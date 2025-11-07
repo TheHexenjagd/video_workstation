@@ -670,7 +670,17 @@ def hardcode_subtitulo(input_file, output_dir):
     # Definir sufijo según si hay subtítulos o no
     base_name = os.path.basename(original_path)
     sufijo = "_hardcoded" if subtitle_index is not None else "_nosub"
-    output_path = Path(output_dir) / (Path(base_name).stem + sufijo + ".mp4")
+    
+    # Crear directorio de salida si no existe
+    output_dir_path = Path(output_dir)
+    try:
+        output_dir_path.mkdir(parents=True, exist_ok=True)
+        enviar_mensaje(f"📁 Directorio de salida verificado: {output_dir}")
+    except Exception as e:
+        enviar_mensaje(f"❌ Error creando directorio de salida: {e}")
+        return False
+    
+    output_path = output_dir_path / (Path(base_name).stem + sufijo + ".mp4")
 
     temp_subtitle_path = None
     try:
@@ -1098,121 +1108,144 @@ def cambiar_preset():
         gpu_nombre = "Intel Quick Sync (QSV)"
         gpu_color = "#0071c5"  # Azul Intel
     
-    # Crear ventana de diálogo con scroll
+    # Crear ventana de diálogo
     dialog = tk.Toplevel(root)
     dialog.title(f"Preset de Codificación - {gpu_nombre}")
-    dialog.geometry("900x650")
+    dialog.geometry("700x550")
     dialog.resizable(False, False)
     dialog.transient(root)
     dialog.grab_set()
     
     # Frame superior con título
-    header_frame = tk.Frame(dialog, bg="#34495e", height=90)
+    header_frame = tk.Frame(dialog, bg="#34495e", height=80)
     header_frame.pack(fill=tk.X)
     header_frame.pack_propagate(False)
     
     tk.Label(header_frame, text="⚙️ Preset de Codificación FFmpeg", 
-             font=("Arial", 16, "bold"), bg="#34495e", fg="white").pack(pady=(15, 5))
+             font=("Arial", 15, "bold"), bg="#34495e", fg="white").pack(pady=(12, 3))
     tk.Label(header_frame, text=f"GPU: {gpu_nombre}", 
-             font=("Arial", 11), bg="#34495e", fg=gpu_color).pack(pady=(0, 15))
+             font=("Arial", 10), bg="#34495e", fg=gpu_color).pack(pady=(0, 12))
     
-    # Descripción general
-    desc_frame = tk.Frame(dialog, bg="white")
-    desc_frame.pack(fill=tk.X, padx=25, pady=(15, 10))
+    # Frame principal de contenido
+    content_frame = tk.Frame(dialog, bg="white")
+    content_frame.pack(fill=tk.BOTH, expand=True, padx=30, pady=20)
     
-    tk.Label(desc_frame, text="Selecciona el preset que mejor se adapte a tus necesidades:", 
-             font=("Arial", 10, "bold"), bg="white", fg="#2c3e50").pack(anchor=tk.W)
-    tk.Label(desc_frame, text="El preset controla el balance entre velocidad de codificación y tamaño/calidad del archivo final.", 
-             font=("Arial", 9), bg="white", fg="gray").pack(anchor=tk.W, pady=(3, 0))
+    # Label de instrucción
+    tk.Label(content_frame, text="Selecciona un preset:", 
+             font=("Arial", 10, "bold"), bg="white", fg="#2c3e50").pack(anchor=tk.W, pady=(0, 10))
     
-    # Frame contenedor con scroll para los presets
-    canvas_frame = tk.Frame(dialog, bg="white")
-    canvas_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=(10, 15))
+    # Frame para el combobox
+    combo_frame = tk.Frame(content_frame, bg="white")
+    combo_frame.pack(fill=tk.X, pady=(0, 20))
     
-    canvas = tk.Canvas(canvas_frame, bg="white", highlightthickness=0)
-    scrollbar = tk.Scrollbar(canvas_frame, orient="vertical", command=canvas.yview)
-    presets_container = tk.Frame(canvas, bg="white")
+    # Crear lista de opciones para el combobox con formato: "nombre_preset - Nombre"
+    preset_options = []
+    preset_map = {}  # Mapeo de texto mostrado a clave del preset
     
-    presets_container.bind(
-        "<Configure>",
-        lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
-    )
-    
-    canvas.create_window((0, 0), window=presets_container, anchor="nw", width=830)
-    canvas.configure(yscrollcommand=scrollbar.set)
-    
-    canvas.pack(side="left", fill="both", expand=True)
-    scrollbar.pack(side="right", fill="y")
-    
-    # Variable para la selección
-    preset_var = tk.StringVar(value=preset_actual.get())
-    
-    # Frame para cada preset - diseño compacto tipo lista
     for preset_key, info in presets_dict.items():
-        # Frame del preset con color de fondo
-        preset_frame = tk.Frame(presets_container, bg="#f8f9fa", relief=tk.SOLID, borderwidth=1, cursor="hand2")
-        preset_frame.pack(fill=tk.X, pady=2, padx=5)
-        
-        # Función para seleccionar este preset al hacer clic en cualquier parte
-        def seleccionar_preset(key=preset_key):
-            preset_var.set(key)
-        
-        # Hacer todo el frame clickeable
-        preset_frame.bind("<Button-1>", lambda e, key=preset_key: seleccionar_preset(key))
-        
-        # Contenedor principal - todo en una fila
-        main_row = tk.Frame(preset_frame, bg="#f8f9fa", cursor="hand2")
-        main_row.pack(fill=tk.X, padx=10, pady=8)
-        main_row.bind("<Button-1>", lambda e, key=preset_key: seleccionar_preset(key))
-        
-        # Radio button
-        rb = tk.Radiobutton(main_row, text="", variable=preset_var, 
-                           value=preset_key, bg="#f8f9fa", 
-                           activebackground="#f8f9fa", cursor="hand2")
-        rb.pack(side=tk.LEFT, padx=(0, 10))
-        
-        # Nombre del preset
-        name_label = tk.Label(main_row, text=info["nombre"], 
-                             font=("Arial", 10, "bold"), bg="#f8f9fa", fg="#2c3e50", 
-                             cursor="hand2", width=22, anchor="w")
-        name_label.pack(side=tk.LEFT, padx=(0, 10))
-        name_label.bind("<Button-1>", lambda e, key=preset_key: seleccionar_preset(key))
-        
-        # Indicador de velocidad
-        vel_label = tk.Label(main_row, text=info['velocidad'], 
-                            font=("Arial", 9), bg="#f8f9fa", fg="#e67e22", 
-                            cursor="hand2", width=8)
-        vel_label.pack(side=tk.LEFT, padx=5)
-        vel_label.bind("<Button-1>", lambda e, key=preset_key: seleccionar_preset(key))
-        
-        # Indicador de calidad
-        cal_label = tk.Label(main_row, text=info['calidad'], 
-                            font=("Arial", 9), bg="#f8f9fa", fg="#f39c12", 
-                            cursor="hand2", width=8)
-        cal_label.pack(side=tk.LEFT, padx=5)
-        cal_label.bind("<Button-1>", lambda e, key=preset_key: seleccionar_preset(key))
-        
-        # Descripción en la misma línea
-        desc_label = tk.Label(main_row, text=info["descripcion"], 
-                             font=("Arial", 8), bg="#f8f9fa", fg="#6c757d", 
-                             cursor="hand2", anchor="w")
-        desc_label.pack(side=tk.LEFT, padx=(10, 5), fill=tk.X, expand=True)
-        desc_label.bind("<Button-1>", lambda e, key=preset_key: seleccionar_preset(key))
+        display_text = f"{info['nombre']}"
+        preset_options.append(display_text)
+        preset_map[display_text] = preset_key
+    
+    # Variable para el combobox
+    combo_var = tk.StringVar()
+    
+    # Encontrar el texto correspondiente al preset actual
+    preset_actual_key = preset_actual.get()
+    if preset_actual_key in presets_dict:
+        combo_var.set(presets_dict[preset_actual_key]['nombre'])
+    else:
+        # Si no existe, usar el primero de la lista
+        combo_var.set(preset_options[0] if preset_options else "")
+    
+    # Combobox estilo moderno
+    combo = ttk.Combobox(combo_frame, textvariable=combo_var, values=preset_options,
+                         state="readonly", font=("Arial", 11), width=45)
+    combo.pack(fill=tk.X)
+    
+    # Frame para la información del preset seleccionado
+    info_frame = tk.Frame(content_frame, bg="#f8f9fa", relief=tk.SOLID, borderwidth=1)
+    info_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+    
+    # Padding interno
+    info_content = tk.Frame(info_frame, bg="#f8f9fa")
+    info_content.pack(fill=tk.BOTH, expand=True, padx=20, pady=15)
+    
+    # Labels para mostrar la información (se actualizarán dinámicamente)
+    nombre_label = tk.Label(info_content, text="", font=("Arial", 13, "bold"), 
+                           bg="#f8f9fa", fg="#2c3e50", anchor="w")
+    nombre_label.pack(fill=tk.X, pady=(0, 10))
+    
+    # Frame para indicadores de velocidad y calidad
+    indicadores_frame = tk.Frame(info_content, bg="#f8f9fa")
+    indicadores_frame.pack(fill=tk.X, pady=(0, 15))
+    
+    # Velocidad
+    vel_container = tk.Frame(indicadores_frame, bg="#f8f9fa")
+    vel_container.pack(side=tk.LEFT, padx=(0, 30))
+    
+    tk.Label(vel_container, text="Velocidad:", font=("Arial", 9, "bold"), 
+             bg="#f8f9fa", fg="#7f8c8d").pack(anchor=tk.W)
+    vel_value_label = tk.Label(vel_container, text="", font=("Arial", 12), 
+                              bg="#f8f9fa", fg="#e67e22")
+    vel_value_label.pack(anchor=tk.W)
+    
+    # Calidad
+    cal_container = tk.Frame(indicadores_frame, bg="#f8f9fa")
+    cal_container.pack(side=tk.LEFT)
+    
+    tk.Label(cal_container, text="Calidad:", font=("Arial", 9, "bold"), 
+             bg="#f8f9fa", fg="#7f8c8d").pack(anchor=tk.W)
+    cal_value_label = tk.Label(cal_container, text="", font=("Arial", 12), 
+                              bg="#f8f9fa", fg="#f39c12")
+    cal_value_label.pack(anchor=tk.W)
+    
+    # Separador
+    tk.Frame(info_content, height=1, bg="#dee2e6").pack(fill=tk.X, pady=(0, 15))
+    
+    # Descripción
+    tk.Label(info_content, text="Descripción:", font=("Arial", 9, "bold"), 
+             bg="#f8f9fa", fg="#7f8c8d", anchor="w").pack(fill=tk.X, pady=(0, 5))
+    
+    desc_label = tk.Label(info_content, text="", font=("Arial", 10), 
+                         bg="#f8f9fa", fg="#495057", anchor="w", 
+                         justify=tk.LEFT, wraplength=580)
+    desc_label.pack(fill=tk.BOTH, expand=True)
+    
+    def actualizar_info_preset(event=None):
+        """Actualiza la información mostrada según el preset seleccionado."""
+        selected_text = combo_var.get()
+        if selected_text in preset_map:
+            preset_key = preset_map[selected_text]
+            info = presets_dict[preset_key]
+            
+            nombre_label.config(text=info['nombre'])
+            vel_value_label.config(text=info['velocidad'])
+            cal_value_label.config(text=info['calidad'])
+            desc_label.config(text=info['descripcion'])
+    
+    # Vincular evento de cambio en el combobox
+    combo.bind("<<ComboboxSelected>>", actualizar_info_preset)
+    
+    # Actualizar con el preset inicial
+    actualizar_info_preset()
     
     # Frame inferior para botones
     footer_frame = tk.Frame(dialog, bg="white")
-    footer_frame.pack(fill=tk.X, padx=25, pady=(10, 20))
+    footer_frame.pack(fill=tk.X, padx=30, pady=(0, 20))
     
     button_frame = tk.Frame(footer_frame, bg="white")
     button_frame.pack()
     
     def aceptar():
-        nuevo_preset = preset_var.get()
-        preset_actual.set(nuevo_preset)
-        messagebox.showinfo("Preset actualizado", 
-                          f"Preset cambiado a: {presets_dict[nuevo_preset]['nombre']}\n"
-                          f"GPU: {gpu_nombre}")
-        dialog.destroy()
+        selected_text = combo_var.get()
+        if selected_text in preset_map:
+            nuevo_preset = preset_map[selected_text]
+            preset_actual.set(nuevo_preset)
+            messagebox.showinfo("Preset actualizado", 
+                              f"Preset cambiado a: {presets_dict[nuevo_preset]['nombre']}\n"
+                              f"GPU: {gpu_nombre}")
+            dialog.destroy()
     
     def cancelar_dialog():
         dialog.destroy()
