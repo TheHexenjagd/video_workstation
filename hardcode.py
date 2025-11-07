@@ -27,31 +27,159 @@ DEFAULT_CONFIG = {
     "Options": {
         "usar_nvidia": "True",
         "buscar_recursivo": "True",
-        "preset": "medium"
+        "preset": "medium"  # Funciona tanto en NVIDIA como en QSV
     }
 }
 
 # Presets disponibles con sus descripciones
-PRESETS_INFO = {
-    "fast": {
-        "nombre": "Rápido (fast)",
-        "descripcion": "Codificación más rápida, archivos más grandes",
-        "velocidad": "⚡⚡⚡",
-        "calidad": "★★☆"
-    },
-    "medium": {
-        "nombre": "Medio (medium)",
-        "descripcion": "Balance entre velocidad y tamaño",
+# Presets para NVIDIA NVENC
+PRESETS_NVIDIA = {
+    "default": {
+        "nombre": "Default",
+        "descripcion": "Balance entre calidad y velocidad (por defecto) - Equivalente: x264 medium",
         "velocidad": "⚡⚡☆",
-        "calidad": "★★★"
+        "calidad": "★★★☆"
     },
     "slow": {
-        "nombre": "Lento (slow)",
-        "descripcion": "Codificación más lenta, mejor compresión",
+        "nombre": "Slow (HQ)",
+        "descripcion": "Mejor calidad, menor velocidad (más recursos GPU) - Equivalente: x264 slow",
         "velocidad": "⚡☆☆",
         "calidad": "★★★★"
+    },
+    "medium": {
+        "nombre": "Medium",
+        "descripcion": "Calidad intermedia - Equivalente: x264 fast–medium",
+        "velocidad": "⚡⚡☆",
+        "calidad": "★★★☆"
+    },
+    "fast": {
+        "nombre": "Fast",
+        "descripcion": "Más rápido, algo menos eficiente - Equivalente: x264 faster",
+        "velocidad": "⚡⚡⚡",
+        "calidad": "★★☆☆"
+    },
+    "hp": {
+        "nombre": "HP (High Performance)",
+        "descripcion": "Prioriza velocidad, menor eficiencia - Equivalente: x264 veryfast",
+        "velocidad": "⚡⚡⚡⚡",
+        "calidad": "★★☆☆"
+    },
+    "hq": {
+        "nombre": "HQ (High Quality)",
+        "descripcion": "Prioriza calidad, más lento - Equivalente: x264 medium–slow",
+        "velocidad": "⚡☆☆",
+        "calidad": "★★★★☆"
+    },
+    "bd": {
+        "nombre": "BD (Blu-ray Disc)",
+        "descripcion": "Optimizado para compatibilidad Blu-ray - Equivalente: x264 slow",
+        "velocidad": "⚡☆☆",
+        "calidad": "★★★★"
+    },
+    "ll": {
+        "nombre": "LL (Low Latency)",
+        "descripcion": "Menor latencia, ideal para streaming en vivo - Equivalente: x264 fast",
+        "velocidad": "⚡⚡⚡",
+        "calidad": "★★☆☆"
+    },
+    "llhq": {
+        "nombre": "LLHQ (Low Latency HQ)",
+        "descripcion": "Baja latencia + alta calidad - Equivalente: x264 fast–medium",
+        "velocidad": "⚡⚡☆",
+        "calidad": "★★★☆"
+    },
+    "llhp": {
+        "nombre": "LLHP (Low Latency HP)",
+        "descripcion": "Baja latencia + alto rendimiento - Equivalente: x264 faster",
+        "velocidad": "⚡⚡⚡",
+        "calidad": "★★☆☆"
+    },
+    "lossless": {
+        "nombre": "Lossless",
+        "descripcion": "Codificación sin pérdida (archivos muy grandes)",
+        "velocidad": "⚡☆☆",
+        "calidad": "★★★★★"
     }
 }
+
+# Presets para Intel Quick Sync (QSV)
+PRESETS_QSV = {
+    "veryfast": {
+        "nombre": "Very Fast",
+        "descripcion": "Máxima velocidad, menor compresión - Equivalente: x264 veryfast",
+        "velocidad": "⚡⚡⚡⚡",
+        "calidad": "★★☆☆"
+    },
+    "faster": {
+        "nombre": "Faster",
+        "descripcion": "Rápido - Equivalente: x264 faster",
+        "velocidad": "⚡⚡⚡",
+        "calidad": "★★☆☆"
+    },
+    "fast": {
+        "nombre": "Fast",
+        "descripcion": "Buen balance velocidad/calidad - Equivalente: x264 fast",
+        "velocidad": "⚡⚡⚡",
+        "calidad": "★★★☆"
+    },
+    "medium": {
+        "nombre": "Medium",
+        "descripcion": "Calidad algo mejor, más lento - Equivalente: x264 medium",
+        "velocidad": "⚡⚡☆",
+        "calidad": "★★★☆"
+    },
+    "slow": {
+        "nombre": "Slow",
+        "descripcion": "Mejor calidad, más lento - Equivalente: x264 slow",
+        "velocidad": "⚡☆☆",
+        "calidad": "★★★★"
+    },
+    "veryslow": {
+        "nombre": "Very Slow",
+        "descripcion": "Máxima calidad (en GPUs compatibles) - Equivalente: x264 veryslow",
+        "velocidad": "⚡☆☆",
+        "calidad": "★★★★★"
+    }
+}
+
+def obtener_preset_valido(preset, usar_nvidia):
+    """
+    Valida y ajusta el preset según la GPU seleccionada.
+    Si el preset no existe para la GPU actual, devuelve un preset compatible.
+    """
+    if usar_nvidia:
+        # Verificar si el preset existe en NVIDIA
+        if preset in PRESETS_NVIDIA:
+            return preset
+        # Si no existe, intentar mapear presets comunes de QSV a NVIDIA
+        mapeo_qsv_a_nvenc = {
+            "veryfast": "hp",
+            "faster": "fast",
+            "fast": "fast",
+            "medium": "medium",
+            "slow": "slow",
+            "veryslow": "hq"
+        }
+        return mapeo_qsv_a_nvenc.get(preset, "default")
+    else:
+        # Verificar si el preset existe en QSV
+        if preset in PRESETS_QSV:
+            return preset
+        # Si no existe, intentar mapear presets comunes de NVIDIA a QSV
+        mapeo_nvenc_a_qsv = {
+            "default": "medium",
+            "slow": "slow",
+            "medium": "medium",
+            "fast": "fast",
+            "hp": "veryfast",
+            "hq": "slow",
+            "bd": "slow",
+            "ll": "fast",
+            "llhq": "medium",
+            "llhp": "faster",
+            "lossless": "veryslow"
+        }
+        return mapeo_nvenc_a_qsv.get(preset, "medium")
 
 def cargar_configuracion():
     """Carga la configuración desde el archivo .ini o crea uno con valores por defecto."""
@@ -105,6 +233,26 @@ def actualizar_configuracion():
         guardar_configuracion(config)
     except Exception as e:
         print(f"❌ Error guardando configuración: {e}")
+
+def on_gpu_change(*args):
+    """Ajusta el preset automáticamente cuando se cambia de GPU."""
+    try:
+        if not preset_actual or not hasattr(preset_actual, 'get'):
+            return
+        
+        preset_actual_val = preset_actual.get()
+        usar_nvidia = var_usar_nvidia.get()
+        
+        # Obtener el preset válido para la nueva GPU
+        nuevo_preset = obtener_preset_valido(preset_actual_val, usar_nvidia)
+        
+        # Si el preset cambió, actualizarlo y notificar
+        if nuevo_preset != preset_actual_val:
+            preset_actual.set(nuevo_preset)
+            gpu_nombre = "NVIDIA NVENC" if usar_nvidia else "Intel Quick Sync (QSV)"
+            print(f"🔄 Preset ajustado de '{preset_actual_val}' a '{nuevo_preset}' para {gpu_nombre}")
+    except Exception as e:
+        print(f"⚠️ Error ajustando preset: {e}")
 
 # Cargar configuración al inicio
 config_ini = cargar_configuracion()
@@ -187,8 +335,8 @@ def obtener_identificador_pista(stream):
 
 def encontrar_pista_por_identificador(streams, identificador, codec_type):
     """Encuentra una pista por su identificador."""
-    # Si el identificador es "NINGUNO", no hay pista que buscar
-    if identificador == "NINGUNO":
+    # Si el identificador es "NINGUNO" o None, no hay pista que buscar
+    if identificador == "NINGUNO" or identificador is None:
         return None
     
     partes_buscadas = identificador.split('|')
@@ -566,8 +714,13 @@ def hardcode_subtitulo(input_file, output_dir):
             # Sin subtítulos, solo convertir formato de color
             video_filter = "format=yuv420p"
         
-        # Obtener preset configurado
-        preset = preset_actual.get()
+        # Obtener preset configurado y validarlo según GPU
+        preset_configurado = preset_actual.get()
+        preset = obtener_preset_valido(preset_configurado, usar_nvidia)
+        
+        # Informar si el preset fue ajustado
+        if preset != preset_configurado:
+            enviar_mensaje(f"ℹ️ Preset '{preset_configurado}' ajustado a '{preset}' para la GPU actual")
         
         # Construir comando ffmpeg según GPU seleccionada
         if usar_nvidia:
@@ -932,45 +1085,73 @@ def cambiar_preset():
     """Muestra un diálogo para cambiar el preset de codificación."""
     global preset_actual
     
-    # Crear ventana de diálogo más amplia
+    # Determinar qué GPU se está usando
+    usar_nvidia_actual = var_usar_nvidia.get()
+    
+    # Seleccionar el conjunto de presets correspondiente
+    if usar_nvidia_actual:
+        presets_dict = PRESETS_NVIDIA
+        gpu_nombre = "NVIDIA NVENC"
+        gpu_color = "#76b900"  # Verde NVIDIA
+    else:
+        presets_dict = PRESETS_QSV
+        gpu_nombre = "Intel Quick Sync (QSV)"
+        gpu_color = "#0071c5"  # Azul Intel
+    
+    # Crear ventana de diálogo con scroll
     dialog = tk.Toplevel(root)
-    dialog.title("Preset de Codificación FFmpeg")
-    dialog.geometry("680x600")
+    dialog.title(f"Preset de Codificación - {gpu_nombre}")
+    dialog.geometry("900x650")
     dialog.resizable(False, False)
     dialog.transient(root)
     dialog.grab_set()
     
     # Frame superior con título
-    header_frame = tk.Frame(dialog, bg="#34495e", height=70)
+    header_frame = tk.Frame(dialog, bg="#34495e", height=90)
     header_frame.pack(fill=tk.X)
     header_frame.pack_propagate(False)
     
     tk.Label(header_frame, text="⚙️ Preset de Codificación FFmpeg", 
-             font=("Arial", 16, "bold"), bg="#34495e", fg="white").pack(pady=20)
+             font=("Arial", 16, "bold"), bg="#34495e", fg="white").pack(pady=(15, 5))
+    tk.Label(header_frame, text=f"GPU: {gpu_nombre}", 
+             font=("Arial", 11), bg="#34495e", fg=gpu_color).pack(pady=(0, 15))
     
     # Descripción general
     desc_frame = tk.Frame(dialog, bg="white")
-    desc_frame.pack(fill=tk.X, padx=25, pady=(20, 10))
+    desc_frame.pack(fill=tk.X, padx=25, pady=(15, 10))
     
     tk.Label(desc_frame, text="Selecciona el preset que mejor se adapte a tus necesidades:", 
              font=("Arial", 10, "bold"), bg="white", fg="#2c3e50").pack(anchor=tk.W)
-    tk.Label(desc_frame, text="El preset controla el balance entre velocidad de codificación y tamaño del archivo final.", 
+    tk.Label(desc_frame, text="El preset controla el balance entre velocidad de codificación y tamaño/calidad del archivo final.", 
              font=("Arial", 9), bg="white", fg="gray").pack(anchor=tk.W, pady=(3, 0))
     
-    # Frame contenedor para los presets
-    presets_container = tk.Frame(dialog, bg="white")
-    presets_container.pack(fill=tk.X, padx=25, pady=(10, 15))
+    # Frame contenedor con scroll para los presets
+    canvas_frame = tk.Frame(dialog, bg="white")
+    canvas_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=(10, 15))
+    
+    canvas = tk.Canvas(canvas_frame, bg="white", highlightthickness=0)
+    scrollbar = tk.Scrollbar(canvas_frame, orient="vertical", command=canvas.yview)
+    presets_container = tk.Frame(canvas, bg="white")
+    
+    presets_container.bind(
+        "<Configure>",
+        lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+    )
+    
+    canvas.create_window((0, 0), window=presets_container, anchor="nw", width=830)
+    canvas.configure(yscrollcommand=scrollbar.set)
+    
+    canvas.pack(side="left", fill="both", expand=True)
+    scrollbar.pack(side="right", fill="y")
     
     # Variable para la selección
     preset_var = tk.StringVar(value=preset_actual.get())
     
-    # Frame para cada preset - diseño horizontal más amplio
-    for i, preset_key in enumerate(["fast", "medium", "slow"]):
-        info = PRESETS_INFO[preset_key]
-        
-        # Frame del preset con color de fondo y bordes redondeados (simulado)
+    # Frame para cada preset - diseño compacto tipo lista
+    for preset_key, info in presets_dict.items():
+        # Frame del preset con color de fondo
         preset_frame = tk.Frame(presets_container, bg="#f8f9fa", relief=tk.SOLID, borderwidth=1, cursor="hand2")
-        preset_frame.pack(fill=tk.X, pady=6)
+        preset_frame.pack(fill=tk.X, pady=2, padx=5)
         
         # Función para seleccionar este preset al hacer clic en cualquier parte
         def seleccionar_preset(key=preset_key):
@@ -979,74 +1160,48 @@ def cambiar_preset():
         # Hacer todo el frame clickeable
         preset_frame.bind("<Button-1>", lambda e, key=preset_key: seleccionar_preset(key))
         
-        # Frame principal horizontal
-        main_content = tk.Frame(preset_frame, bg="#f8f9fa", cursor="hand2")
-        main_content.pack(fill=tk.X, padx=20, pady=15)
-        main_content.bind("<Button-1>", lambda e, key=preset_key: seleccionar_preset(key))
+        # Contenedor principal - todo en una fila
+        main_row = tk.Frame(preset_frame, bg="#f8f9fa", cursor="hand2")
+        main_row.pack(fill=tk.X, padx=10, pady=8)
+        main_row.bind("<Button-1>", lambda e, key=preset_key: seleccionar_preset(key))
         
-        # Lado izquierdo: Radio button + nombre
-        left_frame = tk.Frame(main_content, bg="#f8f9fa", cursor="hand2")
-        left_frame.pack(side=tk.LEFT, fill=tk.Y)
-        left_frame.bind("<Button-1>", lambda e, key=preset_key: seleccionar_preset(key))
-        
-        rb = tk.Radiobutton(left_frame, text="", variable=preset_var, 
+        # Radio button
+        rb = tk.Radiobutton(main_row, text="", variable=preset_var, 
                            value=preset_key, bg="#f8f9fa", 
                            activebackground="#f8f9fa", cursor="hand2")
-        rb.pack(side=tk.LEFT, padx=(0, 8))
+        rb.pack(side=tk.LEFT, padx=(0, 10))
         
-        name_label = tk.Label(left_frame, text=info["nombre"], 
-                             font=("Arial", 12, "bold"), bg="#f8f9fa", fg="#2c3e50", cursor="hand2")
-        name_label.pack(side=tk.LEFT)
+        # Nombre del preset
+        name_label = tk.Label(main_row, text=info["nombre"], 
+                             font=("Arial", 10, "bold"), bg="#f8f9fa", fg="#2c3e50", 
+                             cursor="hand2", width=22, anchor="w")
+        name_label.pack(side=tk.LEFT, padx=(0, 10))
         name_label.bind("<Button-1>", lambda e, key=preset_key: seleccionar_preset(key))
         
-        # Lado derecho: Indicadores
-        right_frame = tk.Frame(main_content, bg="#f8f9fa", cursor="hand2")
-        right_frame.pack(side=tk.RIGHT)
-        right_frame.bind("<Button-1>", lambda e, key=preset_key: seleccionar_preset(key))
+        # Indicador de velocidad
+        vel_label = tk.Label(main_row, text=info['velocidad'], 
+                            font=("Arial", 9), bg="#f8f9fa", fg="#e67e22", 
+                            cursor="hand2", width=8)
+        vel_label.pack(side=tk.LEFT, padx=5)
+        vel_label.bind("<Button-1>", lambda e, key=preset_key: seleccionar_preset(key))
         
-        # Velocidad
-        vel_frame = tk.Frame(right_frame, bg="#f8f9fa", cursor="hand2")
-        vel_frame.pack(side=tk.LEFT, padx=15)
-        vel_frame.bind("<Button-1>", lambda e, key=preset_key: seleccionar_preset(key))
+        # Indicador de calidad
+        cal_label = tk.Label(main_row, text=info['calidad'], 
+                            font=("Arial", 9), bg="#f8f9fa", fg="#f39c12", 
+                            cursor="hand2", width=8)
+        cal_label.pack(side=tk.LEFT, padx=5)
+        cal_label.bind("<Button-1>", lambda e, key=preset_key: seleccionar_preset(key))
         
-        vel_label1 = tk.Label(vel_frame, text="Velocidad", font=("Arial", 8), 
-                bg="#f8f9fa", fg="#7f8c8d", cursor="hand2")
-        vel_label1.pack()
-        vel_label1.bind("<Button-1>", lambda e, key=preset_key: seleccionar_preset(key))
-        
-        vel_label2 = tk.Label(vel_frame, text=info['velocidad'], font=("Arial", 11), 
-                bg="#f8f9fa", fg="#e67e22", cursor="hand2")
-        vel_label2.pack()
-        vel_label2.bind("<Button-1>", lambda e, key=preset_key: seleccionar_preset(key))
-        
-        # Separador vertical
-        sep = tk.Frame(right_frame, width=1, height=35, bg="#dee2e6")
-        sep.pack(side=tk.LEFT, padx=10)
-        
-        # Calidad
-        cal_frame = tk.Frame(right_frame, bg="#f8f9fa", cursor="hand2")
-        cal_frame.pack(side=tk.LEFT, padx=15)
-        cal_frame.bind("<Button-1>", lambda e, key=preset_key: seleccionar_preset(key))
-        
-        cal_label1 = tk.Label(cal_frame, text="Calidad", font=("Arial", 8), 
-                bg="#f8f9fa", fg="#7f8c8d", cursor="hand2")
-        cal_label1.pack()
-        cal_label1.bind("<Button-1>", lambda e, key=preset_key: seleccionar_preset(key))
-        
-        cal_label2 = tk.Label(cal_frame, text=info['calidad'], font=("Arial", 11), 
-                bg="#f8f9fa", fg="#f39c12", cursor="hand2")
-        cal_label2.pack()
-        cal_label2.bind("<Button-1>", lambda e, key=preset_key: seleccionar_preset(key))
-        
-        # Descripción debajo
-        desc_label = tk.Label(preset_frame, text=info["descripcion"], 
-                             font=("Arial", 9), bg="#f8f9fa", fg="#6c757d", cursor="hand2")
-        desc_label.pack(padx=20, pady=(0, 12))
+        # Descripción en la misma línea
+        desc_label = tk.Label(main_row, text=info["descripcion"], 
+                             font=("Arial", 8), bg="#f8f9fa", fg="#6c757d", 
+                             cursor="hand2", anchor="w")
+        desc_label.pack(side=tk.LEFT, padx=(10, 5), fill=tk.X, expand=True)
         desc_label.bind("<Button-1>", lambda e, key=preset_key: seleccionar_preset(key))
     
     # Frame inferior para botones
     footer_frame = tk.Frame(dialog, bg="white")
-    footer_frame.pack(fill=tk.X, padx=25, pady=(10, 25))
+    footer_frame.pack(fill=tk.X, padx=25, pady=(10, 20))
     
     button_frame = tk.Frame(footer_frame, bg="white")
     button_frame.pack()
@@ -1055,7 +1210,8 @@ def cambiar_preset():
         nuevo_preset = preset_var.get()
         preset_actual.set(nuevo_preset)
         messagebox.showinfo("Preset actualizado", 
-                          f"Preset cambiado a: {PRESETS_INFO[nuevo_preset]['nombre']}")
+                          f"Preset cambiado a: {presets_dict[nuevo_preset]['nombre']}\n"
+                          f"GPU: {gpu_nombre}")
         dialog.destroy()
     
     def cancelar_dialog():
@@ -1192,7 +1348,13 @@ tk.Label(frame_opciones, text="|", font=("Arial", 12), fg="lightgray").pack(side
 
 # Checkbox para usar GPU NVIDIA (cargado desde configuración)
 var_usar_nvidia = tk.BooleanVar(value=config_ini.getboolean('Options', 'usar_nvidia'))
-var_usar_nvidia.trace_add('write', lambda *args: actualizar_configuracion())
+
+def on_nvidia_change(*args):
+    """Callback cuando cambia el checkbox de NVIDIA."""
+    on_gpu_change()
+    actualizar_configuracion()
+
+var_usar_nvidia.trace_add('write', on_nvidia_change)
 check_nvidia = tk.Checkbutton(frame_opciones, text="Usar GPU NVIDIA (NVENC)", 
                               variable=var_usar_nvidia, font=("Arial", 9, "bold"), 
                               fg="#00aa00", selectcolor="#e8f8e8", activebackground="#f0f0f0")
