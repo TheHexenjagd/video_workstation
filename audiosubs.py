@@ -571,12 +571,17 @@ def eliminar_pistas(input_file, output_dir):
         return False
 
 def analizar_condiciones_subtitulos(archivos):
-    """Analiza los archivos para verificar que cumplan con las condiciones de subtítulos."""
+    """Analiza los archivos para determinar el patrón estadístico más común de audio/subtítulos."""
     resultados = {
         'conformes': [],
         'no_conformes': [],
-        'errores': []
+        'errores': [],
+        'patron_comun': None
     }
+    
+    # Primera pasada: recopilar estadísticas
+    estadisticas = {}  # {(num_audio, num_subtitulos): [lista de archivos]}
+    info_archivos = {}  # {archivo: info detallada}
     
     for archivo in archivos:
         try:
@@ -588,58 +593,75 @@ def analizar_condiciones_subtitulos(archivos):
                 })
                 continue
             
+            audio_streams = [s for s in info["streams"] if s.get("codec_type") == "audio"]
             subtitle_streams = [s for s in info["streams"] if s.get("codec_type") == "subtitle"]
             
-            # Verificar que tenga exactamente 2 subtítulos
-            if len(subtitle_streams) != 2:
-                resultados['no_conformes'].append({
-                    'archivo': archivo,
-                    'razon': f'Tiene {len(subtitle_streams)} subtítulos (se esperan 2)',
-                    'detalles': subtitle_streams
-                })
-                continue
+            num_audio = len(audio_streams)
+            num_subs = len(subtitle_streams)
+            patron = (num_audio, num_subs)
             
-            # Obtener idiomas de los subtítulos
-            langs = []
-            for stream in subtitle_streams:
-                lang = stream.get('tags', {}).get('language', 'und')
-                title = stream.get('tags', {}).get('title', '')
-                langs.append({
-                    'lang': lang,
-                    'title': title,
-                    'index': stream.get('index')
-                })
+            if patron not in estadisticas:
+                estadisticas[patron] = []
+            estadisticas[patron].append(archivo)
             
-            # Verificar que el primer subtítulo sea español y el segundo inglés
-            primer_sub = langs[0]['lang'].lower()
-            segundo_sub = langs[1]['lang'].lower()
-            
-            es_valido_esp = primer_sub in ['spa', 'es', 'esp']
-            es_valido_eng = segundo_sub in ['eng', 'en']
-            
-            if not es_valido_esp or not es_valido_eng:
-                razon = []
-                if not es_valido_esp:
-                    razon.append(f'Primer subtítulo es "{primer_sub}" (se espera español)')
-                if not es_valido_eng:
-                    razon.append(f'Segundo subtítulo es "{segundo_sub}" (se espera inglés)')
-                
-                resultados['no_conformes'].append({
-                    'archivo': archivo,
-                    'razon': ' | '.join(razon),
-                    'detalles': langs
-                })
-            else:
-                resultados['conformes'].append({
-                    'archivo': archivo,
-                    'detalles': langs
-                })
+            # Guardar detalles
+            info_archivos[archivo] = {
+                'audio_streams': audio_streams,
+                'subtitle_streams': subtitle_streams,
+                'patron': patron
+            }
         
         except Exception as e:
             resultados['errores'].append({
                 'archivo': archivo,
                 'razon': f'Error al analizar: {str(e)}'
             })
+    
+    # Determinar el patrón más común
+    if estadisticas:
+        patron_comun = max(estadisticas.keys(), key=lambda k: len(estadisticas[k]))
+        resultados['patron_comun'] = patron_comun
+        enviar_mensaje(f"📊 Patrón más común: {patron_comun[0]} audio(s), {patron_comun[1]} subtítulo(s) ({len(estadisticas[patron_comun])} archivos)")
+        
+        # Clasificar archivos según el patrón común
+        for archivo, info in info_archivos.items():
+            patron = info['patron']
+            
+            if patron == patron_comun:
+                # Archivo conforme
+                detalles_audio = []
+                for stream in info['audio_streams']:
+                    lang = stream.get('tags', {}).get('language', 'und')
+                    title = stream.get('tags', {}).get('title', '')
+                    detalles_audio.append({
+                        'lang': lang,
+                        'title': title,
+                        'index': stream.get('index')
+                    })
+                
+                detalles_subs = []
+                for stream in info['subtitle_streams']:
+                    lang = stream.get('tags', {}).get('language', 'und')
+                    title = stream.get('tags', {}).get('title', '')
+                    detalles_subs.append({
+                        'lang': lang,
+                        'title': title,
+                        'index': stream.get('index')
+                    })
+                
+                resultados['conformes'].append({
+                    'archivo': archivo,
+                    'patron': patron,
+                    'detalles_audio': detalles_audio,
+                    'detalles_subs': detalles_subs
+                })
+            else:
+                # Archivo no conforme
+                resultados['no_conformes'].append({
+                    'archivo': archivo,
+                    'patron': patron,
+                    'razon': f'Tiene {patron[0]} audio(s) y {patron[1]} subtítulo(s), esperado: {patron_comun[0]} audio(s) y {patron_comun[1]} subtítulo(s)'
+                })
     
     return resultados
 
@@ -675,9 +697,12 @@ def verificar_condiciones_carpeta():
     progreso_bar.pack(pady=10)
     
     # Analizar archivos en segundo plano
-    resultados = {'conformes': [], 'no_conformes': [], 'errores': []}
+    resultados = {'conformes': [], 'no_conformes': [], 'errores': [], 'patron_comun': None}
+    estadisticas = {}
+    info_archivos = {}
     
     def analizar_thread():
+        # Primera pasada: recopilar estadísticas
         for i, archivo in enumerate(archivos_encontrados):
             progreso_label.config(text=f"Analizando {i+1}/{len(archivos_encontrados)}: {os.path.basename(archivo)}")
             progreso_bar['value'] = i + 1
@@ -692,58 +717,74 @@ def verificar_condiciones_carpeta():
                     })
                     continue
                 
+                audio_streams = [s for s in info["streams"] if s.get("codec_type") == "audio"]
                 subtitle_streams = [s for s in info["streams"] if s.get("codec_type") == "subtitle"]
                 
-                # Verificar que tenga exactamente 2 subtítulos
-                if len(subtitle_streams) != 2:
-                    resultados['no_conformes'].append({
-                        'archivo': archivo,
-                        'razon': f'Tiene {len(subtitle_streams)} subtítulos (se esperan 2)',
-                        'detalles': subtitle_streams
-                    })
-                    continue
+                num_audio = len(audio_streams)
+                num_subs = len(subtitle_streams)
+                patron = (num_audio, num_subs)
                 
-                # Obtener idiomas de los subtítulos
-                langs = []
-                for stream in subtitle_streams:
-                    lang = stream.get('tags', {}).get('language', 'und')
-                    title = stream.get('tags', {}).get('title', '')
-                    langs.append({
-                        'lang': lang,
-                        'title': title,
-                        'index': stream.get('index')
-                    })
+                if patron not in estadisticas:
+                    estadisticas[patron] = []
+                estadisticas[patron].append(archivo)
                 
-                # Verificar que el primer subtítulo sea español y el segundo inglés
-                primer_sub = langs[0]['lang'].lower()
-                segundo_sub = langs[1]['lang'].lower()
-                
-                es_valido_esp = primer_sub in ['spa', 'es', 'esp']
-                es_valido_eng = segundo_sub in ['eng', 'en']
-                
-                if not es_valido_esp or not es_valido_eng:
-                    razon = []
-                    if not es_valido_esp:
-                        razon.append(f'1er subtítulo es "{primer_sub}" (se espera español)')
-                    if not es_valido_eng:
-                        razon.append(f'2do subtítulo es "{segundo_sub}" (se espera inglés)')
-                    
-                    resultados['no_conformes'].append({
-                        'archivo': archivo,
-                        'razon': ' | '.join(razon),
-                        'detalles': langs
-                    })
-                else:
-                    resultados['conformes'].append({
-                        'archivo': archivo,
-                        'detalles': langs
-                    })
+                # Guardar detalles
+                info_archivos[archivo] = {
+                    'audio_streams': audio_streams,
+                    'subtitle_streams': subtitle_streams,
+                    'patron': patron
+                }
             
             except Exception as e:
                 resultados['errores'].append({
                     'archivo': archivo,
                     'razon': f'Error al analizar: {str(e)}'
                 })
+        
+        # Determinar el patrón más común
+        if estadisticas:
+            patron_comun = max(estadisticas.keys(), key=lambda k: len(estadisticas[k]))
+            resultados['patron_comun'] = patron_comun
+            
+            # Clasificar archivos según el patrón común
+            for archivo, info in info_archivos.items():
+                patron = info['patron']
+                
+                if patron == patron_comun:
+                    # Archivo conforme
+                    detalles_audio = []
+                    for stream in info['audio_streams']:
+                        lang = stream.get('tags', {}).get('language', 'und')
+                        title = stream.get('tags', {}).get('title', '')
+                        detalles_audio.append({
+                            'lang': lang,
+                            'title': title,
+                            'index': stream.get('index')
+                        })
+                    
+                    detalles_subs = []
+                    for stream in info['subtitle_streams']:
+                        lang = stream.get('tags', {}).get('language', 'und')
+                        title = stream.get('tags', {}).get('title', '')
+                        detalles_subs.append({
+                            'lang': lang,
+                            'title': title,
+                            'index': stream.get('index')
+                        })
+                    
+                    resultados['conformes'].append({
+                        'archivo': archivo,
+                        'patron': patron,
+                        'detalles_audio': detalles_audio,
+                        'detalles_subs': detalles_subs
+                    })
+                else:
+                    # Archivo no conforme
+                    resultados['no_conformes'].append({
+                        'archivo': archivo,
+                        'patron': patron,
+                        'razon': f'Tiene {patron[0]} audio(s) y {patron[1]} subtítulo(s), esperado: {patron_comun[0]} audio(s) y {patron_comun[1]} subtítulo(s)'
+                    })
         
         progreso_ventana.destroy()
         mostrar_resultados_verificacion(resultados, carpeta)
@@ -757,18 +798,24 @@ def mostrar_resultados_verificacion(resultados, carpeta):
     # Crear ventana de resultados
     resultado_ventana = tk.Toplevel(root)
     resultado_ventana.title("Resultados de Verificación")
-    resultado_ventana.geometry("900x650")
+    resultado_ventana.geometry("900x700")
     resultado_ventana.transient(root)
     
     # Header
-    header_frame = tk.Frame(resultado_ventana, bg="#2c3e50", height=80)
+    header_frame = tk.Frame(resultado_ventana, bg="#2c3e50", height=100)
     header_frame.pack(fill=tk.X)
     header_frame.pack_propagate(False)
     
-    tk.Label(header_frame, text="📊 Resultados de Verificación de Subtítulos", 
-             font=("Arial", 16, "bold"), bg="#2c3e50", fg="white").pack(pady=10)
+    tk.Label(header_frame, text="📊 Resultados de Verificación (Análisis Estadístico)", 
+             font=("Arial", 16, "bold"), bg="#2c3e50", fg="white").pack(pady=(10, 2))
     tk.Label(header_frame, text=f"Carpeta: {os.path.basename(carpeta)}", 
              font=("Arial", 9), bg="#2c3e50", fg="#ecf0f1").pack()
+    
+    # Mostrar patrón común
+    if resultados.get('patron_comun'):
+        patron = resultados['patron_comun']
+        tk.Label(header_frame, text=f"📌 Patrón más común: {patron[0]} audio(s), {patron[1]} subtítulo(s)", 
+                 font=("Arial", 10, "bold"), bg="#2c3e50", fg="#3498db").pack(pady=(5, 5))
     
     # Estadísticas
     stats_frame = tk.Frame(resultado_ventana, bg="#ecf0f1")
@@ -803,14 +850,34 @@ def mostrar_resultados_verificacion(resultados, carpeta):
     for item in resultados['conformes']:
         text_conformes.insert(tk.END, f"✅ {os.path.basename(item['archivo'])}\n", "titulo")
         text_conformes.insert(tk.END, f"   📂 {item['archivo']}\n")
-        text_conformes.insert(tk.END, f"   📝 Subtítulos: ")
-        for i, det in enumerate(item['detalles']):
-            text_conformes.insert(tk.END, f"{i+1}. {det['lang'].upper()}")
-            if det['title']:
-                text_conformes.insert(tk.END, f" ({det['title']})")
-            if i < len(item['detalles']) - 1:
-                text_conformes.insert(tk.END, " | ")
-        text_conformes.insert(tk.END, "\n\n")
+        
+        # Mostrar patrón
+        patron = item.get('patron', (0, 0))
+        text_conformes.insert(tk.END, f"   📊 Patrón: {patron[0]} audio(s), {patron[1]} subtítulo(s)\n")
+        
+        # Mostrar audios
+        if item.get('detalles_audio'):
+            text_conformes.insert(tk.END, f"   🎵 Audios: ")
+            for i, det in enumerate(item['detalles_audio']):
+                text_conformes.insert(tk.END, f"{i+1}. {det['lang'].upper()}")
+                if det['title']:
+                    text_conformes.insert(tk.END, f" ({det['title']})")
+                if i < len(item['detalles_audio']) - 1:
+                    text_conformes.insert(tk.END, " | ")
+            text_conformes.insert(tk.END, "\n")
+        
+        # Mostrar subtítulos
+        if item.get('detalles_subs'):
+            text_conformes.insert(tk.END, f"   📝 Subtítulos: ")
+            for i, det in enumerate(item['detalles_subs']):
+                text_conformes.insert(tk.END, f"{i+1}. {det['lang'].upper()}")
+                if det['title']:
+                    text_conformes.insert(tk.END, f" ({det['title']})")
+                if i < len(item['detalles_subs']) - 1:
+                    text_conformes.insert(tk.END, " | ")
+            text_conformes.insert(tk.END, "\n")
+        
+        text_conformes.insert(tk.END, "\n")
     
     text_conformes.config(state=tk.DISABLED)
     
@@ -828,16 +895,13 @@ def mostrar_resultados_verificacion(resultados, carpeta):
     for item in resultados['no_conformes']:
         text_no_conformes.insert(tk.END, f"❌ {os.path.basename(item['archivo'])}\n", "titulo")
         text_no_conformes.insert(tk.END, f"   📂 {item['archivo']}\n")
+        
+        # Mostrar patrón encontrado
+        patron = item.get('patron', (0, 0))
+        text_no_conformes.insert(tk.END, f"   📊 Patrón encontrado: {patron[0]} audio(s), {patron[1]} subtítulo(s)\n")
+        
+        # Mostrar razón
         text_no_conformes.insert(tk.END, f"   ⚠️ Razón: {item['razon']}\n")
-        if 'detalles' in item and item['detalles']:
-            text_no_conformes.insert(tk.END, f"   📝 Subtítulos encontrados: ")
-            for i, det in enumerate(item['detalles']):
-                text_no_conformes.insert(tk.END, f"{i+1}. {det['lang'].upper()}")
-                if det['title']:
-                    text_no_conformes.insert(tk.END, f" ({det['title']})")
-                if i < len(item['detalles']) - 1:
-                    text_no_conformes.insert(tk.END, " | ")
-            text_no_conformes.insert(tk.END, "\n")
         text_no_conformes.insert(tk.END, "\n")
     
     text_no_conformes.config(state=tk.DISABLED)
@@ -876,10 +940,16 @@ def mostrar_resultados_verificacion(resultados, carpeta):
             try:
                 with open(archivo_salida, 'w', encoding='utf-8') as f:
                     f.write("="*80 + "\n")
-                    f.write("RESULTADOS DE VERIFICACIÓN DE SUBTÍTULOS\n")
+                    f.write("RESULTADOS DE VERIFICACIÓN (ANÁLISIS ESTADÍSTICO)\n")
                     f.write("="*80 + "\n\n")
                     f.write(f"Carpeta analizada: {carpeta}\n")
                     f.write(f"Total de archivos: {total}\n")
+                    
+                    # Mostrar patrón común
+                    if resultados.get('patron_comun'):
+                        patron = resultados['patron_comun']
+                        f.write(f"Patrón más común: {patron[0]} audio(s), {patron[1]} subtítulo(s)\n")
+                    
                     f.write(f"Conformes: {len(resultados['conformes'])}\n")
                     f.write(f"No conformes: {len(resultados['no_conformes'])}\n")
                     f.write(f"Errores: {len(resultados['errores'])}\n\n")
@@ -890,14 +960,30 @@ def mostrar_resultados_verificacion(resultados, carpeta):
                     for item in resultados['conformes']:
                         f.write(f"✅ {os.path.basename(item['archivo'])}\n")
                         f.write(f"   Ruta: {item['archivo']}\n")
-                        f.write(f"   Subtítulos: ")
-                        for i, det in enumerate(item['detalles']):
-                            f.write(f"{i+1}. {det['lang'].upper()}")
-                            if det['title']:
-                                f.write(f" ({det['title']})")
-                            if i < len(item['detalles']) - 1:
-                                f.write(" | ")
-                        f.write("\n\n")
+                        
+                        patron = item.get('patron', (0, 0))
+                        f.write(f"   Patrón: {patron[0]} audio(s), {patron[1]} subtítulo(s)\n")
+                        
+                        if item.get('detalles_audio'):
+                            f.write(f"   Audios: ")
+                            for i, det in enumerate(item['detalles_audio']):
+                                f.write(f"{i+1}. {det['lang'].upper()}")
+                                if det['title']:
+                                    f.write(f" ({det['title']})")
+                                if i < len(item['detalles_audio']) - 1:
+                                    f.write(" | ")
+                            f.write("\n")
+                        
+                        if item.get('detalles_subs'):
+                            f.write(f"   Subtítulos: ")
+                            for i, det in enumerate(item['detalles_subs']):
+                                f.write(f"{i+1}. {det['lang'].upper()}")
+                                if det['title']:
+                                    f.write(f" ({det['title']})")
+                                if i < len(item['detalles_subs']) - 1:
+                                    f.write(" | ")
+                            f.write("\n")
+                        f.write("\n")
                     
                     f.write("\n" + "="*80 + "\n")
                     f.write("ARCHIVOS NO CONFORMES\n")
@@ -905,16 +991,11 @@ def mostrar_resultados_verificacion(resultados, carpeta):
                     for item in resultados['no_conformes']:
                         f.write(f"❌ {os.path.basename(item['archivo'])}\n")
                         f.write(f"   Ruta: {item['archivo']}\n")
+                        
+                        patron = item.get('patron', (0, 0))
+                        f.write(f"   Patrón encontrado: {patron[0]} audio(s), {patron[1]} subtítulo(s)\n")
+                        
                         f.write(f"   Razón: {item['razon']}\n")
-                        if 'detalles' in item and item['detalles']:
-                            f.write(f"   Subtítulos encontrados: ")
-                            for i, det in enumerate(item['detalles']):
-                                f.write(f"{i+1}. {det['lang'].upper()}")
-                                if det['title']:
-                                    f.write(f" ({det['title']})")
-                                if i < len(item['detalles']) - 1:
-                                    f.write(" | ")
-                            f.write("\n")
                         f.write("\n")
                     
                     f.write("\n" + "="*80 + "\n")
