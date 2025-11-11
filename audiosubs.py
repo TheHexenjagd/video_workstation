@@ -570,6 +570,370 @@ def eliminar_pistas(input_file, output_dir):
         enviar_mensaje(f"❌ Error: {e}")
         return False
 
+def analizar_condiciones_subtitulos(archivos):
+    """Analiza los archivos para verificar que cumplan con las condiciones de subtítulos."""
+    resultados = {
+        'conformes': [],
+        'no_conformes': [],
+        'errores': []
+    }
+    
+    for archivo in archivos:
+        try:
+            info = ffprobe_info(archivo)
+            if info is None:
+                resultados['errores'].append({
+                    'archivo': archivo,
+                    'razon': 'No se pudo obtener información del archivo'
+                })
+                continue
+            
+            subtitle_streams = [s for s in info["streams"] if s.get("codec_type") == "subtitle"]
+            
+            # Verificar que tenga exactamente 2 subtítulos
+            if len(subtitle_streams) != 2:
+                resultados['no_conformes'].append({
+                    'archivo': archivo,
+                    'razon': f'Tiene {len(subtitle_streams)} subtítulos (se esperan 2)',
+                    'detalles': subtitle_streams
+                })
+                continue
+            
+            # Obtener idiomas de los subtítulos
+            langs = []
+            for stream in subtitle_streams:
+                lang = stream.get('tags', {}).get('language', 'und')
+                title = stream.get('tags', {}).get('title', '')
+                langs.append({
+                    'lang': lang,
+                    'title': title,
+                    'index': stream.get('index')
+                })
+            
+            # Verificar que el primer subtítulo sea español y el segundo inglés
+            primer_sub = langs[0]['lang'].lower()
+            segundo_sub = langs[1]['lang'].lower()
+            
+            es_valido_esp = primer_sub in ['spa', 'es', 'esp']
+            es_valido_eng = segundo_sub in ['eng', 'en']
+            
+            if not es_valido_esp or not es_valido_eng:
+                razon = []
+                if not es_valido_esp:
+                    razon.append(f'Primer subtítulo es "{primer_sub}" (se espera español)')
+                if not es_valido_eng:
+                    razon.append(f'Segundo subtítulo es "{segundo_sub}" (se espera inglés)')
+                
+                resultados['no_conformes'].append({
+                    'archivo': archivo,
+                    'razon': ' | '.join(razon),
+                    'detalles': langs
+                })
+            else:
+                resultados['conformes'].append({
+                    'archivo': archivo,
+                    'detalles': langs
+                })
+        
+        except Exception as e:
+            resultados['errores'].append({
+                'archivo': archivo,
+                'razon': f'Error al analizar: {str(e)}'
+            })
+    
+    return resultados
+
+def verificar_condiciones_carpeta():
+    """Verifica las condiciones de subtítulos de todos los archivos en la lista."""
+    # Obtener archivos de la lista
+    archivos_encontrados = list(lista.get(0, tk.END))
+    
+    if not archivos_encontrados:
+        messagebox.showwarning("Sin archivos", "No hay archivos cargados en la lista.\n\nAgrega archivos o carga una carpeta primero.")
+        return
+    
+    # Obtener la carpeta común o usar "Archivos de la lista"
+    carpeta = "Archivos de la lista"
+    if len(archivos_encontrados) > 0:
+        primer_archivo = archivos_encontrados[0]
+        carpeta = os.path.dirname(primer_archivo)
+    
+    # Crear ventana de progreso
+    progreso_ventana = tk.Toplevel(root)
+    progreso_ventana.title("Analizando archivos...")
+    progreso_ventana.geometry("500x150")
+    progreso_ventana.transient(root)
+    progreso_ventana.grab_set()
+    
+    tk.Label(progreso_ventana, text="Analizando condiciones de subtítulos...", 
+             font=("Arial", 11, "bold")).pack(pady=(20, 10))
+    
+    progreso_label = tk.Label(progreso_ventana, text="Preparando...", font=("Arial", 9))
+    progreso_label.pack(pady=5)
+    
+    progreso_bar = ttk.Progressbar(progreso_ventana, length=400, mode='determinate', maximum=len(archivos_encontrados))
+    progreso_bar.pack(pady=10)
+    
+    # Analizar archivos en segundo plano
+    resultados = {'conformes': [], 'no_conformes': [], 'errores': []}
+    
+    def analizar_thread():
+        for i, archivo in enumerate(archivos_encontrados):
+            progreso_label.config(text=f"Analizando {i+1}/{len(archivos_encontrados)}: {os.path.basename(archivo)}")
+            progreso_bar['value'] = i + 1
+            progreso_ventana.update()
+            
+            try:
+                info = ffprobe_info(archivo)
+                if info is None:
+                    resultados['errores'].append({
+                        'archivo': archivo,
+                        'razon': 'No se pudo obtener información del archivo'
+                    })
+                    continue
+                
+                subtitle_streams = [s for s in info["streams"] if s.get("codec_type") == "subtitle"]
+                
+                # Verificar que tenga exactamente 2 subtítulos
+                if len(subtitle_streams) != 2:
+                    resultados['no_conformes'].append({
+                        'archivo': archivo,
+                        'razon': f'Tiene {len(subtitle_streams)} subtítulos (se esperan 2)',
+                        'detalles': subtitle_streams
+                    })
+                    continue
+                
+                # Obtener idiomas de los subtítulos
+                langs = []
+                for stream in subtitle_streams:
+                    lang = stream.get('tags', {}).get('language', 'und')
+                    title = stream.get('tags', {}).get('title', '')
+                    langs.append({
+                        'lang': lang,
+                        'title': title,
+                        'index': stream.get('index')
+                    })
+                
+                # Verificar que el primer subtítulo sea español y el segundo inglés
+                primer_sub = langs[0]['lang'].lower()
+                segundo_sub = langs[1]['lang'].lower()
+                
+                es_valido_esp = primer_sub in ['spa', 'es', 'esp']
+                es_valido_eng = segundo_sub in ['eng', 'en']
+                
+                if not es_valido_esp or not es_valido_eng:
+                    razon = []
+                    if not es_valido_esp:
+                        razon.append(f'1er subtítulo es "{primer_sub}" (se espera español)')
+                    if not es_valido_eng:
+                        razon.append(f'2do subtítulo es "{segundo_sub}" (se espera inglés)')
+                    
+                    resultados['no_conformes'].append({
+                        'archivo': archivo,
+                        'razon': ' | '.join(razon),
+                        'detalles': langs
+                    })
+                else:
+                    resultados['conformes'].append({
+                        'archivo': archivo,
+                        'detalles': langs
+                    })
+            
+            except Exception as e:
+                resultados['errores'].append({
+                    'archivo': archivo,
+                    'razon': f'Error al analizar: {str(e)}'
+                })
+        
+        progreso_ventana.destroy()
+        mostrar_resultados_verificacion(resultados, carpeta)
+    
+    # Ejecutar análisis en thread
+    thread = threading.Thread(target=analizar_thread, daemon=True)
+    thread.start()
+
+def mostrar_resultados_verificacion(resultados, carpeta):
+    """Muestra los resultados de la verificación de condiciones."""
+    # Crear ventana de resultados
+    resultado_ventana = tk.Toplevel(root)
+    resultado_ventana.title("Resultados de Verificación")
+    resultado_ventana.geometry("900x650")
+    resultado_ventana.transient(root)
+    
+    # Header
+    header_frame = tk.Frame(resultado_ventana, bg="#2c3e50", height=80)
+    header_frame.pack(fill=tk.X)
+    header_frame.pack_propagate(False)
+    
+    tk.Label(header_frame, text="📊 Resultados de Verificación de Subtítulos", 
+             font=("Arial", 16, "bold"), bg="#2c3e50", fg="white").pack(pady=10)
+    tk.Label(header_frame, text=f"Carpeta: {os.path.basename(carpeta)}", 
+             font=("Arial", 9), bg="#2c3e50", fg="#ecf0f1").pack()
+    
+    # Estadísticas
+    stats_frame = tk.Frame(resultado_ventana, bg="#ecf0f1")
+    stats_frame.pack(fill=tk.X, padx=10, pady=10)
+    
+    total = len(resultados['conformes']) + len(resultados['no_conformes']) + len(resultados['errores'])
+    
+    tk.Label(stats_frame, text=f"Total: {total}", font=("Arial", 10, "bold"), 
+             bg="#ecf0f1").pack(side=tk.LEFT, padx=15)
+    tk.Label(stats_frame, text=f"✅ Conformes: {len(resultados['conformes'])}", 
+             font=("Arial", 10), bg="#ecf0f1", fg="green").pack(side=tk.LEFT, padx=15)
+    tk.Label(stats_frame, text=f"❌ No conformes: {len(resultados['no_conformes'])}", 
+             font=("Arial", 10), bg="#ecf0f1", fg="red").pack(side=tk.LEFT, padx=15)
+    tk.Label(stats_frame, text=f"⚠️ Errores: {len(resultados['errores'])}", 
+             font=("Arial", 10), bg="#ecf0f1", fg="orange").pack(side=tk.LEFT, padx=15)
+    
+    # Notebook con pestañas
+    notebook = ttk.Notebook(resultado_ventana)
+    notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+    
+    # Pestaña de archivos conformes
+    tab_conformes = tk.Frame(notebook)
+    notebook.add(tab_conformes, text=f"✅ Conformes ({len(resultados['conformes'])})")
+    
+    text_conformes = tk.Text(tab_conformes, wrap=tk.WORD, font=("Consolas", 9))
+    text_conformes.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+    
+    scroll_conformes = tk.Scrollbar(tab_conformes, command=text_conformes.yview)
+    scroll_conformes.pack(side=tk.RIGHT, fill=tk.Y)
+    text_conformes.config(yscrollcommand=scroll_conformes.set)
+    
+    for item in resultados['conformes']:
+        text_conformes.insert(tk.END, f"✅ {os.path.basename(item['archivo'])}\n", "titulo")
+        text_conformes.insert(tk.END, f"   📂 {item['archivo']}\n")
+        text_conformes.insert(tk.END, f"   📝 Subtítulos: ")
+        for i, det in enumerate(item['detalles']):
+            text_conformes.insert(tk.END, f"{i+1}. {det['lang'].upper()}")
+            if det['title']:
+                text_conformes.insert(tk.END, f" ({det['title']})")
+            if i < len(item['detalles']) - 1:
+                text_conformes.insert(tk.END, " | ")
+        text_conformes.insert(tk.END, "\n\n")
+    
+    text_conformes.config(state=tk.DISABLED)
+    
+    # Pestaña de archivos NO conformes
+    tab_no_conformes = tk.Frame(notebook)
+    notebook.add(tab_no_conformes, text=f"❌ No Conformes ({len(resultados['no_conformes'])})")
+    
+    text_no_conformes = tk.Text(tab_no_conformes, wrap=tk.WORD, font=("Consolas", 9), fg="red")
+    text_no_conformes.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+    
+    scroll_no_conformes = tk.Scrollbar(tab_no_conformes, command=text_no_conformes.yview)
+    scroll_no_conformes.pack(side=tk.RIGHT, fill=tk.Y)
+    text_no_conformes.config(yscrollcommand=scroll_no_conformes.set)
+    
+    for item in resultados['no_conformes']:
+        text_no_conformes.insert(tk.END, f"❌ {os.path.basename(item['archivo'])}\n", "titulo")
+        text_no_conformes.insert(tk.END, f"   📂 {item['archivo']}\n")
+        text_no_conformes.insert(tk.END, f"   ⚠️ Razón: {item['razon']}\n")
+        if 'detalles' in item and item['detalles']:
+            text_no_conformes.insert(tk.END, f"   📝 Subtítulos encontrados: ")
+            for i, det in enumerate(item['detalles']):
+                text_no_conformes.insert(tk.END, f"{i+1}. {det['lang'].upper()}")
+                if det['title']:
+                    text_no_conformes.insert(tk.END, f" ({det['title']})")
+                if i < len(item['detalles']) - 1:
+                    text_no_conformes.insert(tk.END, " | ")
+            text_no_conformes.insert(tk.END, "\n")
+        text_no_conformes.insert(tk.END, "\n")
+    
+    text_no_conformes.config(state=tk.DISABLED)
+    
+    # Pestaña de errores
+    tab_errores = tk.Frame(notebook)
+    notebook.add(tab_errores, text=f"⚠️ Errores ({len(resultados['errores'])})")
+    
+    text_errores = tk.Text(tab_errores, wrap=tk.WORD, font=("Consolas", 9), fg="orange")
+    text_errores.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+    
+    scroll_errores = tk.Scrollbar(tab_errores, command=text_errores.yview)
+    scroll_errores.pack(side=tk.RIGHT, fill=tk.Y)
+    text_errores.config(yscrollcommand=scroll_errores.set)
+    
+    for item in resultados['errores']:
+        text_errores.insert(tk.END, f"⚠️ {os.path.basename(item['archivo'])}\n", "titulo")
+        text_errores.insert(tk.END, f"   📂 {item['archivo']}\n")
+        text_errores.insert(tk.END, f"   ❌ Error: {item['razon']}\n\n")
+    
+    text_errores.config(state=tk.DISABLED)
+    
+    # Botones
+    button_frame = tk.Frame(resultado_ventana)
+    button_frame.pack(fill=tk.X, padx=10, pady=10)
+    
+    def exportar_resultados():
+        archivo_salida = filedialog.asksaveasfilename(
+            title="Guardar resultados",
+            defaultextension=".txt",
+            filetypes=[("Archivo de texto", "*.txt"), ("Todos los archivos", "*.*")],
+            initialfile=f"verificacion_subtitulos_{os.path.basename(carpeta)}.txt"
+        )
+        
+        if archivo_salida:
+            try:
+                with open(archivo_salida, 'w', encoding='utf-8') as f:
+                    f.write("="*80 + "\n")
+                    f.write("RESULTADOS DE VERIFICACIÓN DE SUBTÍTULOS\n")
+                    f.write("="*80 + "\n\n")
+                    f.write(f"Carpeta analizada: {carpeta}\n")
+                    f.write(f"Total de archivos: {total}\n")
+                    f.write(f"Conformes: {len(resultados['conformes'])}\n")
+                    f.write(f"No conformes: {len(resultados['no_conformes'])}\n")
+                    f.write(f"Errores: {len(resultados['errores'])}\n\n")
+                    
+                    f.write("="*80 + "\n")
+                    f.write("ARCHIVOS CONFORMES\n")
+                    f.write("="*80 + "\n\n")
+                    for item in resultados['conformes']:
+                        f.write(f"✅ {os.path.basename(item['archivo'])}\n")
+                        f.write(f"   Ruta: {item['archivo']}\n")
+                        f.write(f"   Subtítulos: ")
+                        for i, det in enumerate(item['detalles']):
+                            f.write(f"{i+1}. {det['lang'].upper()}")
+                            if det['title']:
+                                f.write(f" ({det['title']})")
+                            if i < len(item['detalles']) - 1:
+                                f.write(" | ")
+                        f.write("\n\n")
+                    
+                    f.write("\n" + "="*80 + "\n")
+                    f.write("ARCHIVOS NO CONFORMES\n")
+                    f.write("="*80 + "\n\n")
+                    for item in resultados['no_conformes']:
+                        f.write(f"❌ {os.path.basename(item['archivo'])}\n")
+                        f.write(f"   Ruta: {item['archivo']}\n")
+                        f.write(f"   Razón: {item['razon']}\n")
+                        if 'detalles' in item and item['detalles']:
+                            f.write(f"   Subtítulos encontrados: ")
+                            for i, det in enumerate(item['detalles']):
+                                f.write(f"{i+1}. {det['lang'].upper()}")
+                                if det['title']:
+                                    f.write(f" ({det['title']})")
+                                if i < len(item['detalles']) - 1:
+                                    f.write(" | ")
+                            f.write("\n")
+                        f.write("\n")
+                    
+                    f.write("\n" + "="*80 + "\n")
+                    f.write("ERRORES\n")
+                    f.write("="*80 + "\n\n")
+                    for item in resultados['errores']:
+                        f.write(f"⚠️ {os.path.basename(item['archivo'])}\n")
+                        f.write(f"   Ruta: {item['archivo']}\n")
+                        f.write(f"   Error: {item['razon']}\n\n")
+                
+                messagebox.showinfo("Exportación exitosa", f"Resultados guardados en:\n{archivo_salida}")
+            except Exception as e:
+                messagebox.showerror("Error", f"No se pudo guardar el archivo:\n{str(e)}")
+    
+    tk.Button(button_frame, text="📄 Exportar resultados", command=exportar_resultados, 
+              font=("Arial", 10), bg="#3498db", fg="white", width=20).pack(side=tk.LEFT, padx=5)
+    tk.Button(button_frame, text="Cerrar", command=resultado_ventana.destroy, 
+              font=("Arial", 10), bg="#95a5a6", fg="white", width=15).pack(side=tk.RIGHT, padx=5)
+
 def procesar_archivos_thread(archivos, output_dir):
     """Función que se ejecuta en un thread separado para procesar archivos."""
     global procesando, pistas_a_eliminar, cancelar_procesamiento
@@ -969,7 +1333,7 @@ scrollbar_lista = tk.Scrollbar(frame_lista, orient=tk.VERTICAL, command=lista.yv
 scrollbar_lista.pack(side=tk.RIGHT, fill=tk.Y)
 lista.config(yscrollcommand=scrollbar_lista.set)
 
-# Frame para botones de archivos
+# Frame para botones de archivos (primera fila)
 frame_botones_archivos = tk.Frame(root)
 frame_botones_archivos.pack(pady=5)
 
@@ -981,6 +1345,16 @@ tk.Button(frame_botones_archivos, text="Eliminar seleccionados", command=elimina
           width=20, font=("Arial", 9), relief=tk.RAISED, bd=2).pack(side=tk.LEFT, padx=3)
 tk.Button(frame_botones_archivos, text="Limpiar lista", command=limpiar_lista, 
           width=20, font=("Arial", 9), relief=tk.RAISED, bd=2).pack(side=tk.LEFT, padx=3)
+
+# Frame para botón de verificación (segunda fila)
+frame_botones_verificacion = tk.Frame(root)
+frame_botones_verificacion.pack(pady=2)
+
+tk.Button(frame_botones_verificacion, text="📊 Verificar Condiciones de Subtítulos", 
+          command=verificar_condiciones_carpeta, 
+          width=40, font=("Arial", 9, "bold"), relief=tk.RAISED, bd=2, 
+          bg="#3498db", fg="white", activebackground="#2980b9", 
+          activeforeground="white").pack(pady=3)
 
 # Frame para opciones
 frame_opciones = tk.Frame(root)
