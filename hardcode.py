@@ -837,8 +837,21 @@ def limpiar_metadatos_archivo(video_file):
         # Reemplazar archivo original con el procesado
         if temp_output.exists():
             video_file.unlink()
-            temp_output.rename(video_file)
-            enviar_mensaje(f"✅ Metadatos limpiados: {video_file.name}")
+            
+            # Verificar si la extensión tiene mayúsculas y convertir a minúsculas
+            extension_original = video_file.suffix
+            if extension_original != extension_original.lower():
+                # La extensión tiene mayúsculas, cambiar a minúsculas
+                nombre_nuevo = video_file.stem + extension_original.lower()
+                video_file_nuevo = video_file.parent / nombre_nuevo
+                temp_output.rename(video_file_nuevo)
+                enviar_mensaje(f"✅ Metadatos limpiados: {video_file_nuevo.name}")
+                enviar_mensaje(f"   📝 Extensión convertida: {extension_original} → {extension_original.lower()}")
+            else:
+                # La extensión ya está en minúsculas
+                temp_output.rename(video_file)
+                enviar_mensaje(f"✅ Metadatos limpiados: {video_file.name}")
+            
             return True
         else:
             raise Exception("El archivo de salida no fue creado")
