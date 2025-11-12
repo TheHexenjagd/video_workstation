@@ -797,6 +797,116 @@ def hardcode_subtitulo(input_file, output_dir):
             except:
                 pass
 
+def limpiar_metadatos_archivo(video_file):
+    """Limpia los metadatos de un único archivo de video."""
+    try:
+        video_file = Path(video_file)
+        temp_output = video_file.parent / f"temp_{video_file.name}"
+        
+        enviar_mensaje(f"🧹 Limpiando metadatos: {video_file.name}")
+        
+        # Comando FFmpeg para eliminar metadatos manteniendo solo el primer stream de video
+        command = [
+            FFMPEG_PATH,
+            '-i', str(video_file),
+            '-map', '0:v:0',
+            '-map', '0:a?',
+            '-map', '0:s?',
+            '-c', 'copy',
+            '-map_metadata', '-1',
+            '-write_id3v1', '0',
+            '-write_id3v2', '0',
+            '-id3v2_version', '0',
+            '-y',
+            str(temp_output)
+        ]
+
+        # Ejecutar comando FFmpeg
+        result = subprocess.run(
+            command,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=3600,  # 1 hora de timeout
+            creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+        )
+        
+        if result.returncode != 0:
+            raise subprocess.CalledProcessError(result.returncode, command, stderr=result.stderr)
+        
+        # Reemplazar archivo original con el procesado
+        if temp_output.exists():
+            video_file.unlink()
+            temp_output.rename(video_file)
+            enviar_mensaje(f"✅ Metadatos limpiados: {video_file.name}")
+            return True
+        else:
+            raise Exception("El archivo de salida no fue creado")
+        
+    except subprocess.TimeoutExpired:
+        enviar_mensaje(f"❌ Timeout procesando {video_file.name} (más de 1 hora)")
+        if temp_output.exists():
+            temp_output.unlink()
+        return False
+    except subprocess.CalledProcessError as e:
+        enviar_mensaje(f"❌ Error FFmpeg en {video_file.name}")
+        if e.stderr:
+            error_lines = [line for line in e.stderr.split('\n') if 'error' in line.lower()][:2]
+            for line in error_lines:
+                enviar_mensaje(f"   {line.strip()}")
+        if temp_output.exists():
+            temp_output.unlink()
+        return False
+    except Exception as e:
+        enviar_mensaje(f"❌ Error con {video_file.name}: {str(e)}")
+        if temp_output.exists():
+            temp_output.unlink()
+        return False
+
+def limpiar_metadatos_thread(archivos):
+    """Función que se ejecuta en un thread separado para limpiar metadatos."""
+    global procesando, cancelar_procesamiento
+    procesando = True
+    cancelar_procesamiento = False
+    
+    total = len(archivos)
+    exitosos = 0
+    fallidos = 0
+    cancelados = 0
+    
+    enviar_mensaje(f"{'='*60}")
+    enviar_mensaje(f"🧹 Iniciando limpieza de metadatos de {total} archivo(s)")
+    enviar_mensaje(f"{'='*60}\n")
+    
+    for i, archivo in enumerate(archivos, 1):
+        # Verificar si se solicitó cancelar
+        if cancelar_procesamiento:
+            enviar_mensaje(f"\n⚠️ Limpieza cancelada por el usuario")
+            cancelados = total - i + 1
+            break
+        
+        mensaje_queue.put(("PROGRESO", i, total))
+        enviar_mensaje(f"\n📹 Archivo {i}/{total}")
+        
+        if limpiar_metadatos_archivo(archivo):
+            exitosos += 1
+        else:
+            fallidos += 1
+    
+    enviar_mensaje(f"\n{'='*60}")
+    if cancelar_procesamiento:
+        enviar_mensaje(f"⚠️ Limpieza cancelada!")
+    else:
+        enviar_mensaje(f"✅ Limpieza completada!")
+    enviar_mensaje(f"   Exitosos: {exitosos}")
+    enviar_mensaje(f"   Fallidos: {fallidos}")
+    if cancelados > 0:
+        enviar_mensaje(f"   Cancelados: {cancelados}")
+    enviar_mensaje(f"{'='*60}\n")
+    
+    mensaje_queue.put("FIN")
+    procesando = False
+
 def procesar_archivos_thread(archivos, output_dir):
     """Función que se ejecuta en un thread separado para procesar archivos."""
     global procesando, pistas_config, cancelar_procesamiento, usar_nvidia
@@ -932,6 +1042,55 @@ def cancelar():
     else:
         messagebox.showinfo("Sin procesamiento", "No hay ningún procesamiento en curso.")
 
+def limpiar_metadatos():
+    """Limpia los metadatos de los archivos de la lista actual."""
+    global procesando
+    
+    if procesando:
+        messagebox.showwarning("Procesando", "Ya hay un procesamiento en curso.")
+        return
+    
+    archivos = list(lista.get(0, tk.END))
+    if not archivos:
+        messagebox.showerror("Error", "Selecciona al menos un archivo de video.")
+        return
+    
+    # Confirmar acción
+    respuesta = messagebox.askyesno(
+        "Confirmar limpieza de metadatos",
+        f"¿Deseas limpiar los metadatos de {len(archivos)} archivo(s)?\n\n"
+        "⚠️ ADVERTENCIA: Esta operación modificará los archivos originales.\n"
+        "Se recomienda hacer una copia de respaldo antes de continuar.",
+        icon='warning'
+    )
+    
+    if not respuesta:
+        return
+    
+    # Limpiar el log
+    log_text.config(state=tk.NORMAL)
+    log_text.delete(1.0, tk.END)
+    log_text.config(state=tk.DISABLED)
+    
+    # Resetear barra de progreso
+    progress_bar["value"] = 0
+    progress_label.config(text="Preparando limpieza de metadatos...")
+    
+    # Deshabilitar botones (usamos try/except por si btn_limpiar_metadatos no existe aún)
+    btn_procesar.config(state=tk.DISABLED)
+    try:
+        btn_limpiar_metadatos.config(state=tk.DISABLED)
+    except:
+        pass
+    btn_cancelar.config(state=tk.NORMAL)
+    
+    # Iniciar thread de limpieza de metadatos
+    thread = threading.Thread(target=limpiar_metadatos_thread, args=(archivos,), daemon=True)
+    thread.start()
+    
+    # Iniciar actualización de UI
+    actualizar_ui()
+
 def procesar():
     global procesando
     
@@ -975,7 +1134,17 @@ def actualizar_ui():
         while True:
             msg = mensaje_queue.get_nowait()
             
-            if isinstance(msg, tuple):
+            if msg == "FIN":
+                # Finalizar procesamiento
+                progress_bar["value"] = 100
+                progress_label.config(text="¡Completado!")
+                btn_procesar.config(state=tk.NORMAL)
+                try:
+                    btn_limpiar_metadatos.config(state=tk.NORMAL)
+                except:
+                    pass
+                btn_cancelar.config(state=tk.DISABLED)
+            elif isinstance(msg, tuple):
                 if msg[0] == "PROGRESO":
                     _, actual, total = msg
                     porcentaje = (actual / total) * 100
@@ -986,6 +1155,10 @@ def actualizar_ui():
                     progress_bar["value"] = 100
                     progress_label.config(text=f"¡Completado! ✅ {exitosos} | ❌ {fallidos}")
                     btn_procesar.config(state=tk.NORMAL)
+                    try:
+                        btn_limpiar_metadatos.config(state=tk.NORMAL)
+                    except:
+                        pass
                     btn_cancelar.config(state=tk.DISABLED)
                     messagebox.showinfo("Completado", f"Procesamiento terminado.\n\nExitosos: {exitosos}\nFallidos: {fallidos}")
                 elif msg[0] == "SELECTOR_PISTAS":
@@ -1443,6 +1616,14 @@ btn_procesar = tk.Button(frame_botones_accion, text="PROCESAR", command=procesar
                          activebackground="#218838", activeforeground="white",
                          cursor="hand2")
 btn_procesar.pack(side=tk.LEFT, padx=8)
+
+# Botón de limpiar metadatos
+btn_limpiar_metadatos = tk.Button(frame_botones_accion, text="LIMPIAR\nMETADATOS", command=limpiar_metadatos, 
+                         bg="#17a2b8", fg="white", font=("Arial", 11, "bold"), 
+                         height=2, width=18, relief=tk.RAISED, bd=3,
+                         activebackground="#138496", activeforeground="white",
+                         cursor="hand2")
+btn_limpiar_metadatos.pack(side=tk.LEFT, padx=8)
 
 # Botón de cancelar
 btn_cancelar = tk.Button(frame_botones_accion, text="CANCELAR", command=cancelar, 
