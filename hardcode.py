@@ -339,8 +339,21 @@ def encontrar_pista_por_identificador(streams, identificador, codec_type):
     if identificador == "NINGUNO" or identificador is None:
         return None
     
+    # El formato es lang|title|codec, pero title puede contener '|'
+    # Primero separamos el codec del final, luego el lang del principio
     partes_buscadas = identificador.split('|')
-    lang_buscado, title_buscado, codec_buscado = partes_buscadas
+    if len(partes_buscadas) >= 3:
+        lang_buscado = partes_buscadas[0]
+        codec_buscado = partes_buscadas[-1]
+        # El título es todo lo que está entre el primer y último '|'
+        title_buscado = '|'.join(partes_buscadas[1:-1])
+    elif len(partes_buscadas) == 2:
+        lang_buscado, codec_buscado = partes_buscadas
+        title_buscado = ''
+    else:
+        lang_buscado = partes_buscadas[0] if partes_buscadas else ''
+        title_buscado = ''
+        codec_buscado = ''
     
     for stream in streams:
         if stream.get('codec_type') != codec_type:
