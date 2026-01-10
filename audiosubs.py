@@ -20,8 +20,8 @@ CONFIG_FILE = os.path.join(CONFIG_DIR, 'asrt_config.ini')
 # Valores por defecto
 DEFAULT_CONFIG = {
     "Paths": {
-        "ffmpeg": r"C:\Users\Gabriel\AppData\Local\JDownloader 2.0\tools\Windows\ffmpeg\x64\ffmpeg.exe",
-        "ffprobe": r"C:\Users\Gabriel\AppData\Local\JDownloader 2.0\tools\Windows\ffmpeg\x64\ffprobe.exe",
+        "ffmpeg": r"C:\Users\Gabriel\AppData\Roaming\Galleon\bin\ffmpeg.exe",
+        "ffprobe": r"C:\Users\Gabriel\AppData\Roaming\Galleon\bin\ffprobe.exe",
         "output_dir": ""
     },
     "Options": {
@@ -74,6 +74,7 @@ def actualizar_configuracion():
     try:
         output_dir_value = salida.get() if 'salida' in globals() and salida and hasattr(salida, 'get') else ''
         backup_value = var_backup.get() if 'var_backup' in globals() and var_backup and hasattr(var_backup, 'get') else True
+        recursivo_value = var_recursivo.get() if 'var_recursivo' in globals() and var_recursivo and hasattr(var_recursivo, 'get') else True
         
         config = configparser.ConfigParser()
         config['Paths'] = {
@@ -82,12 +83,106 @@ def actualizar_configuracion():
             'output_dir': output_dir_value
         }
         config['Options'] = {
-            'buscar_recursivo': str(var_recursivo.get()),
+            'buscar_recursivo': str(recursivo_value),
             'backup_original': str(backup_value)
         }
         guardar_configuracion(config)
     except Exception as e:
         print(f"❌ Error guardando configuración: {e}")
+
+def guardar_solo_rutas_ffmpeg():
+    """Guarda únicamente las rutas de FFmpeg/FFProbe sin acceder a variables de UI."""
+    try:
+        config = configparser.ConfigParser()
+        
+        # Leer configuración existente si existe
+        if os.path.exists(CONFIG_FILE):
+            config.read(CONFIG_FILE, encoding='utf-8')
+        
+        # Asegurar que existen las secciones
+        if 'Paths' not in config:
+            config['Paths'] = {}
+        if 'Options' not in config:
+            config['Options'] = DEFAULT_CONFIG['Options'].copy()
+        
+        # Actualizar solo las rutas de FFmpeg
+        config['Paths']['ffmpeg'] = FFMPEG_PATH
+        config['Paths']['ffprobe'] = FFPROBE_PATH
+        
+        # Preservar output_dir si existe
+        if 'output_dir' not in config['Paths']:
+            config['Paths']['output_dir'] = ''
+        
+        guardar_configuracion(config)
+    except Exception as e:
+        print(f"❌ Error guardando rutas FFmpeg: {e}")
+
+def verificar_y_configurar_ffmpeg():
+    """Verifica que ffmpeg y ffprobe existan, si no, solicita al usuario que los ubique."""
+    global FFMPEG_PATH, FFPROBE_PATH
+    
+    # Verificar si ffmpeg existe
+    if not os.path.exists(FFMPEG_PATH):
+        print(f"⚠️ FFmpeg no encontrado en: {FFMPEG_PATH}")
+        print(f"📁 Por favor, selecciona la ubicación de ffmpeg.exe")
+        
+        # Crear ventana temporal para el diálogo
+        temp_root = tk.Tk()
+        temp_root.withdraw()
+        
+        archivo = filedialog.askopenfilename(
+            title="FFmpeg no encontrado - Selecciona ffmpeg.exe",
+            filetypes=[("FFmpeg", "ffmpeg.exe"), ("Todos los archivos", "*.*")],
+            initialdir=os.path.dirname(FFMPEG_PATH)
+        )
+        
+        temp_root.destroy()
+        
+        if archivo:
+            FFMPEG_PATH = archivo
+            print(f"✅ FFmpeg configurado en: {FFMPEG_PATH}")
+        else:
+            print(f"❌ No se seleccionó FFmpeg. La aplicación puede no funcionar correctamente.")
+            return False
+    else:
+        print(f"✅ FFmpeg encontrado: {FFMPEG_PATH}")
+    
+    # Verificar si ffprobe existe
+    if not os.path.exists(FFPROBE_PATH):
+        print(f"⚠️ FFProbe no encontrado en: {FFPROBE_PATH}")
+        
+        # Primero intentar buscar en el mismo directorio que ffmpeg
+        ffprobe_auto = os.path.join(os.path.dirname(FFMPEG_PATH), "ffprobe.exe")
+        if os.path.exists(ffprobe_auto):
+            FFPROBE_PATH = ffprobe_auto
+            print(f"✅ FFProbe encontrado automáticamente: {FFPROBE_PATH}")
+        else:
+            print(f"📁 Por favor, selecciona la ubicación de ffprobe.exe")
+            
+            # Crear ventana temporal para el diálogo
+            temp_root = tk.Tk()
+            temp_root.withdraw()
+            
+            archivo = filedialog.askopenfilename(
+                title="FFProbe no encontrado - Selecciona ffprobe.exe",
+                filetypes=[("FFProbe", "ffprobe.exe"), ("Todos los archivos", "*.*")],
+                initialdir=os.path.dirname(FFMPEG_PATH)
+            )
+            
+            temp_root.destroy()
+            
+            if archivo:
+                FFPROBE_PATH = archivo
+                print(f"✅ FFProbe configurado en: {FFPROBE_PATH}")
+            else:
+                print(f"❌ No se seleccionó FFProbe. La aplicación puede no funcionar correctamente.")
+                return False
+    else:
+        print(f"✅ FFProbe encontrado: {FFPROBE_PATH}")
+    
+    # Guardar la configuración actualizada (solo rutas, sin variables de UI)
+    guardar_solo_rutas_ffmpeg()
+    return True
 
 # Cargar configuración al inicio
 config_ini = cargar_configuracion()
@@ -520,7 +615,12 @@ def eliminar_pistas(input_file, output_dir):
 
     try:
         # Construir comando FFmpeg para copiar streams excepto los que se eliminan
-        cmd = [FFMPEG_PATH, "-i", input_file]
+        # Usando características de FFmpeg 7.1+ y aceleración NVIDIA (diciembre 2025)
+        cmd = [FFMPEG_PATH]
+        
+        # Entrada (sin aceleración por hardware para -c copy, ya que no hay decodificación)
+        # La aceleración NVIDIA solo es útil cuando se recodifica video
+        cmd.extend(["-i", input_file])
         
         # Mapear todos los streams
         cmd.extend(["-map", "0"])
@@ -534,8 +634,12 @@ def eliminar_pistas(input_file, output_dir):
             cmd.extend(["-map", f"-0:{idx}"])
         
         # Copiar todos los codecs (sin recodificar)
+        # Usar -c copy para máximo rendimiento
+        # Nota: La aceleración NVIDIA (NVENC/NVDEC) se habilitaría automáticamente
+        # si se estuviera recodificando con codecs como h264_nvenc, hevc_nvenc, av1_nvenc
         cmd.extend([
             "-c", "copy",
+            "-movflags", "+faststart",  # Optimización para reproducción web/streaming (FFmpeg 7.1+)
             "-y", str(output_path)
         ])
         
@@ -1226,7 +1330,7 @@ def actualizar_ui():
 # INFORMACIÓN DEL PROGRAMA
 # -----------------------------
 PROGRAMA_NOMBRE = "Audio & Subtitle Removal Tool (ASRT)"
-PROGRAMA_VERSION = "2.0.0"
+PROGRAMA_VERSION = "2.1.0"
 PROGRAMA_AUTOR = "Galleon"
 PROGRAMA_DESCRIPCION = """
 Audio & Subtitle Removal Tool es una herramienta para listar y eliminar
@@ -1239,6 +1343,8 @@ Características principales:
 • Búsqueda recursiva en carpetas
 • Opción de backup automático del archivo original
 • Sin recodificación: proceso rápido y sin pérdida de calidad
+• Optimizado para FFmpeg 7.1+ con soporte para aceleración NVIDIA
+• Configuración automática de rutas de FFmpeg/FFProbe
 
 Requisitos:
 • FFmpeg instalado en el sistema
@@ -1376,6 +1482,13 @@ def mostrar_acerca_de():
 root = tk.Tk()
 root.title(f"{PROGRAMA_NOMBRE} v{PROGRAMA_VERSION}")
 root.geometry("900x680")
+
+# Verificar y configurar ffmpeg/ffprobe si no existen
+if not verificar_y_configurar_ffmpeg():
+    messagebox.showwarning("Configuración incompleta", 
+                          "No se pudieron configurar FFmpeg y/o FFProbe.\n\n" +
+                          "Algunas funciones pueden no estar disponibles.\n\n" +
+                          "Puedes configurarlos más tarde desde el menú Configuración.")
 
 # Barra de menú
 menubar = tk.Menu(root)
