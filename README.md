@@ -11,10 +11,8 @@
 - [Características](#-características)
 - [Requisitos](#-requisitos)
 - [Instalación](#-instalación)
-- [Uso](#-uso)
 - [Configuración](#-configuración)
 - [Presets de Codificación](#-presets-de-codificación)
-- [Capturas de Pantalla](#-capturas-de-pantalla)
 - [Solución de Problemas](#-solución-de-problemas)
 - [Contribuciones](#-contribuciones)
 - [Licencia](#-licencia)
@@ -77,47 +75,6 @@ cd galleon_mc_hardcodetool
 python hardcode.py
 ```
 
-## 🚀 Uso
-
-### Interfaz Gráfica
-
-1. **Agregar Videos**
-   - **Agregar archivos**: Selecciona videos individuales
-   - **Cargar carpeta**: Carga todos los videos de una carpeta
-   - **Búsqueda recursiva**: Activa para incluir subcarpetas
-
-2. **Configurar Salida**
-   - Selecciona el directorio donde se guardarán los videos procesados
-   - Los archivos tendrán el sufijo `_hardcoded` o `_nosub`
-
-3. **Seleccionar GPU**
-   - ✅ **NVIDIA NVENC**: Para tarjetas gráficas NVIDIA
-   - ⬜ **Intel Quick Sync**: Para procesadores Intel con iGPU
-
-4. **Procesar**
-   - Haz clic en **PROCESAR** para iniciar
-   - Si hay múltiples pistas de audio/subtítulos, aparecerá un selector
-   - Opción de aplicar la misma selección a todos los archivos
-
-### Selector de Pistas
-
-Cuando un video tiene múltiples pistas de audio o subtítulos:
-
-```
-🎵 Audio 1 (spa)
-   AAC | 2ch | 128kbps
-
-🎵 Audio 2 (eng)  
-   DTS | 6ch | 1536kbps
-
-📝 Subtítulo 1 (spa)
-   SUBRIP
-
-❌ Sin subtítulos (solo video + audio)
-```
-
-Marca **"✓ Aplicar esta selección a todos los archivos de la cola"** para usar las mismas pistas en todos los videos.
-
 ## ⚙️ Configuración
 
 ### Archivo de Configuración
@@ -138,12 +95,6 @@ usar_nvidia = True
 buscar_recursivo = True
 preset = medium
 ```
-
-### Cambiar Rutas de FFmpeg
-**Menú → Configuración → Cambiar ruta de FFmpeg/FFProbe**
-
-### Cambiar Preset
-**Menú → Configuración → Preset de codificación**
 
 ## 🎛️ Presets de Codificación
 
@@ -176,40 +127,7 @@ preset = medium
 
 > **Nota**: Los presets se ajustan automáticamente al cambiar de GPU.
 
-## 📸 Capturas de Pantalla
-
-### Ventana Principal
-```
-┌─────────────────────────────────────────────────────────┐
-│  Archivo  Configuración  Ayuda                          │
-├─────────────────────────────────────────────────────────┤
-│  Archivos de video:                                     │
-│  ┌───────────────────────────────────────────────────┐  │
-│  │ C:\Videos\Pelicula1.mkv                           │  │
-│  │ C:\Videos\Pelicula2.mp4                           │  │
-│  └───────────────────────────────────────────────────┘  │
-│                                                          │
-│  [Agregar archivos] [Cargar carpeta] [Eliminar] [...]  │
-│                                                          │
-│  ☑ Buscar en subcarpetas | ☑ Usar GPU NVIDIA (NVENC)   │
-│                                                          │
-│  Directorio de salida: C:\Videos\Salida [Seleccionar]  │
-│                                                          │
-│  Listo para procesar                                    │
-│  [████████████████████████████████████████] 100%        │
-│                                                          │
-│  Log de procesamiento:                                  │
-│  ┌───────────────────────────────────────────────────┐  │
-│  │ ✅ Procesamiento completado!                      │  │
-│  │    Exitosos: 2                                     │  │
-│  │    Fallidos: 0                                     │  │
-│  └───────────────────────────────────────────────────┘  │
-│                                                          │
-│         [   PROCESAR   ]    [   CANCELAR   ]            │
-└─────────────────────────────────────────────────────────┘
-```
-
-## 🐛 Solución de Problemas
+##  Solución de Problemas
 
 ### Error: "No se encontró FFmpeg"
 - Verifica la ruta en **Configuración → Cambiar ruta de FFmpeg**
