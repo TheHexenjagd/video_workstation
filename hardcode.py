@@ -17,11 +17,15 @@ CONFIG_DIR = os.path.join(os.getenv('APPDATA'), 'Galleon', 'HST')
 os.makedirs(CONFIG_DIR, exist_ok=True)
 CONFIG_FILE = os.path.join(CONFIG_DIR, 'hardcode_config.ini')
 
+# Directorio por defecto para FFmpeg
+FFMPEG_DIR = os.path.join(os.getenv('APPDATA'), 'Galleon', 'bin')
+os.makedirs(FFMPEG_DIR, exist_ok=True)
+
 # Valores por defecto
 DEFAULT_CONFIG = {
     "Paths": {
-        "ffmpeg": r"C:\Users\Gabriel\AppData\Local\JDownloader 2.0\tools\Windows\ffmpeg\x64\ffmpeg.exe",
-        "ffprobe": r"C:\Users\Gabriel\AppData\Local\JDownloader 2.0\tools\Windows\ffmpeg\x64\ffprobe.exe",
+        "ffmpeg": os.path.join(FFMPEG_DIR, "ffmpeg.exe"),
+        "ffprobe": os.path.join(FFMPEG_DIR, "ffprobe.exe"),
         "output_dir": ""
     },
     "Options": {
@@ -213,6 +217,169 @@ def guardar_configuracion(config):
     except Exception as e:
         print(f"❌ Error guardando configuración: {e}")
 
+def configurar_ffmpeg_primera_vez():
+    """Configura FFmpeg en primera ejecución si no existe."""
+    ffmpeg_path = config_ini.get('Paths', 'ffmpeg', fallback=DEFAULT_CONFIG['Paths']['ffmpeg'])
+    ffprobe_path = config_ini.get('Paths', 'ffprobe', fallback=DEFAULT_CONFIG['Paths']['ffprobe'])
+    
+    # Verificar si los archivos existen
+    ffmpeg_existe = os.path.exists(ffmpeg_path)
+    ffprobe_existe = os.path.exists(ffprobe_path)
+    
+    if not ffmpeg_existe or not ffprobe_existe:
+        # Crear ventana de diálogo
+        dialog = tk.Toplevel()
+        dialog.title("⚙️ Configuración Inicial - FFmpeg")
+        dialog.geometry("650x450")
+        dialog.resizable(False, False)
+        dialog.grab_set()
+        
+        # Centrar ventana
+        dialog.update_idletasks()
+        x = (dialog.winfo_screenwidth() // 2) - (650 // 2)
+        y = (dialog.winfo_screenheight() // 2) - (450 // 2)
+        dialog.geometry(f"650x450+{x}+{y}")
+        
+        # Frame principal
+        main_frame = tk.Frame(dialog, padx=20, pady=20)
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Título
+        tk.Label(main_frame, text="🔧 Configuración Inicial de FFmpeg", 
+                font=("Arial", 14, "bold"), fg="#007bff").pack(pady=(0, 10))
+        
+        # Mensaje explicativo
+        mensaje = (
+            "No se encontraron los archivos de FFmpeg en la ubicación por defecto.\n\n"
+            f"📁 Ubicación esperada:\n{FFMPEG_DIR}\n\n"
+            "FFmpeg es necesario para procesar videos.\n\n"
+            "Opciones:\n"
+            "1️⃣ Coloca ffmpeg.exe y ffprobe.exe en la carpeta indicada\n"
+            "2️⃣ Selecciona la ubicación actual de FFmpeg manualmente"
+        )
+        
+        text_frame = tk.Frame(main_frame, relief=tk.SUNKEN, bd=1)
+        text_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 15))
+        
+        text_widget = tk.Text(text_frame, wrap=tk.WORD, height=12, font=("Arial", 10),
+                             bg="#f8f9fa", relief=tk.FLAT, padx=10, pady=10)
+        text_widget.pack(fill=tk.BOTH, expand=True)
+        text_widget.insert("1.0", mensaje)
+        text_widget.config(state=tk.DISABLED)
+        
+        # Info adicional
+        info_frame = tk.LabelFrame(main_frame, text="💡 Información", font=("Arial", 9, "bold"),
+                                  padx=10, pady=10)
+        info_frame.pack(fill=tk.X, pady=(0, 15))
+        
+        tk.Label(info_frame, text="Descarga FFmpeg actualizado desde:", 
+                font=("Arial", 9)).pack(anchor=tk.W)
+        tk.Label(info_frame, text="https://www.gyan.dev/ffmpeg/builds/", 
+                font=("Arial", 9, "bold"), fg="#0066cc").pack(anchor=tk.W)
+        tk.Label(info_frame, text="(Descarga: ffmpeg-release-full.7z)", 
+                font=("Arial", 8), fg="#666").pack(anchor=tk.W)
+        
+        # Variable para controlar si se configuró
+        configurado = {'ok': False}
+        
+        def seleccionar_ffmpeg():
+            """Permite al usuario seleccionar la ubicación de FFmpeg."""
+            archivo = filedialog.askopenfilename(
+                title="Seleccionar ffmpeg.exe",
+                filetypes=[("FFmpeg Ejecutable", "ffmpeg.exe"), ("Todos los archivos", "*.*")],
+                initialdir=os.path.dirname(ffmpeg_path) if os.path.exists(os.path.dirname(ffmpeg_path)) else None
+            )
+            
+            if archivo:
+                directorio = os.path.dirname(archivo)
+                nuevo_ffmpeg = archivo
+                nuevo_ffprobe = os.path.join(directorio, "ffprobe.exe")
+                
+                # Verificar que ambos existan
+                if not os.path.exists(nuevo_ffprobe):
+                    messagebox.showerror(
+                        "Error",
+                        f"No se encontró ffprobe.exe en la misma carpeta:\n{directorio}\n\n"
+                        "FFmpeg y FFprobe deben estar en la misma carpeta."
+                    )
+                    return
+                
+                # Guardar configuración
+                config_ini.set('Paths', 'ffmpeg', nuevo_ffmpeg)
+                config_ini.set('Paths', 'ffprobe', nuevo_ffprobe)
+                guardar_configuracion(config_ini)
+                
+                configurado['ok'] = True
+                messagebox.showinfo(
+                    "✅ Configuración guardada",
+                    f"FFmpeg configurado correctamente:\n\n"
+                    f"📂 {directorio}\n\n"
+                    "La aplicación ya está lista para usar."
+                )
+                dialog.destroy()
+        
+        def abrir_carpeta_destino():
+            """Abre la carpeta donde debe estar FFmpeg."""
+            try:
+                os.startfile(FFMPEG_DIR)
+            except:
+                messagebox.showerror("Error", f"No se pudo abrir la carpeta:\n{FFMPEG_DIR}")
+        
+        def verificar_y_continuar():
+            """Verifica si ahora existen los archivos."""
+            if os.path.exists(ffmpeg_path) and os.path.exists(ffprobe_path):
+                configurado['ok'] = True
+                messagebox.showinfo(
+                    "✅ FFmpeg encontrado",
+                    "Los archivos de FFmpeg se encontraron correctamente.\n\n"
+                    "La aplicación ya está lista para usar."
+                )
+                dialog.destroy()
+            else:
+                messagebox.showwarning(
+                    "⚠️ Archivos no encontrados",
+                    f"No se encontraron los archivos en:\n{FFMPEG_DIR}\n\n"
+                    "Asegúrate de copiar ambos archivos:\n"
+                    "• ffmpeg.exe\n"
+                    "• ffprobe.exe"
+                )
+        
+        def salir():
+            """Sale de la aplicación."""
+            dialog.destroy()
+            root.quit()
+        
+        # Botones
+        button_frame = tk.Frame(main_frame)
+        button_frame.pack(fill=tk.X)
+        
+        tk.Button(button_frame, text="📂 Abrir Carpeta Destino", command=abrir_carpeta_destino,
+                 bg="#17a2b8", fg="white", font=("Arial", 10, "bold"),
+                 relief=tk.RAISED, bd=2, padx=10, pady=8).pack(side=tk.LEFT, padx=5)
+        
+        tk.Button(button_frame, text="🔍 Seleccionar FFmpeg", command=seleccionar_ffmpeg,
+                 bg="#28a745", fg="white", font=("Arial", 10, "bold"),
+                 relief=tk.RAISED, bd=2, padx=10, pady=8).pack(side=tk.LEFT, padx=5)
+        
+        tk.Button(button_frame, text="✓ Verificar", command=verificar_y_continuar,
+                 bg="#007bff", fg="white", font=("Arial", 10, "bold"),
+                 relief=tk.RAISED, bd=2, padx=10, pady=8).pack(side=tk.LEFT, padx=5)
+        
+        tk.Button(button_frame, text="✗ Salir", command=salir,
+                 bg="#dc3545", fg="white", font=("Arial", 10, "bold"),
+                 relief=tk.RAISED, bd=2, padx=10, pady=8).pack(side=tk.RIGHT, padx=5)
+        
+        # Esperar a que se cierre el diálogo
+        dialog.wait_window()
+        
+        # Si no se configuró, salir
+        if not configurado['ok']:
+            print("❌ FFmpeg no configurado. Cerrando aplicación...")
+            root.quit()
+            return False
+    
+    return True
+
 def actualizar_configuracion():
     """Actualiza el archivo de configuración con los valores actuales."""
     try:
@@ -278,10 +445,157 @@ pistas_config = {
 
 # Configuración de GPU
 usar_nvidia = True
+nvenc_verificado = None  # Cache para verificación de NVENC (None=no verificado, True/False=resultado)
 
 # -----------------------------
 # FUNCIONES AUXILIARES
 # -----------------------------
+def verificar_nvenc_disponible(mostrar_detalles=False):
+    """
+    Verifica si NVENC está disponible y compatible con los drivers actuales.
+    Retorna (disponible, mensaje_error, detalles_diagnostico)
+    """
+    global nvenc_verificado
+    
+    # Si ya se verificó antes, usar resultado en cache
+    if nvenc_verificado is not None:
+        return nvenc_verificado
+    
+    detalles = []
+    
+    try:
+        # Paso 1: Verificar que FFmpeg existe
+        if not os.path.exists(FFMPEG_PATH):
+            msg = f"❌ FFmpeg no encontrado en: {FFMPEG_PATH}"
+            nvenc_verificado = (False, msg, ["Configura la ruta de FFmpeg en las opciones"])
+            return nvenc_verificado
+        
+        # Paso 2: Verificar versión de FFmpeg
+        version_cmd = [FFMPEG_PATH, "-version"]
+        version_result = subprocess.run(version_cmd, capture_output=True, text=True, timeout=5)
+        if version_result.returncode == 0:
+            primera_linea = version_result.stdout.split('\n')[0]
+            detalles.append(f"📦 {primera_linea}")
+        
+        # Paso 3: Verificar encoders disponibles
+        cmd = [FFMPEG_PATH, "-hide_banner", "-encoders"]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        
+        if result.returncode == 0:
+            # Verificar si h264_nvenc está disponible
+            if "h264_nvenc" not in result.stdout:
+                msg = "⚠️ h264_nvenc no está disponible en tu versión de FFmpeg"
+                detalles.extend([
+                    "Tu FFmpeg no fue compilado con soporte NVENC",
+                    "Descarga una versión con soporte CUDA/NVENC desde:",
+                    "https://www.gyan.dev/ffmpeg/builds/ (Windows)"
+                ])
+                nvenc_verificado = (False, msg, detalles)
+                return nvenc_verificado
+            
+            detalles.append("✅ h264_nvenc encontrado en FFmpeg")
+            
+            # Paso 4: Test de inicialización de NVENC con diagnóstico extendido
+            test_cmd = [
+                FFMPEG_PATH,
+                "-hide_banner",
+                "-f", "lavfi",
+                "-i", "nullsrc=s=256x256:d=1",
+                "-c:v", "h264_nvenc",
+                "-preset", "fast",
+                "-f", "null",
+                "-"
+            ]
+            
+            detalles.append("🔍 Probando inicialización de NVENC...")
+            test_result = subprocess.run(test_cmd, capture_output=True, text=True, timeout=15)
+            
+            if test_result.returncode != 0:
+                error_msg = test_result.stderr.lower()
+                error_lines = [line.strip() for line in test_result.stderr.split('\n') if line.strip()]
+                
+                # Extraer líneas relevantes del error
+                error_relevante = []
+                for line in error_lines:
+                    if any(word in line.lower() for word in ['error', 'failed', 'cuda', 'nvenc', 'cannot']):
+                        error_relevante.append(f"   {line[:150]}")
+                        if len(error_relevante) >= 3:
+                            break
+                
+                detalles.extend(error_relevante)
+                
+                # Diagnosticar problema específico
+                if "no cuda capable devices" in error_msg or "could not find" in error_msg:
+                    msg = "❌ No se detectó GPU NVIDIA compatible"
+                    detalles.extend([
+                        "",
+                        "💡 Posibles causas:",
+                        "   1. No tienes una GPU NVIDIA instalada",
+                        "   2. Los drivers NVIDIA no están instalados",
+                        "   3. La GPU no soporta NVENC (muy antigua)",
+                        "",
+                        "🔧 Soluciones:",
+                        "   • Instala/actualiza drivers desde nvidia.com/drivers",
+                        "   • Verifica tu GPU con: nvidia-smi",
+                        "   • Usa Intel Quick Sync (desmarca opción NVIDIA)"
+                    ])
+                elif "cannot load" in error_msg or "failed loading" in error_msg:
+                    msg = "❌ No se pudo cargar NVENC"
+                    detalles.extend([
+                        "",
+                        "💡 Posibles causas:",
+                        "   1. Drivers NVIDIA desactualizados (<566.14)",
+                        "   2. FFmpeg compilado para versión CUDA diferente",
+                        "   3. Librerías CUDA faltantes",
+                        "",
+                        "🔧 Soluciones:",
+                        "   • Actualiza drivers NVIDIA a 566.14+",
+                        "   • Descarga FFmpeg más reciente (6.1+)",
+                        "   • Usa Intel Quick Sync como alternativa"
+                    ])
+                elif "nvenc" in error_msg and ("init" in error_msg or "failed" in error_msg):
+                    msg = "⚠️ Error al inicializar NVENC (drivers dic-2025)"
+                    detalles.extend([
+                        "",
+                        "💡 Este error es común con drivers NVIDIA 566.x+ (Dic 2025)",
+                        "",
+                        "🔧 Soluciones en orden de prioridad:",
+                        "   1. Actualiza FFmpeg a versión 6.1+ con CUDA 12.x",
+                        "      Descarga: https://www.gyan.dev/ffmpeg/builds/",
+                        "   2. Actualiza drivers NVIDIA a 566.14 o superior",
+                        "      Descarga: https://www.nvidia.com/download/",
+                        "   3. Usa Intel Quick Sync (QSV) si tienes CPU Intel",
+                        "",
+                        "📋 Para verificar:",
+                        "   • nvidia-smi          (versión de driver)",
+                        "   • ffmpeg -version     (versión de FFmpeg)",
+                        "   • ffmpeg -encoders | Select-String nvenc"
+                    ])
+                else:
+                    msg = "⚠️ Error desconocido al probar NVENC"
+                    detalles.append("")
+                    detalles.append("💡 Revisa los errores arriba o consulta NVIDIA_DIC2025_FIX.md")
+                
+                nvenc_verificado = (False, msg, detalles)
+                return nvenc_verificado
+            
+            detalles.append("✅ NVENC inicializado correctamente")
+            msg = "✅ NVENC disponible y funcionando"
+            nvenc_verificado = (True, msg, detalles)
+            return nvenc_verificado
+        else:
+            msg = "❌ Error ejecutando FFmpeg"
+            nvenc_verificado = (False, msg, ["Verifica que FFmpeg esté instalado correctamente"])
+            return nvenc_verificado
+    except subprocess.TimeoutExpired:
+        msg = "⏱️ Timeout verificando NVENC (FFmpeg no responde)"
+        nvenc_verificado = (False, msg, ["FFmpeg tardó demasiado en responder"])
+        return nvenc_verificado
+    except Exception as e:
+        msg = f"❌ Error verificando NVENC: {str(e)}"
+        nvenc_verificado = (False, msg, [])
+        return nvenc_verificado
+
 def enviar_mensaje(mensaje):
     """Envía un mensaje a la interfaz gráfica."""
     mensaje_queue.put(mensaje)
@@ -748,6 +1062,9 @@ def hardcode_subtitulo(input_file, output_dir):
         # Construir comando ffmpeg según GPU seleccionada
         if usar_nvidia:
             # Codificación con NVIDIA NVENC
+            # Actualizado para compatibilidad con drivers NVIDIA 566.x+ (Dic 2025)
+            # Nota: No usamos -hwaccel cuda porque interfiere con filtros de video (subtítulos)
+            # NVENC solo se usa para codificación, no para decodificación
             cmd = [
                 FFMPEG_PATH,
                 "-i", input_file,
@@ -757,11 +1074,15 @@ def hardcode_subtitulo(input_file, output_dir):
                 "-c:v", "h264_nvenc",
                 "-preset", preset,
                 "-profile:v", "high",
-                "-rc", "vbr",
+                "-rc", "vbr_hq",  # Cambiado de "vbr" a "vbr_hq" para drivers nuevos (566.x+)
                 "-cq", "23",
                 "-b:v", "5M",
                 "-maxrate", "8M",
                 "-bufsize", "10M",
+                "-rc-lookahead", "20",  # Mejora la calidad con nuevo driver
+                "-spatial_aq", "1",  # Adaptive Quantization espacial
+                "-temporal_aq", "1",  # Adaptive Quantization temporal
+                "-gpu", "0",  # Especificar GPU explícitamente
                 *audio_settings,
                 "-movflags", "+faststart",
                 "-y", str(output_path)
@@ -797,9 +1118,31 @@ def hardcode_subtitulo(input_file, output_dir):
             return True
         else:
             enviar_mensaje(f"❌ Error procesando el archivo")
+            
+            # Análisis mejorado de errores para drivers NVIDIA nuevos (Dic 2025+)
+            error_stderr = result.stderr.lower()
+            
+            if usar_nvidia:
+                if "nvenc" in error_stderr and ("init" in error_stderr or "failed" in error_stderr):
+                    enviar_mensaje("⚠️ Error de inicialización de NVENC")
+                    enviar_mensaje("💡 Posibles soluciones:")
+                    enviar_mensaje("   1. Actualiza FFmpeg a la última versión (6.1+)")
+                    enviar_mensaje("   2. Actualiza los drivers NVIDIA a 566.14 o superior")
+                    enviar_mensaje("   3. Intenta usar Intel Quick Sync (QSV) si está disponible")
+                elif "cuda" in error_stderr:
+                    enviar_mensaje("⚠️ Error relacionado con CUDA")
+                    enviar_mensaje("💡 Verifica que tu GPU NVIDIA sea compatible con NVENC")
+                elif "no device" in error_stderr or "cannot load" in error_stderr:
+                    enviar_mensaje("⚠️ No se detectó GPU NVIDIA")
+                    enviar_mensaje("💡 Verifica que los drivers NVIDIA estén instalados correctamente")
+            
+            # Mostrar primeras líneas de error
             error_lines = [line for line in result.stderr.split('\n') if 'error' in line.lower()][:3]
+            if error_lines:
+                enviar_mensaje("\n📋 Detalles del error:")
             for line in error_lines:
                 enviar_mensaje(f"   {line}")
+            
             return False
     
     finally:
@@ -935,12 +1278,15 @@ def limpiar_metadatos_thread(archivos):
 
 def procesar_archivos_thread(archivos, output_dir):
     """Función que se ejecuta en un thread separado para procesar archivos."""
-    global procesando, pistas_config, cancelar_procesamiento, usar_nvidia
+    global procesando, pistas_config, cancelar_procesamiento, usar_nvidia, nvenc_verificado
     procesando = True
     cancelar_procesamiento = False
     
     # Capturar configuración de GPU al inicio
     usar_nvidia = var_usar_nvidia.get()
+    
+    # Resetear cache de verificación NVENC
+    nvenc_verificado = None
     
     # Resetear configuración de pistas
     pistas_config = {
@@ -957,6 +1303,31 @@ def procesar_archivos_thread(archivos, output_dir):
     enviar_mensaje(f"{'='*60}")
     enviar_mensaje(f"Iniciando procesamiento de {total} archivo(s)")
     enviar_mensaje(f"{'='*60}\n")
+    
+    # Verificar NVENC una sola vez al inicio si se va a usar
+    if usar_nvidia:
+        enviar_mensaje("🔍 Verificando disponibilidad de NVIDIA NVENC...\n")
+        disponible, mensaje, detalles = verificar_nvenc_disponible(mostrar_detalles=True)
+        
+        enviar_mensaje(mensaje)
+        if detalles:
+            for detalle in detalles:
+                enviar_mensaje(detalle)
+        
+        if not disponible:
+            enviar_mensaje("\n" + "="*60)
+            enviar_mensaje("❌ No se puede continuar con NVIDIA NVENC")
+            enviar_mensaje("💡 Opciones:")
+            enviar_mensaje("   1. Desmarca 'Usar GPU NVIDIA' y usa Intel Quick Sync")
+            enviar_mensaje("   2. Sigue las soluciones indicadas arriba")
+            enviar_mensaje("   3. Consulta el archivo NVIDIA_DIC2025_FIX.md")
+            enviar_mensaje("="*60 + "\n")
+            
+            mensaje_queue.put(("FINALIZADO", 0, total))
+            procesando = False
+            return
+        
+        enviar_mensaje("\n" + "="*60 + "\n")
     
     for i, archivo in enumerate(archivos, 1):
         # Verificar si se solicitó cancelar
@@ -1512,6 +1883,11 @@ def mostrar_acerca_de():
 root = tk.Tk()
 root.title(f"{PROGRAMA_NOMBRE} v{PROGRAMA_VERSION}")
 root.geometry("900x680")
+
+# Verificar y configurar FFmpeg en primera ejecución
+if not configurar_ffmpeg_primera_vez():
+    root.destroy()
+    exit()
 
 # Barra de menú
 menubar = tk.Menu(root)
