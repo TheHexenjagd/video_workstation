@@ -58,6 +58,7 @@ DEFAULT_CONFIG = {
         "nombre_subcarpeta": "",
         "usar_nvidia": "True",
         "preset": "medium",
+        "sufijo_idiomas": "True",
     },
 }
 
@@ -210,6 +211,7 @@ class VPTSuite:
             self.config_ini["Options"]["nombre_subcarpeta"] = self.var_nombre_subcarpeta.get()
             self.config_ini["Options"]["usar_nvidia"] = str(self.var_usar_nvidia.get())
             self.config_ini["Options"]["preset"] = self.preset_var.get()
+            self.config_ini["Options"]["sufijo_idiomas"] = str(self.var_sufijo_idiomas.get())
 
             self._guardar_configuracion()
         except Exception as exc:
@@ -260,6 +262,7 @@ class VPTSuite:
         self.var_usar_nvidia = tk.BooleanVar(value=self.config_ini.getboolean("Options", "usar_nvidia", fallback=True))
         self.preset_var = tk.StringVar(value=self.config_ini.get("Options", "preset", fallback="medium"))
         self.salida_var = tk.StringVar(value=self.config_ini.get("Paths", "output_dir", fallback=""))
+        self.var_sufijo_idiomas = tk.BooleanVar(value=self.config_ini.getboolean("Options", "sufijo_idiomas", fallback=True))
 
         for var in [
             self.var_recursivo,
@@ -269,6 +272,7 @@ class VPTSuite:
             self.var_usar_nvidia,
             self.preset_var,
             self.salida_var,
+            self.var_sufijo_idiomas,
         ]:
             var.trace_add("write", self._actualizar_configuracion)
 
@@ -405,6 +409,7 @@ class VPTSuite:
         tk.Label(opts_frame, text="3. Opciones Generales:", bg="#FFFFFF", fg="#2B3A57", font=("Segoe UI", 9, "bold")).pack(side=tk.LEFT, padx=(0, 8))
         tk.Checkbutton(opts_frame, text="Backup original", variable=self.var_backup, bg="#FFFFFF", fg="#2B3A57", activebackground="#FFFFFF", selectcolor="#FFFFFF").pack(side=tk.LEFT, padx=8)
         tk.Checkbutton(opts_frame, text="Usar NVIDIA", variable=self.var_usar_nvidia, bg="#FFFFFF", fg="#2B3A57", activebackground="#FFFFFF", selectcolor="#FFFFFF", command=self._on_gpu_change).pack(side=tk.LEFT, padx=8)
+        tk.Checkbutton(opts_frame, text="Añadir sufijo al nombre", variable=self.var_sufijo_idiomas, bg="#FFFFFF", fg="#2B3A57", activebackground="#FFFFFF", selectcolor="#FFFFFF").pack(side=tk.LEFT, padx=8)
 
         prog = tk.Frame(base, bg="#FFFFFF")
         prog.pack(fill=tk.X, padx=12, pady=(4, 8))
@@ -929,7 +934,8 @@ class VPTSuite:
                 out_dir = out_dir / Path(patron)
 
             out_dir.mkdir(parents=True, exist_ok=True)
-            output_path = out_dir / f"{video_stem}_{label}.mp4"
+            suffix = f"_{label}" if self.var_sufijo_idiomas.get() else ""
+            output_path = out_dir / f"{video_stem}{suffix}.mp4"
 
             if combo.get("hardsub"):
                 audio_idx = audio_indices[0] if audio_indices else None
@@ -1262,10 +1268,13 @@ class VPTSuite:
         audio_settings = ["-c:a", "aac", "-b:a", "320k"] if audio_codec == "flac" else ["-c:a", "copy"]
 
         out_dir = Path(output_dir)
-        sufijo = "_hardcoded" if sub_idx is not None else "_nosub"
+        sufijo = ""
+        if self.var_sufijo_idiomas.get():
+            sufijo = "_hardcoded" if sub_idx is not None else "_nosub"
+
         if self.var_subcarpeta.get():
             sub_indices = [sub_idx] if sub_idx is not None else []
-            patron = self._resolver_patron_subcarpeta(input_file, info, sufijo.strip("_"), [audio_idx], sub_indices)
+            patron = self._resolver_patron_subcarpeta(input_file, info, sufijo.strip("_") or "hardcode", [audio_idx], sub_indices)
             out_dir = out_dir / Path(patron)
 
         out_dir.mkdir(parents=True, exist_ok=True)

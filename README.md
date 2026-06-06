@@ -14,6 +14,7 @@ Este proyecto fusiona y mejora significativamente las funcionalidades de las her
 Genera múltiples versiones de forma limpia (sin recodificar vídeo) a partir de las pistas de audio y subtítulos disponibles en tus archivos fuente.
 * **Verificación de condiciones**: Analiza estadísticamente las pistas internas del contenedor para asegurar la disponibilidad de idiomas seleccionados.
 * **Selector dinámico de pistas**: Interfaz dedicada para seleccionar múltiples combinaciones deseadas por archivo o lote.
+* **Hardsub integrado directo**: Si seleccionas exactamente **una (1) pista de audio** y **un (1) subtítulo** en la combinación de la versión, se habilitará la opción de realizar el incrustado de subtítulos (`hardsub`) directamente desde este módulo en un solo clic, sin tener que recurrir al módulo independiente de Hardcode.
 
 ### 2. Hardcode (Codificación por Hardware)
 Incrusta subtítulos en el vídeo de forma permanente utilizando códecs acelerados por GPU.
@@ -27,14 +28,19 @@ Incrusta subtítulos en el vídeo de forma permanente utilizando códecs acelera
 
 ---
 
+## 🛑 Cancelación Inmediata e Inteligente
+La aplicación cuenta con una rutina de detención de tareas por subprocesos no bloqueante (`subprocess.Popen` redireccionado a `/dev/null` para evitar interrupciones de búfer). Al hacer clic en **"Cancelar todo"**, se finaliza de forma **instantánea** cualquier instancia activa de FFmpeg/FFprobe corriendo en segundo plano, liberando de inmediato el procesador y la tarjeta gráfica del sistema sin demoras.
+
+---
+
 ## 🛠️ Requisitos del Sistema
 1. **Python 3.12** o superior.
 2. **FFmpeg y FFprobe**: La aplicación los utiliza internamente para las operaciones de codificación y análisis de streams. Puedes configurar sus rutas en la interfaz gráfica.
 
 ---
 
-## ⚙️ Configuración Inicial
-Al abrir por primera vez la aplicación, se genera automáticamente un archivo de configuración en `%APPDATA%/Galleon/VPT/vpt_config.ini` con los siguientes parámetros por defecto:
+## ⚙️ Parámetros de Configuración
+Al abrir por primera vez la aplicación, se genera automáticamente un archivo de configuración en `%APPDATA%/Galleon/VPT/vpt_config.ini` con las siguientes opciones:
 * **ffmpeg**: `%APPDATA%/Galleon/bin/ffmpeg.exe`
 * **ffprobe**: `%APPDATA%/Galleon/bin/ffprobe.exe`
 * **buscar_recursivo**: `True` (Carga recursiva de carpetas)
@@ -42,15 +48,16 @@ Al abrir por primera vez la aplicación, se genera automáticamente un archivo d
 * **crear_subcarpeta**: `False` (Exportación en la misma carpeta o ruta directa)
 * **usar_nvidia**: `True` (Intenta usar codificación NVIDIA NVENC por defecto)
 * **preset**: `"medium"`
+* **sufijo_idiomas**: `True` (Si está activo, añade el sufijo de idioma como `_SPA` o `_hardcoded` al archivo. Si está desactivado, conserva el nombre original del archivo intacto).
 
 ---
 
 ## 💻 Interfaz Gráfica
-VPT Studio cuenta con una interfaz moderna y premium con:
-* **Pestañas personalizadas**: Alternancia fluida entre módulos (Versiones, Hardcode y Mantenimiento) mediante un diseño plano con indicador inferior azul.
-* **Constructor de Rutas Dinámicas (⚙️)**: Herramienta visual interactiva para personalizar los nombres de las carpetas de salida en función de las pistas de audio, subtítulos y nombre del archivo utilizando marcadores dinámicos.
-* **Cola de Videos**: Lista con carga múltiple e importación recursiva de directorios completos.
-* **Consola de Actividad**: Visor en tiempo real de los procesos en ejecución y registros de FFmpeg.
+VPT Studio cuenta con una interfaz de usuario limpia e intuitiva:
+* **Pestañas personalizadas estáticas**: Alternancia instantánea entre módulos mediante un diseño plano tipo "Pills" con indicador inferior azul. Su tamaño de contenedor se mantiene fijo y no altera la distribución de la ventana al navegar.
+* **Checkbuttons sin sombras**: El selector de combinaciones y el árbol de pistas heredan el color nativo del tema de ventana de forma transparente y uniforme.
+* **Constructor de Rutas Dinámicas (⚙️)**: Herramienta visual interactiva para personalizar los nombres de las carpetas de salida en función de marcadores dinámicos.
+* **Consola de Actividad**: Visor en tiempo real de los procesos en ejecución y registros de eventos.
 
 ---
 
