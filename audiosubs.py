@@ -32,12 +32,7 @@ DEFAULT_CONFIG = {
     }
 }
 
-# Configuración de pistas a eliminar
-pistas_a_eliminar = {
-    'audio': [],  # Lista de índices de audio a eliminar
-    'subtitle': [],  # Lista de índices de subtítulos a eliminar
-    'aplicar_a_todos': False
-}
+
 
 # Configuración para modo multi-versión por combinaciones
 combinaciones_a_aplicar = {
@@ -304,186 +299,7 @@ def encontrar_pista_por_identificador(streams, identificador, codec_type):
     
     return None
 
-def mostrar_selector_pistas(info, filename):
-    """Muestra un diálogo para seleccionar pistas de audio y subtítulos a ELIMINAR."""
-    audio_streams = [s for s in info["streams"] if s.get("codec_type") == "audio"]
-    subtitle_streams = [s for s in info["streams"] if s.get("codec_type") == "subtitle"]
-    
-    # Si no hay pistas para eliminar, no mostrar el selector
-    if len(audio_streams) == 0 and len(subtitle_streams) == 0:
-        resultado = {'ok': True, 'audio': [], 'subtitle': [], 'aplicar_todos': False}
-        return resultado
-    
-    # Crear ventana de diálogo
-    dialog = tk.Toplevel(root)
-    dialog.title(f"Seleccionar pistas a ELIMINAR - {os.path.basename(filename)}")
-    dialog.geometry("720x680")
-    dialog.transient(root)
-    dialog.grab_set()
-    
-    # Resultado de la selección
-    resultado = {'ok': False, 'audio': [], 'subtitle': [], 'aplicar_todos': False}
-    
-    # Frame superior para título
-    header_frame = tk.Frame(dialog)
-    header_frame.pack(fill=tk.X, padx=10, pady=(10, 5))
-    
-    tk.Label(header_frame, text=f"Archivo: {os.path.basename(filename)}", 
-             font=("Arial", 10, "bold")).pack()
-    tk.Label(header_frame, text="Marca las pistas que deseas ELIMINAR", 
-             font=("Arial", 9), fg="red").pack()
-    
-    # Frame principal con scroll para selectores
-    main_frame = tk.Frame(dialog)
-    main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
-    
-    # Variables para checkboxes de audio
-    audio_vars = []
-    
-    # Selector de audio
-    if len(audio_streams) > 0:
-        tk.Label(main_frame, text=f"Pistas de audio ({len(audio_streams)} disponibles):", 
-                 font=("Arial", 9, "bold")).pack(anchor=tk.W, pady=(5, 5))
-        
-        audio_frame = tk.Frame(main_frame)
-        audio_frame.pack(fill=tk.BOTH, expand=True, pady=5)
-        
-        audio_canvas = tk.Canvas(audio_frame, height=180)
-        audio_scrollbar = tk.Scrollbar(audio_frame, orient="vertical", command=audio_canvas.yview)
-        audio_scrollable = tk.Frame(audio_canvas)
-        
-        audio_scrollable.bind(
-            "<Configure>",
-            lambda e: audio_canvas.configure(scrollregion=audio_canvas.bbox("all"))
-        )
-        
-        audio_canvas.create_window((0, 0), window=audio_scrollable, anchor="nw")
-        audio_canvas.configure(yscrollcommand=audio_scrollbar.set)
-        
-        for i, stream in enumerate(audio_streams):
-            codec = stream.get('codec_name', 'unknown')
-            channels = stream.get('channels', '?')
-            lang = stream.get('tags', {}).get('language', 'und')
-            title = stream.get('tags', {}).get('title', '')
-            bitrate = stream.get('bit_rate', 'N/A')
-            if bitrate != 'N/A':
-                bitrate = f"{int(bitrate)//1000}kbps"
-            
-            identificador = obtener_identificador_pista(stream)
-            
-            # Crear etiqueta descriptiva
-            if title:
-                texto = f"🎵 {title} ({lang})"
-            else:
-                texto = f"🎵 Audio {i+1} ({lang})"
-            
-            texto += f"\n   {codec.upper()} | {channels}ch | {bitrate}"
-            
-            var = tk.BooleanVar(value=False)
-            audio_vars.append((var, identificador))
-            
-            tk.Checkbutton(audio_scrollable, text=texto, variable=var, 
-                          anchor=tk.W, justify=tk.LEFT,
-                          wraplength=650).pack(fill=tk.X, padx=5, pady=3)
-        
-        audio_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        audio_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        
-        resultado['audio_vars'] = audio_vars
-    
-    # Variables para checkboxes de subtítulos
-    subtitle_vars = []
-    
-    # Selector de subtítulos
-    if len(subtitle_streams) > 0:
-        tk.Label(main_frame, text=f"Pistas de subtítulos ({len(subtitle_streams)} disponibles):", 
-                 font=("Arial", 9, "bold")).pack(anchor=tk.W, pady=(15, 5))
-        
-        sub_frame = tk.Frame(main_frame)
-        sub_frame.pack(fill=tk.BOTH, expand=True, pady=5)
-        
-        sub_canvas = tk.Canvas(sub_frame, height=180)
-        sub_scrollbar = tk.Scrollbar(sub_frame, orient="vertical", command=sub_canvas.yview)
-        sub_scrollable = tk.Frame(sub_canvas)
-        
-        sub_scrollable.bind(
-            "<Configure>",
-            lambda e: sub_canvas.configure(scrollregion=sub_canvas.bbox("all"))
-        )
-        
-        sub_canvas.create_window((0, 0), window=sub_scrollable, anchor="nw")
-        sub_canvas.configure(yscrollcommand=sub_scrollbar.set)
-        
-        for i, stream in enumerate(subtitle_streams):
-            codec = stream.get('codec_name', 'unknown')
-            lang = stream.get('tags', {}).get('language', 'und')
-            title = stream.get('tags', {}).get('title', '')
-            
-            identificador = obtener_identificador_pista(stream)
-            
-            # Crear etiqueta descriptiva
-            if title:
-                texto = f"📝 {title} ({lang})"
-            else:
-                texto = f"📝 Subtítulo {i+1} ({lang})"
-            
-            texto += f"\n   {codec.upper()}"
-            
-            var = tk.BooleanVar(value=False)
-            subtitle_vars.append((var, identificador))
-            
-            tk.Checkbutton(sub_scrollable, text=texto, variable=var, 
-                          anchor=tk.W, justify=tk.LEFT,
-                          wraplength=650).pack(fill=tk.X, padx=5, pady=3)
-        
-        sub_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        sub_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        
-        resultado['subtitle_vars'] = subtitle_vars
-    
-    # Frame inferior fijo para checkbox y botones
-    footer_frame = tk.Frame(dialog)
-    footer_frame.pack(fill=tk.X, padx=10, pady=10, side=tk.BOTTOM)
-    
-    # Checkbox para aplicar a todos
-    aplicar_todos_var = tk.BooleanVar(value=False)
-    tk.Checkbutton(footer_frame, text="✓ Aplicar esta selección a todos los archivos de la cola", 
-                   variable=aplicar_todos_var, font=("Arial", 9, "bold")).pack(pady=(0, 10))
-    
-    resultado['aplicar_todos_var'] = aplicar_todos_var
-    
-    # Botones
-    button_frame = tk.Frame(footer_frame)
-    button_frame.pack(pady=(4, 0))
-    
-    def aceptar():
-        resultado['ok'] = True
-        # Recopilar pistas de audio marcadas para eliminar
-        resultado['audio'] = [ident for var, ident in audio_vars if var.get()]
-        # Recopilar pistas de subtítulos marcadas para eliminar
-        resultado['subtitle'] = [ident for var, ident in subtitle_vars if var.get()]
-        resultado['aplicar_todos'] = aplicar_todos_var.get()
-        dialog.destroy()
-    
-    def cancelar_dialog():
-        resultado['ok'] = False
-        dialog.destroy()
-    
-    tk.Button(button_frame, text="✓  Aceptar", command=aceptar,
-              bg="#28a745", fg="white", font=("Arial", 11, "bold"),
-              width=14, height=1, relief=tk.RAISED, bd=3,
-              activebackground="#218838", activeforeground="white",
-              cursor="hand2").pack(side=tk.LEFT, padx=6)
-    tk.Button(button_frame, text="✗  Cancelar", command=cancelar_dialog,
-              bg="#dc3545", fg="white", font=("Arial", 11, "bold"),
-              width=14, height=1, relief=tk.RAISED, bd=3,
-              activebackground="#c82333", activeforeground="white",
-              cursor="hand2").pack(side=tk.LEFT, padx=6)
-    
-    # Esperar a que se cierre el diálogo
-    dialog.wait_window()
-    
-    return resultado
+
 
 def mostrar_selector_combinaciones(info, filename):
     """Muestra un diálogo para definir múltiples versiones a generar con combinaciones de audio."""
@@ -674,68 +490,7 @@ def mostrar_selector_combinaciones(info, filename):
     dialog.wait_window()
     return resultado
 
-def obtener_pistas_a_eliminar(info, filename):
-    """Obtiene los índices de audio y subtítulos a ELIMINAR."""
-    global pistas_a_eliminar
-    
-    audio_streams = [s for s in info["streams"] if s.get("codec_type") == "audio"]
-    subtitle_streams = [s for s in info["streams"] if s.get("codec_type") == "subtitle"]
-    
-    # Si ya se configuró para aplicar a todos, buscar las pistas correspondientes
-    if pistas_a_eliminar['aplicar_a_todos']:
-        audio_indices = []
-        for tag in pistas_a_eliminar['audio']:
-            idx = encontrar_pista_por_identificador(info["streams"], tag, "audio")
-            if idx is not None:
-                audio_indices.append(idx)
-        
-        subtitle_indices = []
-        for tag in pistas_a_eliminar['subtitle']:
-            idx = encontrar_pista_por_identificador(info["streams"], tag, "subtitle")
-            if idx is not None:
-                subtitle_indices.append(idx)
-        
-        return audio_indices, subtitle_indices
-    
-    enviar_mensaje(f"📋 Esperando selección de pistas a eliminar...")
-    
-    # Crear cola temporal para esta operación
-    respuesta_queue = queue.Queue()
-    
-    # Mostrar selector en el hilo principal
-    mensaje_queue.put(("SELECTOR_PISTAS", info, filename, respuesta_queue))
-    
-    # Esperar respuesta con timeout
-    try:
-        resultado = respuesta_queue.get(timeout=300)  # 5 minutos de timeout
-        
-        if resultado['ok']:
-            if resultado['aplicar_todos']:
-                pistas_a_eliminar['audio'] = resultado['audio']
-                pistas_a_eliminar['subtitle'] = resultado['subtitle']
-                pistas_a_eliminar['aplicar_a_todos'] = True
-                enviar_mensaje(f"✓ Configuración guardada para aplicar a todos los archivos")
-            
-            # Convertir identificadores a índices
-            audio_indices = []
-            for tag in resultado['audio']:
-                idx = encontrar_pista_por_identificador(info["streams"], tag, "audio")
-                if idx is not None:
-                    audio_indices.append(idx)
-            
-            subtitle_indices = []
-            for tag in resultado['subtitle']:
-                idx = encontrar_pista_por_identificador(info["streams"], tag, "subtitle")
-                if idx is not None:
-                    subtitle_indices.append(idx)
-            
-            return audio_indices, subtitle_indices
-        else:
-            enviar_mensaje(f"✗ Selección cancelada por el usuario")
-            return None, None
-    except queue.Empty:
-        enviar_mensaje(f"❌ Timeout esperando selección del usuario")
-        return None, None
+
 
 def obtener_combinaciones_a_generar(info, filename):
     """Obtiene la lista de combinaciones a generar, mostrando el selector si es necesario."""
@@ -880,14 +635,12 @@ def _generar_combinaciones(input_file, original_path, output_dir, info, combinac
     return n_ok, n_fail
 
 def eliminar_pistas(input_file, output_dir):
-    """Elimina pistas de audio y subtítulos seleccionadas del archivo de video."""
+    """Elimina pistas de audio y subtítulos seleccionadas del archivo de video (versiones)."""
     input_file = os.path.abspath(os.path.normpath(input_file))
     
     original_path = input_file
-    use_unc = False
     if len(input_file) > 260 and not input_file.startswith('\\\\?\\'):
         input_file = '\\\\?\\' + input_file
-        use_unc = True
         enviar_mensaje(f"⚠️ Ruta larga detectada, usando formato UNC")
     
     enviar_mensaje(f"\n🔍 Verificando: {os.path.basename(original_path)}")
@@ -914,154 +667,11 @@ def eliminar_pistas(input_file, output_dir):
     
     enviar_mensaje(f"📊 Pistas encontradas: {v} video, {a} audio, {s} subtítulos")
 
-    # Verificar modo de múltiples versiones por combinaciones
-    if modo_versiones:
-        combinaciones = obtener_combinaciones_a_generar(info, original_path)
-        if combinaciones is None:
-            enviar_mensaje(f"⚠️ Selección cancelada por el usuario")
-            return False
-        return _generar_combinaciones(input_file, original_path, output_dir, info, combinaciones)  # returns (n_ok, n_fail)
-
-    # Obtener pistas a eliminar (con selector si es necesario)
-    audio_indices, subtitle_indices = obtener_pistas_a_eliminar(info, original_path)
-    
-    if audio_indices is None:
+    combinaciones = obtener_combinaciones_a_generar(info, original_path)
+    if combinaciones is None:
         enviar_mensaje(f"⚠️ Selección cancelada por el usuario")
         return False
-    
-    # Mostrar información de las pistas que se eliminarán
-    if len(audio_indices) > 0:
-        enviar_mensaje(f"🗑️ Pistas de audio a eliminar:")
-        for idx in audio_indices:
-            for stream in info["streams"]:
-                if stream.get("index") == idx:
-                    title = stream.get('tags', {}).get('title', f"Audio {idx}")
-                    lang = stream.get('tags', {}).get('language', 'und')
-                    enviar_mensaje(f"   - {title} ({lang})")
-    else:
-        enviar_mensaje(f"✓ No se eliminarán pistas de audio")
-    
-    if len(subtitle_indices) > 0:
-        enviar_mensaje(f"�️ Pistas de subtítulos a eliminar:")
-        for idx in subtitle_indices:
-            for stream in info["streams"]:
-                if stream.get("index") == idx:
-                    title = stream.get('tags', {}).get('title', f"Subtítulo {idx}")
-                    lang = stream.get('tags', {}).get('language', 'und')
-                    enviar_mensaje(f"   - {title} ({lang})")
-    else:
-        enviar_mensaje(f"✓ No se eliminarán pistas de subtítulos")
-    
-    # Si no hay pistas para eliminar, omitir archivo
-    if len(audio_indices) == 0 and len(subtitle_indices) == 0:
-        enviar_mensaje(f"⚠️ No se seleccionaron pistas para eliminar, se omite el archivo")
-        return True
-    
-    base_name = os.path.basename(original_path)
-    video_stem = Path(base_name).stem
-    
-    # Determinar estructura de carpeta de salida
-    usar_subcarpeta = var_subcarpeta.get() if 'var_subcarpeta' in globals() and var_subcarpeta and hasattr(var_subcarpeta, 'get') else False
-    nombre_sub = (var_nombre_subcarpeta.get().strip() if 'var_nombre_subcarpeta' in globals() and var_nombre_subcarpeta and hasattr(var_nombre_subcarpeta, 'get') else '') or 'Peliculas'
-    
-    # Crear directorio de salida si no existe
-    output_dir_path = Path(output_dir)
-    if usar_subcarpeta:
-        patron = nombre_sub.replace('{name}', video_stem)
-        output_dir_path = output_dir_path / Path(patron)
-    try:
-        output_dir_path.mkdir(parents=True, exist_ok=True)
-        enviar_mensaje(f"📁 Directorio de salida: {output_dir_path}")
-    except Exception as e:
-        enviar_mensaje(f"❌ Error creando directorio de salida: {e}")
-        return False
-    
-    if usar_subcarpeta:
-        output_path = output_dir_path / (video_stem + ".mp4")
-    else:
-        output_path = output_dir_path / (video_stem + "_cleaned.mp4")
-
-    # Calcular pistas que PERMANECEN para incluirlas como metadata
-    def _lang_list(streams, indices_eliminados):
-        partes = []
-        for s in streams:
-            if s.get('codec_type') not in ('audio', 'subtitle'):
-                continue
-            if s['index'] in indices_eliminados:
-                continue
-            lang = s.get('tags', {}).get('language', 'und').upper()
-            title = s.get('tags', {}).get('title', '')
-            partes.append(f"{lang} ({title})" if title else lang)
-        return ', '.join(partes) if partes else 'Ninguno'
-
-    audio_streams_info = [s for s in info["streams"] if s.get("codec_type") == "audio"]
-    sub_streams_info   = [s for s in info["streams"] if s.get("codec_type") == "subtitle"]
-    audio_tag = _lang_list(audio_streams_info, set(audio_indices))
-    sub_tag   = _lang_list(sub_streams_info,   set(subtitle_indices))
-    comment_tag = f"Audio: {audio_tag} | Subtítulos: {sub_tag}"
-
-    try:
-        # Construir comando FFmpeg para copiar streams excepto los que se eliminan
-        # Usando características de FFmpeg 7.1+ y aceleración NVIDIA (diciembre 2025)
-        cmd = [FFMPEG_PATH]
-        
-        # Entrada (sin aceleración por hardware para -c copy, ya que no hay decodificación)
-        # La aceleración NVIDIA solo es útil cuando se recodifica video
-        cmd.extend(["-i", input_file])
-        
-        # Mapear todos los streams
-        cmd.extend(["-map", "0"])
-        
-        # Eliminar pistas de audio seleccionadas
-        for idx in audio_indices:
-            cmd.extend(["-map", f"-0:{idx}"])
-        
-        # Eliminar pistas de subtítulos seleccionadas
-        for idx in subtitle_indices:
-            cmd.extend(["-map", f"-0:{idx}"])
-        
-        # Copiar todos los codecs (sin recodificar)
-        # Usar -c copy para máximo rendimiento
-        # Nota: La aceleración NVIDIA (NVENC/NVDEC) se habilitaría automáticamente
-        # si se estuviera recodificando con codecs como h264_nvenc, hevc_nvenc, av1_nvenc
-        cmd.extend([
-            "-c", "copy",
-            "-movflags", "+faststart",  # Optimización para reproducción web/streaming (FFmpeg 7.1+)
-            "-metadata", f"comment={comment_tag}",
-            "-y", str(output_path)
-        ])
-        enviar_mensaje(f"🏷️ Tags → {comment_tag}")
-        
-        enviar_mensaje(f"\n🚀 Eliminando pistas seleccionadas...")
-        enviar_mensaje(f"⏳ Procesando...")
-        
-        result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='replace')
-        
-        if result.returncode == 0:
-            enviar_mensaje(f"✅ Guardado en: {output_path.name}")
-            
-            # Si está habilitada la opción de backup, mantener el original
-            # Si no, eliminar el original (opcional)
-            backup_enabled = var_backup.get() if 'var_backup' in globals() else True
-            if not backup_enabled:
-                try:
-                    os.remove(input_file)
-                    enviar_mensaje(f"�️ Archivo original eliminado")
-                except Exception as e:
-                    enviar_mensaje(f"⚠️ No se pudo eliminar el original: {e}")
-            
-            enviar_mensaje("")
-            return True
-        else:
-            enviar_mensaje(f"❌ Error procesando el archivo")
-            error_lines = [line for line in result.stderr.split('\n') if 'error' in line.lower()][:3]
-            for line in error_lines:
-                enviar_mensaje(f"   {line}")
-            return False
-    
-    except Exception as e:
-        enviar_mensaje(f"❌ Error: {e}")
-        return False
+    return _generar_combinaciones(input_file, original_path, output_dir, info, combinaciones)
 
 def analizar_condiciones_subtitulos(archivos):
     """Analiza los archivos para determinar el patrón estadístico más común de audio/subtítulos."""
@@ -1510,16 +1120,11 @@ def mostrar_resultados_verificacion(resultados, carpeta):
 
 def procesar_archivos_thread(archivos, output_dir):
     """Función que se ejecuta en un thread separado para procesar archivos."""
-    global procesando, pistas_a_eliminar, combinaciones_a_aplicar, cancelar_procesamiento, modo_versiones
+    global procesando, combinaciones_a_aplicar, cancelar_procesamiento, modo_versiones
     procesando = True
     cancelar_procesamiento = False
     
-    # Resetear configuración de pistas y combinaciones
-    pistas_a_eliminar = {
-        'audio': [],
-        'subtitle': [],
-        'aplicar_a_todos': False
-    }
+    # Resetear configuración de combinaciones
     combinaciones_a_aplicar = {
         'combinaciones': [],
         'aplicar_a_todos': False
@@ -1649,11 +1254,6 @@ def cancelar():
     else:
         messagebox.showinfo("Sin procesamiento", "No hay ningún procesamiento en curso.")
 
-def procesar():
-    global procesando, modo_versiones
-    modo_versiones = False
-    _iniciar_procesamiento()
-
 def procesar_versiones():
     global procesando, modo_versiones
     modo_versiones = True
@@ -1685,8 +1285,7 @@ def _iniciar_procesamiento():
     progress_bar["value"] = 0
     progress_label.config(text="Preparando...")
     
-    # Deshabilitar botón de procesar y habilitar cancelar
-    btn_procesar.config(state=tk.DISABLED)
+    # Deshabilitar botón de versiones y habilitar cancelar
     btn_versiones.config(state=tk.DISABLED)
     btn_cancelar.config(state=tk.NORMAL)
     
@@ -1713,14 +1312,9 @@ def actualizar_ui():
                     _, exitosos, fallidos = msg
                     progress_bar["value"] = 100
                     progress_label.config(text=f"¡Completado! ✅ {exitosos} | ❌ {fallidos}")
-                    btn_procesar.config(state=tk.NORMAL)
                     btn_versiones.config(state=tk.NORMAL)
                     btn_cancelar.config(state=tk.DISABLED)
                     messagebox.showinfo("Completado", f"Procesamiento terminado.\n\nExitosos: {exitosos}\nFallidos: {fallidos}")
-                elif msg[0] == "SELECTOR_PISTAS":
-                    _, info, filename, respuesta_queue = msg
-                    resultado = mostrar_selector_pistas(info, filename)
-                    respuesta_queue.put(resultado)
                 elif msg[0] == "SELECTOR_COMBINACIONES":
                     _, info, filename, respuesta_queue = msg
                     resultado = mostrar_selector_combinaciones(info, filename)
@@ -2038,14 +1632,6 @@ log_text.config(yscrollcommand=scrollbar_log.set)
 # Frame para botones de acción
 frame_botones_accion = tk.Frame(root)
 frame_botones_accion.pack(pady=15)
-
-# Botón de procesar
-btn_procesar = tk.Button(frame_botones_accion, text="PROCESAR", command=procesar, 
-                         bg="#28a745", fg="white", font=("Arial", 13, "bold"), 
-                         height=2, width=15, relief=tk.RAISED, bd=3,
-                         activebackground="#218838", activeforeground="white",
-                         cursor="hand2")
-btn_procesar.pack(side=tk.LEFT, padx=8)
 
 # Botón de generar versiones
 btn_versiones = tk.Button(frame_botones_accion, text="GENERAR VERSIONES", command=procesar_versiones,
