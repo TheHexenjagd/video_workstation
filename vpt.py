@@ -1896,7 +1896,7 @@ class VPTSuite:
         
         dialog = tk.Toplevel(self.root)
         dialog.title("Acerca de VPT Studio")
-        dialog.geometry("520x340")
+        dialog.geometry("540x370")
         dialog.resizable(False, False)
         dialog.configure(bg="#FFFFFF")
         dialog.transient(self.root)
@@ -1930,7 +1930,7 @@ class VPTSuite:
         ).pack(side=tk.RIGHT, padx=20, pady=16)
 
         # Content frame
-        content = tk.Frame(dialog, bg="#FFFFFF", padx=24, pady=20)
+        content = tk.Frame(dialog, bg="#FFFFFF", padx=24, pady=16)
         content.pack(fill=tk.BOTH, expand=True)
 
         tk.Label(
@@ -1953,50 +1953,70 @@ class VPTSuite:
             bg="#FFFFFF",
             fg="#5C6B8A",
             justify=tk.LEFT,
-            wraplength=470
-        ).pack(anchor=tk.W, pady=(8, 16))
+            wraplength=490
+        ).pack(anchor=tk.W, pady=(6, 10))
 
         # Divider
-        tk.Frame(content, height=1, bg="#E5ECF9").pack(fill=tk.X, pady=(0, 16))
+        tk.Frame(content, height=1, bg="#E5ECF9").pack(fill=tk.X, pady=(0, 10))
 
-        # Author and Github details
+        # Grid for info
         info_frame = tk.Frame(content, bg="#FFFFFF")
         info_frame.pack(fill=tk.X)
+        info_frame.columnconfigure(1, weight=1)
 
+        # Developer Row
         tk.Label(
             info_frame,
             text="Desarrollador:",
             font=("Segoe UI", 9, "bold"),
             bg="#FFFFFF",
             fg="#2B3A57"
-        ).grid(row=0, column=0, sticky=tk.W, pady=2)
+        ).grid(row=0, column=0, sticky=tk.W, pady=3)
 
-        tk.Label(
+        dev_lbl = tk.Label(
             info_frame,
-            text="TheHexenjagd",
-            font=("Segoe UI", 9),
-            bg="#FFFFFF",
-            fg="#1F2A44"
-        ).grid(row=0, column=1, sticky=tk.W, padx=8, pady=2)
-
-        tk.Label(
-            info_frame,
-            text="GitHub:",
-            font=("Segoe UI", 9, "bold"),
-            bg="#FFFFFF",
-            fg="#2B3A57"
-        ).grid(row=1, column=0, sticky=tk.W, pady=2)
-
-        github_lbl = tk.Label(
-            info_frame,
-            text="github.com/TheHexenjagd",
+            text="TheHexenjagd (github.com/TheHexenjagd)",
             font=("Segoe UI", 9, "underline"),
             bg="#FFFFFF",
             fg="#2D9CDB",
             cursor="hand2"
         )
-        github_lbl.grid(row=1, column=1, sticky=tk.W, padx=8, pady=2)
-        github_lbl.bind("<Button-1>", lambda e: webbrowser.open_new("https://github.com/TheHexenjagd"))
+        dev_lbl.grid(row=0, column=1, sticky=tk.W, padx=12, pady=3)
+        dev_lbl.bind("<Button-1>", lambda e: webbrowser.open_new("https://github.com/TheHexenjagd"))
+
+        # Base Projects Row
+        tk.Label(
+            info_frame,
+            text="Proyectos base:",
+            font=("Segoe UI", 9, "bold"),
+            bg="#FFFFFF",
+            fg="#2B3A57"
+        ).grid(row=1, column=0, sticky=tk.NW, pady=4)
+
+        projects_subframe = tk.Frame(info_frame, bg="#FFFFFF")
+        projects_subframe.grid(row=1, column=1, sticky=tk.W, padx=12, pady=4)
+
+        hardcode_lbl = tk.Label(
+            projects_subframe,
+            text="• hardcodetool (github.com/TheHexenjagd/hardcodetool)",
+            font=("Segoe UI", 9, "underline"),
+            bg="#FFFFFF",
+            fg="#2D9CDB",
+            cursor="hand2"
+        )
+        hardcode_lbl.pack(anchor=tk.W, pady=1)
+        hardcode_lbl.bind("<Button-1>", lambda e: webbrowser.open_new("https://github.com/TheHexenjagd/hardcodetool"))
+
+        audio_lbl = tk.Label(
+            projects_subframe,
+            text="• audioselector (github.com/TheHexenjagd/audioselector)",
+            font=("Segoe UI", 9, "underline"),
+            bg="#FFFFFF",
+            fg="#2D9CDB",
+            cursor="hand2"
+        )
+        audio_lbl.pack(anchor=tk.W, pady=1)
+        audio_lbl.bind("<Button-1>", lambda e: webbrowser.open_new("https://github.com/TheHexenjagd/audioselector"))
 
         # Close button at the bottom
         btn_close = tk.Button(
@@ -2013,7 +2033,7 @@ class VPTSuite:
             cursor="hand2",
             font=("Segoe UI", 9, "bold")
         )
-        btn_close.pack(side=tk.BOTTOM, pady=16)
+        btn_close.pack(side=tk.BOTTOM, pady=12)
 
     def salir_aplicacion(self):
         if self.procesando and not messagebox.askyesno("Proceso activo", "Hay un proceso en curso. Salir de todos modos?"):
