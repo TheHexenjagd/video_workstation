@@ -155,6 +155,7 @@ class VPTSuite:
         self.msg_queue = queue.Queue()
         self.procesando = False
         self.cancelar_procesamiento = False
+        self.proceso_actual = None
         self.nvenc_verificado = None
 
         self.pistas_config = {"audio_tag": None, "subtitle_tag": None, "aplicar_a_todos": False}
@@ -724,6 +725,7 @@ class VPTSuite:
             title = tags.get("title") or f"Audio {i + 1}"
             lang = tags.get("language", "und")
             var = tk.BooleanVar(value=False)
+            var.trace_add("write", lambda *_: actualizar_estado_hardsub())
             audio_vars.append((var, s))
             tk.Checkbutton(left, text=f"{title} ({lang})", variable=var, anchor=tk.W).pack(fill=tk.X, padx=8, pady=2)
 
@@ -734,8 +736,22 @@ class VPTSuite:
             title = tags.get("title") or f"Sub {i + 1}"
             lang = tags.get("language", "und")
             var = tk.BooleanVar(value=False)
+            var.trace_add("write", lambda *_: actualizar_estado_hardsub())
             sub_vars.append((var, s))
             tk.Checkbutton(left, text=f"{title} ({lang})", variable=var, anchor=tk.W).pack(fill=tk.X, padx=8, pady=2)
+
+        var_hardsub = tk.BooleanVar(value=False)
+        cb_hardsub = tk.Checkbutton(left, text="Hacer hardsub (Incrustar)", variable=var_hardsub, font=("Segoe UI", 9, "bold"), fg="#E74C3C", activeforeground="#E74C3C", state=tk.DISABLED)
+        cb_hardsub.pack(anchor=tk.W, padx=8, pady=12)
+
+        def actualizar_estado_hardsub():
+            aud_sel = [s for v, s in audio_vars if v.get()]
+            sub_sel = [s for v, s in sub_vars if v.get()]
+            if len(aud_sel) == 1 and len(sub_sel) == 1:
+                cb_hardsub.config(state=tk.NORMAL)
+            else:
+                var_hardsub.set(False)
+                cb_hardsub.config(state=tk.DISABLED)
 
         right = tk.LabelFrame(body, text="Versiones")
         right.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(6, 0))
@@ -746,7 +762,8 @@ class VPTSuite:
         def refresh():
             lst.delete(0, tk.END)
             for i, combo in enumerate(combinaciones):
-                lst.insert(tk.END, f"{i + 1}. {combo['label']}")
+                suffix = " (Hardsub)" if combo.get("hardsub") else ""
+                lst.insert(tk.END, f"{i + 1}. {combo['label']}{suffix}")
 
         def agregar():
             aud_sel = [s for var, s in audio_vars if var.get()]
@@ -775,6 +792,7 @@ class VPTSuite:
                     "audio_identifiers": audio_ids,
                     "sub_identifiers": sub_ids,
                     "label": label,
+                    "hardsub": var_hardsub.get(),
                 }
             )
             refresh()
@@ -782,6 +800,7 @@ class VPTSuite:
                 var.set(False)
             for var, _ in sub_vars:
                 var.set(False)
+            var_hardsub.set(False)
 
         def quitar():
             sel = lst.curselection()
@@ -858,6 +877,7 @@ class VPTSuite:
                             "audio_identifiers": c.get("audio_identifiers", []),
                             "sub_identifiers": c.get("sub_identifiers", []),
                             "label": c["label"],
+                            "hardsub": c.get("hardsub", False),
                         }
                     )
             return combos
@@ -880,6 +900,7 @@ class VPTSuite:
                         "audio_identifiers": c.get("audio_identifiers", []),
                         "sub_identifiers": c.get("sub_identifiers", []),
                         "label": c["label"],
+                        "hardsub": c.get("hardsub", False),
                     }
                     for c in r["combinaciones"]
                 ],
@@ -901,47 +922,114 @@ class VPTSuite:
             sub_indices = combo.get("sub_indices", [])
             label = combo.get("label", "VERSION")
 
-            sub_incluir = []
-            excluidos = 0
-            for idx in sub_indices:
-                s = next((st for st in subtitle_streams if st["index"] == idx), None)
-                if s and s.get("codec_name", "").lower() in BITMAP_SUB_CODECS:
-                    excluidos += 1
-                else:
-                    sub_incluir.append(idx)
-
-            if excluidos:
-                self._enviar_mensaje(f"Advertencia: {excluidos} subtitulos bitmap excluidos")
-
+            # Resolve output directory and output path common to both branches
             out_dir = Path(output_dir)
             if self.var_subcarpeta.get():
-                patron = self._resolver_patron_subcarpeta(input_file, info, label, audio_indices, sub_incluir)
+                patron = self._resolver_patron_subcarpeta(input_file, info, label, audio_indices, sub_indices)
                 out_dir = out_dir / Path(patron)
 
             out_dir.mkdir(parents=True, exist_ok=True)
             output_path = out_dir / f"{video_stem}_{label}.mp4"
 
-            cmd = [self.ffmpeg_path, "-i", input_file]
-            for s in info["streams"]:
-                if s.get("codec_type") not in ("audio", "subtitle"):
-                    cmd.extend(["-map", f"0:{s['index']}"])
-            for idx in audio_indices:
-                cmd.extend(["-map", f"0:{idx}"])
-            for idx in sub_incluir:
-                cmd.extend(["-map", f"0:{idx}"])
-
-            cmd.extend(["-c:v", "copy", "-c:a", "copy"])
-            if sub_incluir:
-                cmd.extend(["-c:s", "mov_text"])
-            cmd.extend(["-movflags", "+faststart", "-y", str(output_path)])
-
-            self._enviar_mensaje(f"[{i}/{len(combinaciones)}] {output_path.name}")
-            result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
-            if result.returncode == 0:
-                ok += 1
+            if combo.get("hardsub"):
+                audio_idx = audio_indices[0] if audio_indices else None
+                sub_idx = sub_indices[0] if sub_indices else None
+                temp_subtitle_path = None
+                
+                try:
+                    if sub_idx is not None:
+                        tf = tempfile.NamedTemporaryFile(mode="w", suffix=".ass", delete=False, encoding="utf-8")
+                        temp_subtitle_path = tf.name
+                        tf.close()
+                        
+                        extract = [self.ffmpeg_path, "-i", input_file, "-map", f"0:{sub_idx}", "-y", temp_subtitle_path]
+                        res = self._run_subprocess_cancellable(extract)
+                        if res.returncode != 0:
+                            fail += 1
+                            continue
+                            
+                        esc = temp_subtitle_path.replace("\\", "/").replace(":", "\\:")
+                        video_filter = f"ass='{esc}',format=yuv420p"
+                    else:
+                        video_filter = "format=yuv420p"
+                        
+                    audio_codec = None
+                    for s in info["streams"]:
+                        if s.get("codec_type") == "audio" and s.get("index") == audio_idx:
+                            audio_codec = s.get("codec_name")
+                            break
+                    audio_settings = ["-c:a", "aac", "-b:a", "320k"] if audio_codec == "flac" else ["-c:a", "copy"]
+                    
+                    preset = obtener_preset_valido(self.preset_var.get(), self.var_usar_nvidia.get())
+                    
+                    if self.var_usar_nvidia.get():
+                        cmd = [
+                            self.ffmpeg_path, "-i", input_file,
+                            "-map", "0:v:0", "-map", f"0:{audio_idx}",
+                            "-vf", video_filter,
+                            "-c:v", "h264_nvenc", "-preset", preset,
+                            "-profile:v", "high", "-rc", "vbr_hq", "-cq", "23",
+                            "-b:v", "5M", "-maxrate", "8M", "-bufsize", "10M",
+                            *audio_settings, "-movflags", "+faststart", "-y", str(output_path)
+                        ]
+                    else:
+                        cmd = [
+                            self.ffmpeg_path, "-i", input_file,
+                            "-map", "0:v:0", "-map", f"0:{audio_idx}",
+                            "-vf", video_filter,
+                            "-c:v", "h264_qsv", "-preset", preset,
+                            "-global_quality", "23",
+                            "-b:v", "5M", "-maxrate", "8M", "-bufsize", "10M",
+                            *audio_settings, "-movflags", "+faststart", "-y", str(output_path)
+                        ]
+                    
+                    self._enviar_mensaje(f"[{i}/{len(combinaciones)}] {output_path.name} (Incrustando subtítulos...)")
+                    result = self._run_subprocess_cancellable(cmd)
+                    if result.returncode == 0:
+                        ok += 1
+                    else:
+                        fail += 1
+                        self._enviar_mensaje("Error al generar version hardsub")
+                finally:
+                    if temp_subtitle_path and os.path.exists(temp_subtitle_path):
+                        try:
+                            os.unlink(temp_subtitle_path)
+                        except Exception:
+                            pass
             else:
-                fail += 1
-                self._enviar_mensaje("Error al generar version")
+                sub_incluir = []
+                excluidos = 0
+                for idx in sub_indices:
+                    s = next((st for st in subtitle_streams if st["index"] == idx), None)
+                    if s and s.get("codec_name", "").lower() in BITMAP_SUB_CODECS:
+                        excluidos += 1
+                    else:
+                        sub_incluir.append(idx)
+
+                if excluidos:
+                    self._enviar_mensaje(f"Advertencia: {excluidos} subtitulos bitmap excluidos")
+
+                cmd = [self.ffmpeg_path, "-i", input_file]
+                for s in info["streams"]:
+                    if s.get("codec_type") not in ("audio", "subtitle"):
+                        cmd.extend(["-map", f"0:{s['index']}"])
+                for idx in audio_indices:
+                    cmd.extend(["-map", f"0:{idx}"])
+                for idx in sub_incluir:
+                    cmd.extend(["-map", f"0:{idx}"])
+
+                cmd.extend(["-c:v", "copy", "-c:a", "copy"])
+                if sub_incluir:
+                    cmd.extend(["-c:s", "mov_text"])
+                cmd.extend(["-movflags", "+faststart", "-y", str(output_path)])
+
+                self._enviar_mensaje(f"[{i}/{len(combinaciones)}] {output_path.name}")
+                result = self._run_subprocess_cancellable(cmd)
+                if result.returncode == 0:
+                    ok += 1
+                else:
+                    fail += 1
+                    self._enviar_mensaje("Error al generar version")
 
         return ok, fail
 
@@ -1192,7 +1280,7 @@ class VPTSuite:
                 tf.close()
 
                 extract = [self.ffmpeg_path, "-i", input_file, "-map", f"0:{sub_idx}", "-y", temp_subtitle_path]
-                res = subprocess.run(extract, capture_output=True, text=True)
+                res = self._run_subprocess_cancellable(extract)
                 if res.returncode != 0:
                     return False
 
@@ -1266,7 +1354,7 @@ class VPTSuite:
                     str(out_file),
                 ]
 
-            res = subprocess.run(cmd, capture_output=True, text=True)
+            res = self._run_subprocess_cancellable(cmd)
             return res.returncode == 0
 
         finally:
@@ -1361,7 +1449,7 @@ class VPTSuite:
             str(temp_output),
         ]
         try:
-            res = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, timeout=3600)
+            res = self._run_subprocess_cancellable(cmd, stdout_devnull=True)
             if res.returncode != 0:
                 return False
             if temp_output.exists():
@@ -1791,10 +1879,41 @@ class VPTSuite:
             return
         if messagebox.askyesno("Cancelar todo", "Deseas cancelar el procesamiento actual y detener toda la cola de videos?"):
             self.cancelar_procesamiento = True
+            if self.proceso_actual:
+                try:
+                    self.proceso_actual.terminate()
+                except Exception:
+                    pass
             self.btn_cancelar.config(state=tk.DISABLED)
             self.btn_cancelar_asrt.config(state=tk.DISABLED)
             self.btn_cancelar_hst.config(state=tk.DISABLED)
             self._enviar_mensaje("Solicitud de cancelacion enviada...")
+
+    def _run_subprocess_cancellable(self, cmd, stdout_devnull=False):
+        self.proceso_actual = subprocess.Popen(
+            cmd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
+        
+        import time
+        while True:
+            if self.cancelar_procesamiento:
+                try:
+                    self.proceso_actual.terminate()
+                    self.proceso_actual.wait(timeout=1.5)
+                except Exception:
+                    try:
+                        self.proceso_actual.kill()
+                    except Exception:
+                        pass
+                return subprocess.CompletedProcess(cmd, returncode=-1)
+                
+            ret = self.proceso_actual.poll()
+            if ret is not None:
+                return subprocess.CompletedProcess(cmd, returncode=ret)
+                
+            time.sleep(0.1)
 
     def cambiar_ruta_ffmpeg(self):
         archivo = filedialog.askopenfilename(
