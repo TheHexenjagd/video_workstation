@@ -55,7 +55,7 @@ DEFAULT_CONFIG = {
         "buscar_recursivo": "True",
         "backup_original": "True",
         "crear_subcarpeta": "False",
-        "nombre_subcarpeta": "{name}/Peliculas",
+        "nombre_subcarpeta": "",
         "usar_nvidia": "True",
         "preset": "medium",
     },
@@ -195,19 +195,21 @@ class VPTSuite:
 
     def _actualizar_configuracion(self, *_):
         try:
-            self.config_ini["Paths"] = {
-                "ffmpeg": self.ffmpeg_path,
-                "ffprobe": self.ffprobe_path,
-                "output_dir": self.salida_var.get(),
-            }
-            self.config_ini["Options"] = {
-                "buscar_recursivo": str(self.var_recursivo.get()),
-                "backup_original": str(self.var_backup.get()),
-                "crear_subcarpeta": str(self.var_subcarpeta.get()),
-                "nombre_subcarpeta": self.var_nombre_subcarpeta.get(),
-                "usar_nvidia": str(self.var_usar_nvidia.get()),
-                "preset": self.preset_var.get(),
-            }
+            if "Paths" not in self.config_ini:
+                self.config_ini["Paths"] = {}
+            self.config_ini["Paths"]["ffmpeg"] = self.ffmpeg_path
+            self.config_ini["Paths"]["ffprobe"] = self.ffprobe_path
+            self.config_ini["Paths"]["output_dir"] = self.salida_var.get()
+
+            if "Options" not in self.config_ini:
+                self.config_ini["Options"] = {}
+            self.config_ini["Options"]["buscar_recursivo"] = str(self.var_recursivo.get())
+            self.config_ini["Options"]["backup_original"] = str(self.var_backup.get())
+            self.config_ini["Options"]["crear_subcarpeta"] = str(self.var_subcarpeta.get())
+            self.config_ini["Options"]["nombre_subcarpeta"] = self.var_nombre_subcarpeta.get()
+            self.config_ini["Options"]["usar_nvidia"] = str(self.var_usar_nvidia.get())
+            self.config_ini["Options"]["preset"] = self.preset_var.get()
+
             self._guardar_configuracion()
         except Exception as exc:
             print(f"Error actualizando configuracion: {exc}")
@@ -253,6 +255,25 @@ class VPTSuite:
         self.root.bind("<F1>", lambda _: self.mostrar_acerca_de())
 
     def _crear_ui(self):
+        self.var_recursivo = tk.BooleanVar(value=self.config_ini.getboolean("Options", "buscar_recursivo", fallback=True))
+        self.var_backup = tk.BooleanVar(value=self.config_ini.getboolean("Options", "backup_original", fallback=True))
+        self.var_subcarpeta = tk.BooleanVar(value=self.config_ini.getboolean("Options", "crear_subcarpeta", fallback=False))
+        self.var_nombre_subcarpeta = tk.StringVar(value=self.config_ini.get("Options", "nombre_subcarpeta", fallback=""))
+        self.var_usar_nvidia = tk.BooleanVar(value=self.config_ini.getboolean("Options", "usar_nvidia", fallback=True))
+        self.preset_var = tk.StringVar(value=self.config_ini.get("Options", "preset", fallback="medium"))
+        self.salida_var = tk.StringVar(value=self.config_ini.get("Paths", "output_dir", fallback=""))
+
+        for var in [
+            self.var_recursivo,
+            self.var_backup,
+            self.var_subcarpeta,
+            self.var_nombre_subcarpeta,
+            self.var_usar_nvidia,
+            self.preset_var,
+            self.salida_var,
+        ]:
+            var.trace_add("write", self._actualizar_configuracion)
+
         main = ttk.Frame(self.root, style="VPT.TFrame")
         main.pack(fill=tk.BOTH, expand=True)
 
@@ -278,6 +299,7 @@ class VPTSuite:
         self._btn(acciones, "Cargar carpeta", self.cargar_carpeta, "#2F80ED").pack(side=tk.LEFT, padx=3)
         self._btn(acciones, "Quitar seleccion", self.eliminar_seleccionados, "#F2994A").pack(side=tk.LEFT, padx=3)
         self._btn(acciones, "Limpiar", self.limpiar_lista, "#EB5757").pack(side=tk.LEFT, padx=3)
+        tk.Checkbutton(acciones, text="Buscar recursivo", variable=self.var_recursivo, bg="#FFFFFF", fg="#2B3A57", activebackground="#FFFFFF", selectcolor="#FFFFFF").pack(side=tk.LEFT, padx=8)
 
         right = ttk.Frame(top, style="Card.TFrame")
         right.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(8, 0), pady=4)
@@ -301,39 +323,48 @@ class VPTSuite:
         base = ttk.Frame(main, style="Card.TFrame")
         base.pack(fill=tk.BOTH, expand=True, padx=18, pady=(0, 14))
 
-        opts = tk.Frame(base, bg="#FFFFFF")
-        opts.pack(fill=tk.X, padx=12, pady=(12, 8))
+        # 1. Directorio de Salida
+        salida_frame = tk.Frame(base, bg="#FFFFFF")
+        salida_frame.pack(fill=tk.X, padx=12, pady=(12, 6))
+        tk.Label(salida_frame, text="1. Directorio de Salida:", bg="#FFFFFF", fg="#2B3A57", font=("Segoe UI", 9, "bold")).pack(side=tk.LEFT, padx=(0, 8))
+        tk.Entry(salida_frame, textvariable=self.salida_var, bg="#F4F8FF", fg="#1F2A44", relief=tk.FLAT).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 8))
+        self._btn(salida_frame, "Seleccionar", self.seleccionar_directorio, "#4DA8DA").pack(side=tk.LEFT)
 
-        self.var_recursivo = tk.BooleanVar(value=self.config_ini.getboolean("Options", "buscar_recursivo", fallback=True))
-        self.var_backup = tk.BooleanVar(value=self.config_ini.getboolean("Options", "backup_original", fallback=True))
-        self.var_subcarpeta = tk.BooleanVar(value=self.config_ini.getboolean("Options", "crear_subcarpeta", fallback=False))
-        self.var_nombre_subcarpeta = tk.StringVar(value=self.config_ini.get("Options", "nombre_subcarpeta", fallback="{name}/Peliculas"))
-        self.var_usar_nvidia = tk.BooleanVar(value=self.config_ini.getboolean("Options", "usar_nvidia", fallback=True))
-        self.preset_var = tk.StringVar(value=self.config_ini.get("Options", "preset", fallback="medium"))
-        self.salida_var = tk.StringVar(value=self.config_ini.get("Paths", "output_dir", fallback=""))
+        # 2. Estructura de Subcarpetas
+        subcarp_frame = tk.Frame(base, bg="#FFFFFF")
+        subcarp_frame.pack(fill=tk.X, padx=12, pady=6)
+        tk.Label(subcarp_frame, text="2. Estructura de Subcarpeta:", bg="#FFFFFF", fg="#2B3A57", font=("Segoe UI", 9, "bold")).pack(side=tk.LEFT, padx=(0, 8))
+        tk.Checkbutton(subcarp_frame, text="Crear subcarpeta", variable=self.var_subcarpeta, bg="#FFFFFF", fg="#2B3A57", activebackground="#FFFFFF", selectcolor="#FFFFFF").pack(side=tk.LEFT, padx=(0, 8))
+        
+        try:
+            presets_data = json.loads(self.config_ini.get("Options", "presets", fallback='[]'))
+        except Exception:
+            presets_data = []
+        self.cb_nombre_subcarpeta = ttk.Combobox(subcarp_frame, textvariable=self.var_nombre_subcarpeta, values=presets_data, width=32)
+        self.cb_nombre_subcarpeta.pack(side=tk.LEFT, padx=(0, 6))
+        
+        btn_build = tk.Button(
+            subcarp_frame,
+            text="⚙️",
+            command=self._abrir_constructor_rutas,
+            bg="#2D9CDB",
+            fg="white",
+            activebackground="#2D9CDB",
+            activeforeground="white",
+            relief=tk.FLAT,
+            padx=6,
+            pady=2,
+            cursor="hand2",
+            font=("Segoe UI", 9, "bold"),
+        )
+        btn_build.pack(side=tk.LEFT)
 
-        for var in [
-            self.var_recursivo,
-            self.var_backup,
-            self.var_subcarpeta,
-            self.var_nombre_subcarpeta,
-            self.var_usar_nvidia,
-            self.preset_var,
-            self.salida_var,
-        ]:
-            var.trace_add("write", self._actualizar_configuracion)
-
-        tk.Checkbutton(opts, text="Buscar recursivo", variable=self.var_recursivo, bg="#FFFFFF", fg="#2B3A57", activebackground="#FFFFFF", selectcolor="#FFFFFF").pack(side=tk.LEFT, padx=8)
-        tk.Checkbutton(opts, text="Backup original", variable=self.var_backup, bg="#FFFFFF", fg="#2B3A57", activebackground="#FFFFFF", selectcolor="#FFFFFF").pack(side=tk.LEFT, padx=8)
-        tk.Checkbutton(opts, text="Crear subcarpeta", variable=self.var_subcarpeta, bg="#FFFFFF", fg="#2B3A57", activebackground="#FFFFFF", selectcolor="#FFFFFF").pack(side=tk.LEFT, padx=8)
-        tk.Entry(opts, textvariable=self.var_nombre_subcarpeta, width=24, bg="#F4F8FF", fg="#1F2A44", relief=tk.FLAT).pack(side=tk.LEFT, padx=6)
-        tk.Checkbutton(opts, text="Usar NVIDIA", variable=self.var_usar_nvidia, bg="#FFFFFF", fg="#2B3A57", activebackground="#FFFFFF", selectcolor="#FFFFFF", command=self._on_gpu_change).pack(side=tk.LEFT, padx=8)
-
-        salida = tk.Frame(base, bg="#FFFFFF")
-        salida.pack(fill=tk.X, padx=12, pady=6)
-        tk.Label(salida, text="Salida:", bg="#FFFFFF", fg="#2B3A57", font=("Segoe UI", 9, "bold")).pack(side=tk.LEFT)
-        tk.Entry(salida, textvariable=self.salida_var, bg="#F4F8FF", fg="#1F2A44", relief=tk.FLAT).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=8)
-        self._btn(salida, "Seleccionar", self.seleccionar_directorio, "#4DA8DA").pack(side=tk.LEFT)
+        # 3. Opciones Generales
+        opts_frame = tk.Frame(base, bg="#FFFFFF")
+        opts_frame.pack(fill=tk.X, padx=12, pady=(6, 12))
+        tk.Label(opts_frame, text="3. Opciones Generales:", bg="#FFFFFF", fg="#2B3A57", font=("Segoe UI", 9, "bold")).pack(side=tk.LEFT, padx=(0, 8))
+        tk.Checkbutton(opts_frame, text="Backup original", variable=self.var_backup, bg="#FFFFFF", fg="#2B3A57", activebackground="#FFFFFF", selectcolor="#FFFFFF").pack(side=tk.LEFT, padx=8)
+        tk.Checkbutton(opts_frame, text="Usar NVIDIA", variable=self.var_usar_nvidia, bg="#FFFFFF", fg="#2B3A57", activebackground="#FFFFFF", selectcolor="#FFFFFF", command=self._on_gpu_change).pack(side=tk.LEFT, padx=8)
 
         prog = tk.Frame(base, bg="#FFFFFF")
         prog.pack(fill=tk.X, padx=12, pady=(4, 8))
@@ -376,7 +407,7 @@ class VPTSuite:
         self.btn_versiones = self._btn(btns, "Generar versiones", self.procesar_versiones, "#2D9CDB")
         self.btn_versiones.pack(side=tk.LEFT, padx=(0, 8))
         self._btn(btns, "Verificar condiciones", self.verificar_condiciones_carpeta, "#27AE60").pack(side=tk.LEFT, padx=(0, 8))
-        self.btn_cancelar_asrt = self._btn(btns, "Cancelar", self.cancelar, "#EB5757")
+        self.btn_cancelar_asrt = self._btn(btns, "Cancelar todo", self.cancelar, "#EB5757")
         self.btn_cancelar_asrt.config(state=tk.DISABLED)
         self.btn_cancelar_asrt.pack(side=tk.LEFT, padx=(0, 8))
 
@@ -388,7 +419,7 @@ class VPTSuite:
         btns.pack(anchor=tk.W, pady=12)
         self.btn_hardcode = self._btn(btns, "Procesar hardcode", self.procesar_hardcode, "#56CCF2")
         self.btn_hardcode.pack(side=tk.LEFT, padx=(0, 8))
-        self.btn_cancelar_hst = self._btn(btns, "Cancelar", self.cancelar, "#EB5757")
+        self.btn_cancelar_hst = self._btn(btns, "Cancelar todo", self.cancelar, "#EB5757")
         self.btn_cancelar_hst.config(state=tk.DISABLED)
         self.btn_cancelar_hst.pack(side=tk.LEFT, padx=(0, 8))
 
@@ -400,7 +431,7 @@ class VPTSuite:
         btns.pack(anchor=tk.W, pady=12)
         self.btn_limpiar_meta = self._btn(btns, "Limpiar metadatos", self.limpiar_metadatos, "#F2C94C")
         self.btn_limpiar_meta.pack(side=tk.LEFT, padx=(0, 8))
-        self.btn_cancelar = self._btn(btns, "Cancelar", self.cancelar, "#EB5757")
+        self.btn_cancelar = self._btn(btns, "Cancelar todo", self.cancelar, "#EB5757")
         self.btn_cancelar.config(state=tk.DISABLED)
         self.btn_cancelar.pack(side=tk.LEFT, padx=(0, 8))
 
@@ -463,7 +494,7 @@ class VPTSuite:
         cmd = [self.ffprobe_path, "-v", "error", "-print_format", "json", "-show_streams", filepath]
         result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace")
         if result.returncode != 0:
-            self._enviar_mensaje(f"❌ Error ffprobe: {result.stderr[:220]}")
+            self._enviar_mensaje(f"Error ffprobe: {result.stderr[:220]}")
             return None
 
         try:
@@ -595,6 +626,22 @@ class VPTSuite:
         tk.Button(btns, text="Cancelar", command=dialog.destroy, bg="#EB5757", fg="white", width=14).pack(side=tk.LEFT, padx=6)
 
         dialog.wait_window()
+        if not resultado["ok"]:
+            ans = messagebox.askyesnocancel(
+                "Cancelar proceso",
+                "¿Deseas cancelar todo el procesamiento?\n\n"
+                "Sí: Cancela toda la cola de videos.\n"
+                "No: Salta este archivo y continúa con el siguiente.\n"
+                "Cancelar: Vuelve a la selección de pistas.",
+                parent=self.root
+            )
+            if ans is True:
+                self.cancelar_procesamiento = True
+                resultado["ok"] = False
+            elif ans is False:
+                resultado["ok"] = False
+            else:
+                return self._mostrar_selector_pistas(info, filename)
         return resultado
 
     def _mostrar_selector_combinaciones(self, info, filename):
@@ -717,6 +764,22 @@ class VPTSuite:
         tk.Button(bottom, text="Cancelar", command=dialog.destroy, bg="#95A5A6", fg="white", width=14).pack(side=tk.LEFT, padx=6)
 
         dialog.wait_window()
+        if not resultado["ok"]:
+            ans = messagebox.askyesnocancel(
+                "Cancelar proceso",
+                "¿Deseas cancelar todo el procesamiento?\n\n"
+                "Sí: Cancela toda la cola de videos.\n"
+                "No: Salta este archivo y continúa con el siguiente.\n"
+                "Cancelar: Vuelve a la selección de pistas.",
+                parent=self.root
+            )
+            if ans is True:
+                self.cancelar_procesamiento = True
+                resultado["ok"] = False
+            elif ans is False:
+                resultado["ok"] = False
+            else:
+                return self._mostrar_selector_combinaciones(info, filename)
         return resultado
 
     # -----------------------------
@@ -783,6 +846,8 @@ class VPTSuite:
         fail = 0
 
         for i, combo in enumerate(combinaciones, 1):
+            if self.cancelar_procesamiento:
+                break
             audio_indices = combo.get("audio_indices", [])
             sub_indices = combo.get("sub_indices", [])
             label = combo.get("label", "VERSION")
@@ -797,11 +862,11 @@ class VPTSuite:
                     sub_incluir.append(idx)
 
             if excluidos:
-                self._enviar_mensaje(f"⚠️ {excluidos} subtitulos bitmap excluidos")
+                self._enviar_mensaje(f"Advertencia: {excluidos} subtitulos bitmap excluidos")
 
             out_dir = Path(output_dir)
             if self.var_subcarpeta.get():
-                patron = (self.var_nombre_subcarpeta.get().strip() or "{name}/Peliculas").replace("{name}", f"{video_stem}_{label}")
+                patron = self._resolver_patron_subcarpeta(input_file, info, label, audio_indices, sub_incluir)
                 out_dir = out_dir / Path(patron)
 
             out_dir.mkdir(parents=True, exist_ok=True)
@@ -821,20 +886,20 @@ class VPTSuite:
                 cmd.extend(["-c:s", "mov_text"])
             cmd.extend(["-movflags", "+faststart", "-y", str(output_path)])
 
-            self._enviar_mensaje(f"🎞 [{i}/{len(combinaciones)}] {output_path.name}")
+            self._enviar_mensaje(f"[{i}/{len(combinaciones)}] {output_path.name}")
             result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
             if result.returncode == 0:
                 ok += 1
             else:
                 fail += 1
-                self._enviar_mensaje("❌ Error al generar version")
+                self._enviar_mensaje("Error al generar version")
 
         return ok, fail
 
     def _eliminar_pistas_versiones(self, archivo, output_dir):
         info = self._ffprobe_info(archivo)
         if info is None:
-            self._enviar_mensaje("❌ No se pudo leer streams")
+            self._enviar_mensaje("No se pudo leer streams")
             return False
 
         v = sum(1 for s in info["streams"] if s.get("codec_type") == "video")
@@ -859,7 +924,7 @@ class VPTSuite:
 
         for i, archivo in enumerate(archivos, 1):
             if self.cancelar_procesamiento:
-                self._enviar_mensaje("⚠️ Cancelado por usuario")
+                self._enviar_mensaje("Cancelado por usuario")
                 break
             self.msg_queue.put(("PROGRESO", i, total))
             self._enviar_mensaje(f"Archivo {i}/{total}: {os.path.basename(archivo)}")
@@ -1060,8 +1125,13 @@ class VPTSuite:
         audio_settings = ["-c:a", "aac", "-b:a", "320k"] if audio_codec == "flac" else ["-c:a", "copy"]
 
         out_dir = Path(output_dir)
-        out_dir.mkdir(parents=True, exist_ok=True)
         sufijo = "_hardcoded" if sub_idx is not None else "_nosub"
+        if self.var_subcarpeta.get():
+            sub_indices = [sub_idx] if sub_idx is not None else []
+            patron = self._resolver_patron_subcarpeta(input_file, info, sufijo.strip("_"), [audio_idx], sub_indices)
+            out_dir = out_dir / Path(patron)
+
+        out_dir.mkdir(parents=True, exist_ok=True)
         out_file = out_dir / f"{Path(input_file).stem}{sufijo}.mp4"
 
         temp_subtitle_path = None
@@ -1178,7 +1248,7 @@ class VPTSuite:
         self._enviar_mensaje("===== INICIO HARDCODE =====")
         for i, archivo in enumerate(archivos, 1):
             if self.cancelar_procesamiento:
-                self._enviar_mensaje("⚠️ Cancelado por usuario")
+                self._enviar_mensaje("Cancelado por usuario")
                 break
             self.msg_queue.put(("PROGRESO", i, total))
             self._enviar_mensaje(f"Archivo {i}/{total}: {os.path.basename(archivo)}")
@@ -1274,7 +1344,7 @@ class VPTSuite:
 
         for i, archivo in enumerate(archivos, 1):
             if self.cancelar_procesamiento:
-                self._enviar_mensaje("⚠️ Cancelado por usuario")
+                self._enviar_mensaje("Cancelado por usuario")
                 break
             self.msg_queue.put(("PROGRESO", i, total))
             self._enviar_mensaje(f"Limpiando {i}/{total}: {os.path.basename(archivo)}")
@@ -1366,16 +1436,316 @@ class VPTSuite:
         if carpeta:
             self.salida_var.set(carpeta)
 
+    def _resolver_patron_subcarpeta(self, filepath, info, label, audio_indices, sub_indices):
+        video_stem = Path(filepath).stem
+        parent_folder = Path(filepath).parent.name or "input_folder"
+        if info is None:
+            patron = self.var_nombre_subcarpeta.get().strip()
+            patron = patron.replace("{name}", video_stem)
+            patron = patron.replace("{folder}", parent_folder)
+            patron = patron.replace("{label}", label)
+            patron = patron.replace("{audio_langs}", "UND")
+            patron = patron.replace("{sub_langs}", "NONE")
+            patron = patron.replace("{codec_v}", "unknown")
+            patron = patron.replace("{codec_a}", "unknown")
+            patron = patron.replace("{resolution}", "unknown")
+            return patron
+
+        video_stream = next((s for s in info["streams"] if s.get("codec_type") == "video"), {})
+        codec_v = video_stream.get("codec_name", "unknown")
+        
+        try:
+            width = int(video_stream.get("width", 0))
+            height = int(video_stream.get("height", 0))
+        except (ValueError, TypeError):
+            width = 0
+            height = 0
+
+        if height >= 2160 or width >= 3840:
+            resolution = "2160p"
+        elif height >= 1080 or width >= 1920:
+            resolution = "1080p"
+        elif height >= 720 or width >= 1280:
+            resolution = "720p"
+        elif height >= 480 or width >= 854:
+            resolution = "480p"
+        elif height > 0:
+            resolution = f"{height}p"
+        else:
+            resolution = "unknown"
+
+        audio_streams = [s for s in info["streams"] if s.get("codec_type") == "audio"]
+        if audio_indices:
+            selected_audios = [s for s in audio_streams if s.get("index") in audio_indices]
+        else:
+            selected_audios = audio_streams[:1] if audio_streams else []
+
+        codec_a = selected_audios[0].get("codec_name", "unknown") if selected_audios else "none"
+
+        audio_langs = []
+        for s in (selected_audios if audio_indices else audio_streams):
+            lang = s.get("tags", {}).get("language", "und").upper()
+            if lang not in audio_langs:
+                audio_langs.append(lang)
+        audio_langs_str = "_".join(audio_langs) if audio_langs else "UND"
+
+        subtitle_streams = [s for s in info["streams"] if s.get("codec_type") == "subtitle"]
+        if sub_indices:
+            sub_indices_ints = [int(x) for x in sub_indices if x is not None]
+            selected_subs = [s for s in subtitle_streams if int(s.get("index", -1)) in sub_indices_ints]
+        else:
+            selected_subs = []
+
+        sub_langs = []
+        for s in selected_subs:
+            lang = s.get("tags", {}).get("language", "und").upper()
+            if lang not in sub_langs:
+                sub_langs.append(lang)
+        sub_langs_str = "_".join(sub_langs) if sub_langs else "NONE"
+
+        patron = self.var_nombre_subcarpeta.get().strip()
+        
+        mapping = {
+            "{name}": video_stem,
+            "{folder}": parent_folder,
+            "{label}": label,
+            "{audio_langs}": audio_langs_str,
+            "{sub_langs}": sub_langs_str,
+            "{codec_v}": codec_v,
+            "{codec_a}": codec_a,
+            "{resolution}": resolution
+        }
+        
+        for placeholder, val in mapping.items():
+            patron = patron.replace(placeholder, str(val))
+            
+        return patron
+
+    def _abrir_constructor_rutas(self):
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Constructor de Ruta de Salida")
+        dialog.geometry("680x520")
+        dialog.transient(self.root)
+        dialog.grab_set()
+        dialog.configure(bg="#F3F7FF")
+
+        tk.Label(dialog, text="Constructor de Ruta de Salida", font=("Segoe UI", 12, "bold"), bg="#F3F7FF", fg="#1F2A44").pack(pady=(12, 6))
+        tk.Label(dialog, text="Haz clic en las banderas para agregarlas al patrón de subcarpeta:", font=("Segoe UI", 9), bg="#F3F7FF", fg="#5C6B8A").pack(pady=(0, 10))
+
+        patron_var = tk.StringVar(value=self.var_nombre_subcarpeta.get())
+        entry = tk.Entry(dialog, textvariable=patron_var, font=("Consolas", 11), bg="#FFFFFF", fg="#1F2A44", relief=tk.SOLID, bd=1)
+        entry.pack(fill=tk.X, padx=20, pady=8)
+        entry.focus_set()
+
+        # Presets Row
+        presets_frame = tk.Frame(dialog, bg="#F3F7FF")
+        presets_frame.pack(fill=tk.X, padx=20, pady=(4, 8))
+        
+        tk.Label(presets_frame, text="Presets:", font=("Segoe UI", 9, "bold"), bg="#F3F7FF", fg="#2B3A57").pack(side=tk.LEFT, padx=(0, 6))
+        
+        try:
+            presets_data = json.loads(self.config_ini.get("Options", "presets", fallback='[]'))
+        except Exception:
+            presets_data = []
+        
+        presets_var = tk.StringVar()
+        cb_presets = ttk.Combobox(presets_frame, values=presets_data, textvariable=presets_var, state="readonly", width=40)
+        cb_presets.pack(side=tk.LEFT, padx=6)
+        if presets_data:
+            presets_var.set(presets_data[0])
+        
+        def on_preset_selected(*_):
+            selected = presets_var.get()
+            if selected:
+                patron_var.set(selected)
+                
+        cb_presets.bind("<<ComboboxSelected>>", on_preset_selected)
+
+        def guardar_nuevo_preset():
+            nuevo = patron_var.get().strip()
+            if not nuevo:
+                return
+            try:
+                curr = json.loads(self.config_ini.get("Options", "presets", fallback='[]'))
+            except Exception:
+                curr = []
+                
+            if nuevo not in curr:
+                curr.append(nuevo)
+                if "Options" not in self.config_ini:
+                    self.config_ini["Options"] = {}
+                self.config_ini["Options"]["presets"] = json.dumps(curr)
+                self._guardar_configuracion()
+                self.cb_nombre_subcarpeta["values"] = curr
+                cb_presets["values"] = curr
+                presets_var.set(nuevo)
+                messagebox.showinfo("Preset Guardado", f"Se ha guardado el preset:\n{nuevo}", parent=dialog)
+        
+        btn_add_preset = tk.Button(
+            presets_frame,
+            text="Guardar actual",
+            command=guardar_nuevo_preset,
+            bg="#27AE60",
+            fg="white",
+            activebackground="#27AE60",
+            activeforeground="white",
+            relief=tk.FLAT,
+            padx=8,
+            pady=2,
+            cursor="hand2",
+            font=("Segoe UI", 9, "bold")
+        )
+        btn_add_preset.pack(side=tk.LEFT, padx=6)
+
+        def eliminar_preset_seleccionado():
+            seleccionado = cb_presets.get()
+            if not seleccionado:
+                return
+            try:
+                curr = json.loads(self.config_ini.get("Options", "presets", fallback='[]'))
+            except Exception:
+                curr = []
+                
+            if seleccionado in curr:
+                curr.remove(seleccionado)
+                if "Options" not in self.config_ini:
+                    self.config_ini["Options"] = {}
+                self.config_ini["Options"]["presets"] = json.dumps(curr)
+                self._guardar_configuracion()
+                self.cb_nombre_subcarpeta["values"] = curr
+                cb_presets["values"] = curr
+                if curr:
+                    presets_var.set(curr[0])
+                    patron_var.set(curr[0])
+                else:
+                    presets_var.set("")
+                    patron_var.set("")
+                messagebox.showinfo("Preset Eliminado", "El preset seleccionado ha sido eliminado.", parent=dialog)
+                
+        btn_del_preset = tk.Button(
+            presets_frame,
+            text="Eliminar",
+            command=eliminar_preset_seleccionado,
+            bg="#EB5757",
+            fg="white",
+            activebackground="#EB5757",
+            activeforeground="white",
+            relief=tk.FLAT,
+            padx=8,
+            pady=2,
+            cursor="hand2",
+            font=("Segoe UI", 9, "bold")
+        )
+        btn_del_preset.pack(side=tk.LEFT, padx=6)
+
+        flags_frame = tk.LabelFrame(dialog, text="Banderas Disponibles", font=("Segoe UI", 9, "bold"), bg="#FFFFFF", fg="#2B3A57", padx=10, pady=10)
+        flags_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+        flags_frame.configure(relief=tk.GROOVE)
+
+        flags = [
+            ("{name}", "Nombre original del video"),
+            ("{folder}", "Nombre de la carpeta contenedora del video"),
+            ("{label}", "Etiqueta/Versión (ej: ESP_subENG, hardcoded)"),
+            ("{audio_langs}", "Idiomas de audio resultantes (ej: ESP_ENG)"),
+            ("{sub_langs}", "Idiomas de subtítulos resultantes (ej: SPA, NONE)"),
+            ("{codec_v}", "Codec de video (ej: h264, hevc)"),
+            ("{codec_a}", "Codec de audio (ej: aac, ac3)"),
+            ("{resolution}", "Resolución del video (ej: 1080p, 720p)"),
+        ]
+
+        def insertar_flag(flag):
+            pos = entry.index(tk.INSERT)
+            entry.insert(pos, flag)
+            entry.focus_set()
+            actualizar_preview()
+
+        for i, (flag, desc) in enumerate(flags):
+            row = tk.Frame(flags_frame, bg="#FFFFFF")
+            row.pack(fill=tk.X, pady=3)
+            
+            btn = tk.Button(
+                row,
+                text=flag,
+                command=lambda f=flag: insertar_flag(f),
+                bg="#2D9CDB",
+                fg="white",
+                activebackground="#2D9CDB",
+                activeforeground="white",
+                relief=tk.FLAT,
+                width=16,
+                font=("Consolas", 9, "bold"),
+                cursor="hand2"
+            )
+            btn.pack(side=tk.LEFT, padx=(0, 10))
+            
+            tk.Label(row, text=desc, font=("Segoe UI", 9), bg="#FFFFFF", fg="#5C6B8A").pack(side=tk.LEFT)
+
+        preview_frame = tk.Frame(dialog, bg="#E5ECF9", padx=10, pady=10)
+        btm = tk.Frame(dialog, bg="#F3F7FF")
+
+        # Pack bottom elements first to ensure visibility
+        btm.pack(side=tk.BOTTOM, pady=(5, 12))
+        preview_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=20, pady=10)
+        flags_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+
+        tk.Label(preview_frame, text="Vista previa de ruta resuelta:", font=("Segoe UI", 9, "bold"), bg="#E5ECF9", fg="#2B3A57").pack(anchor=tk.W)
+        preview_lbl = tk.Label(preview_frame, text="", font=("Consolas", 9), bg="#E5ECF9", fg="#1F2A44", wraplength=620, justify=tk.LEFT)
+        preview_lbl.pack(anchor=tk.W, pady=(4, 0))
+
+        def actualizar_preview(*_):
+            archivos = list(self.lista.get(0, tk.END))
+            patron = patron_var.get()
+            
+            dummy_info = {
+                "streams": [
+                    {"codec_type": "video", "codec_name": "h264", "width": 1920, "height": 1080, "index": 0},
+                    {"codec_type": "audio", "codec_name": "ac3", "index": 1, "tags": {"language": "spa"}},
+                    {"codec_type": "audio", "codec_name": "aac", "index": 2, "tags": {"language": "eng"}},
+                    {"codec_type": "subtitle", "codec_name": "subrip", "index": 3, "tags": {"language": "eng"}}
+                ]
+            }
+            
+            video_name = "Ejemplo_Video"
+            info = dummy_info
+            audio_indices = [1, 2]
+            sub_indices = [3]
+            
+            if archivos:
+                video_name = Path(archivos[0]).stem
+                real_info = self._ffprobe_info(archivos[0])
+                if real_info:
+                    info = real_info
+                    audio_indices = [s["index"] for s in info["streams"] if s.get("codec_type") == "audio"]
+                    sub_indices = [s["index"] for s in info["streams"] if s.get("codec_type") == "subtitle"]
+
+            old_val = self.var_nombre_subcarpeta.get()
+            self.var_nombre_subcarpeta.set(patron)
+            resolved = self._resolver_patron_subcarpeta(f"C:/ruta/de/ejemplo/{video_name}.mp4", info, "ESP_subENG", audio_indices, sub_indices)
+            self.var_nombre_subcarpeta.set(old_val)
+            
+            base_dir = self.salida_var.get() or "C:/Salida/Seleccionada"
+            preview_lbl.config(text=f"{base_dir}/{resolved}")
+
+        patron_var.trace_add("write", actualizar_preview)
+        actualizar_preview()
+
+        def aceptar():
+            self.var_nombre_subcarpeta.set(patron_var.get())
+            dialog.destroy()
+
+        tk.Button(btm, text="Guardar", command=aceptar, bg="#27AE60", fg="white", width=12, relief=tk.FLAT, font=("Segoe UI", 9, "bold")).pack(side=tk.LEFT, padx=6)
+        tk.Button(btm, text="Cancelar", command=dialog.destroy, bg="#95A5A6", fg="white", width=12, relief=tk.FLAT, font=("Segoe UI", 9, "bold")).pack(side=tk.LEFT, padx=6)
+
     def cancelar(self):
         if not self.procesando:
             messagebox.showinfo("Sin proceso", "No hay procesamiento activo")
             return
-        if messagebox.askyesno("Cancelar", "Deseas cancelar el procesamiento actual?"):
+        if messagebox.askyesno("Cancelar todo", "Deseas cancelar el procesamiento actual y detener toda la cola de videos?"):
             self.cancelar_procesamiento = True
             self.btn_cancelar.config(state=tk.DISABLED)
             self.btn_cancelar_asrt.config(state=tk.DISABLED)
             self.btn_cancelar_hst.config(state=tk.DISABLED)
-            self._enviar_mensaje("⚠️ Solicitud de cancelacion enviada...")
+            self._enviar_mensaje("Solicitud de cancelacion enviada...")
 
     def cambiar_ruta_ffmpeg(self):
         archivo = filedialog.askopenfilename(
