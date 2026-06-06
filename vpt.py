@@ -227,9 +227,6 @@ class VPTSuite:
         style.configure("Header.TLabel", background="#F3F7FF", foreground="#1F2A44", font=("Segoe UI", 19, "bold"))
         style.configure("SubHeader.TLabel", background="#F3F7FF", foreground="#5C6B8A", font=("Segoe UI", 10))
         style.configure("CardTitle.TLabel", background="#FFFFFF", foreground="#2B3A57", font=("Segoe UI", 10, "bold"))
-        style.configure("TNotebook", background="#FFFFFF", borderwidth=0)
-        style.configure("TNotebook.Tab", font=("Segoe UI", 10, "bold"), padding=(16, 8), background="#DDE8FF", foreground="#2B3A57")
-        style.map("TNotebook.Tab", background=[("selected", "#2D9CDB")], foreground=[("selected", "#FFFFFF")])
         style.configure("Modern.Horizontal.TProgressbar", troughcolor="#E5ECF9", background="#2D9CDB", bordercolor="#E5ECF9")
 
     def _crear_menu(self):
@@ -278,9 +275,15 @@ class VPTSuite:
         main.pack(fill=tk.BOTH, expand=True)
 
         hero = ttk.Frame(main, style="VPT.TFrame")
-        hero.pack(fill=tk.X, padx=18, pady=(14, 8))
-        ttk.Label(hero, text="VPT Studio", style="Header.TLabel").pack(anchor=tk.W)
-        ttk.Label(hero, text="Fusion de AudioSubs + HardCode en una interfaz moderna", style="SubHeader.TLabel").pack(anchor=tk.W)
+        hero.pack(fill=tk.X, padx=18, pady=(16, 10))
+        
+        title_frame = tk.Frame(hero, bg="#F3F7FF")
+        title_frame.pack(anchor=tk.W)
+        
+        tk.Label(title_frame, text="VPT Studio", font=("Segoe UI", 22, "bold"), fg="#1F2A44", bg="#F3F7FF").pack(side=tk.LEFT)
+        tk.Label(title_frame, text="Toolkit", font=("Segoe UI", 10, "bold"), fg="#2D9CDB", bg="#DDE8FF", padx=8, pady=2).pack(side=tk.LEFT, padx=10, pady=(6, 0))
+        
+        ttk.Label(hero, text="Herramienta de procesamiento de vídeo, codificación por hardware y multiplexación", style="SubHeader.TLabel").pack(anchor=tk.W, pady=(4, 0))
 
         top = ttk.Frame(main, style="VPT.TFrame")
         top.pack(fill=tk.BOTH, expand=True, padx=18, pady=6)
@@ -305,20 +308,56 @@ class VPTSuite:
         right.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(8, 0), pady=4)
 
         ttk.Label(right, text="Modulos", style="CardTitle.TLabel").pack(anchor=tk.W, padx=12, pady=(10, 6))
-        self.tabs = ttk.Notebook(right)
-        self.tabs.pack(fill=tk.BOTH, expand=True, padx=12, pady=(0, 10))
+        
+        # Modern custom tab header
+        self.tab_header = tk.Frame(right, bg="#FFFFFF")
+        self.tab_header.pack(fill=tk.X, padx=12, pady=(0, 2))
 
-        self.tab_asrt = ttk.Frame(self.tabs, style="Card.TFrame")
-        self.tab_hst = ttk.Frame(self.tabs, style="Card.TFrame")
-        self.tab_tools = ttk.Frame(self.tabs, style="Card.TFrame")
+        # Underline separator for the tab header
+        tab_divider = tk.Frame(right, height=1, bg="#E5ECF9")
+        tab_divider.pack(fill=tk.X, padx=12, pady=(0, 10))
 
-        self.tabs.add(self.tab_asrt, text="Versiones Audio/Sub")
-        self.tabs.add(self.tab_hst, text="Hardcode")
-        self.tabs.add(self.tab_tools, text="Mantenimiento")
+        self.tab_content_container = ttk.Frame(right, style="Card.TFrame")
+        self.tab_content_container.pack(fill=tk.BOTH, expand=True, padx=12, pady=(0, 10))
+        self.tab_content_container.grid_rowconfigure(0, weight=1)
+        self.tab_content_container.grid_columnconfigure(0, weight=1)
+
+        self.tab_asrt = ttk.Frame(self.tab_content_container, style="Card.TFrame")
+        self.tab_hst = ttk.Frame(self.tab_content_container, style="Card.TFrame")
+        self.tab_tools = ttk.Frame(self.tab_content_container, style="Card.TFrame")
+
+        self.tab_asrt.grid(row=0, column=0, sticky="nsew")
+        self.tab_hst.grid(row=0, column=0, sticky="nsew")
+        self.tab_tools.grid(row=0, column=0, sticky="nsew")
+
+        self.tab_frames = [self.tab_asrt, self.tab_hst, self.tab_tools]
+        self.tab_labels_text = ["Versiones Audio/Sub", "Hardcode", "Mantenimiento"]
+        self.tab_buttons = []
+        self.tab_indicators = []
+        self.tab_label_widgets = []
+
+        for i, text in enumerate(self.tab_labels_text):
+            btn_frame = tk.Frame(self.tab_header, bg="#FFFFFF", cursor="hand2")
+            btn_frame.pack(side=tk.LEFT, padx=(0, 16))
+
+            lbl = tk.Label(btn_frame, text=text, font=("Segoe UI", 10, "bold"), bg="#FFFFFF", fg="#5C6B8A", pady=6)
+            lbl.pack(fill=tk.X)
+
+            ind = tk.Frame(btn_frame, height=3, bg="#FFFFFF")
+            ind.pack(fill=tk.X)
+
+            lbl.bind("<Button-1>", lambda e, idx=i: self._seleccionar_pestana(idx))
+            btn_frame.bind("<Button-1>", lambda e, idx=i: self._seleccionar_pestana(idx))
+
+            self.tab_buttons.append(btn_frame)
+            self.tab_label_widgets.append(lbl)
+            self.tab_indicators.append(ind)
 
         self._crear_tab_asrt()
         self._crear_tab_hst()
         self._crear_tab_tools()
+        
+        self._seleccionar_pestana(0)
 
         base = ttk.Frame(main, style="Card.TFrame")
         base.pack(fill=tk.BOTH, expand=True, padx=18, pady=(0, 14))
@@ -397,6 +436,16 @@ class VPTSuite:
             cursor="hand2",
             font=("Segoe UI", 9, "bold"),
         )
+
+    def _seleccionar_pestana(self, index):
+        for i, (frm, lbl, ind) in enumerate(zip(self.tab_frames, self.tab_label_widgets, self.tab_indicators)):
+            if i == index:
+                frm.tkraise()
+                lbl.config(fg="#2D9CDB")
+                ind.config(bg="#2D9CDB")
+            else:
+                lbl.config(fg="#5C6B8A")
+                ind.config(bg="#FFFFFF")
 
     def _crear_tab_asrt(self):
         frm = tk.Frame(self.tab_asrt, bg="#FFFFFF")
@@ -1843,16 +1892,128 @@ class VPTSuite:
         tk.Button(btm, text="Cancelar", command=dialog.destroy, bg="#95A5A6", fg="white", width=12).pack(side=tk.LEFT, padx=6)
 
     def mostrar_acerca_de(self):
-        txt = (
-            "VPT Studio\n\n"
-            "Fusiona funcionalidades de:\n"
-            "1. Generacion de versiones Audio/Subtitulos\n"
-            "2. Hardcode de subtitulos (NVENC/QSV)\n"
-            "3. Limpieza de metadatos\n"
-            "4. Verificacion estadistica de condiciones de streams\n\n"
-            "Configuracion en: %APPDATA%/Galleon/VPT"
+        import webbrowser
+        
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Acerca de VPT Studio")
+        dialog.geometry("520x340")
+        dialog.resizable(False, False)
+        dialog.configure(bg="#FFFFFF")
+        dialog.transient(self.root)
+        dialog.grab_set()
+
+        # Center dialog relative to main window
+        dialog.update_idletasks()
+        x = self.root.winfo_x() + (self.root.winfo_width() - dialog.winfo_width()) // 2
+        y = self.root.winfo_y() + (self.root.winfo_height() - dialog.winfo_height()) // 2
+        dialog.geometry(f"+{x}+{y}")
+
+        # Top banner frame
+        top_banner = tk.Frame(dialog, bg="#1F2A44", height=60)
+        top_banner.pack(fill=tk.X)
+        top_banner.pack_propagate(False)
+
+        tk.Label(
+            top_banner,
+            text="VPT Studio",
+            font=("Segoe UI", 16, "bold"),
+            bg="#1F2A44",
+            fg="#FFFFFF"
+        ).pack(side=tk.LEFT, padx=20, pady=12)
+
+        tk.Label(
+            top_banner,
+            text="v2.1.0",
+            font=("Segoe UI", 10, "bold"),
+            bg="#1F2A44",
+            fg="#2D9CDB"
+        ).pack(side=tk.RIGHT, padx=20, pady=16)
+
+        # Content frame
+        content = tk.Frame(dialog, bg="#FFFFFF", padx=24, pady=20)
+        content.pack(fill=tk.BOTH, expand=True)
+
+        tk.Label(
+            content,
+            text="Video Processing Toolkit",
+            font=("Segoe UI", 12, "bold"),
+            bg="#FFFFFF",
+            fg="#1F2A44"
+        ).pack(anchor=tk.W)
+
+        desc = (
+            "Una suite profesional diseñada para la optimización de flujos de trabajo de vídeo, "
+            "automatizando la multiplexación de audio/subtítulos, la codificación acelerada por "
+            "hardware (NVIDIA NVENC, Intel QSV) y la depuración de metadatos."
         )
-        messagebox.showinfo("Acerca de", txt)
+        tk.Label(
+            content,
+            text=desc,
+            font=("Segoe UI", 9),
+            bg="#FFFFFF",
+            fg="#5C6B8A",
+            justify=tk.LEFT,
+            wraplength=470
+        ).pack(anchor=tk.W, pady=(8, 16))
+
+        # Divider
+        tk.Frame(content, height=1, bg="#E5ECF9").pack(fill=tk.X, pady=(0, 16))
+
+        # Author and Github details
+        info_frame = tk.Frame(content, bg="#FFFFFF")
+        info_frame.pack(fill=tk.X)
+
+        tk.Label(
+            info_frame,
+            text="Desarrollador:",
+            font=("Segoe UI", 9, "bold"),
+            bg="#FFFFFF",
+            fg="#2B3A57"
+        ).grid(row=0, column=0, sticky=tk.W, pady=2)
+
+        tk.Label(
+            info_frame,
+            text="TheHexenjagd",
+            font=("Segoe UI", 9),
+            bg="#FFFFFF",
+            fg="#1F2A44"
+        ).grid(row=0, column=1, sticky=tk.W, padx=8, pady=2)
+
+        tk.Label(
+            info_frame,
+            text="GitHub:",
+            font=("Segoe UI", 9, "bold"),
+            bg="#FFFFFF",
+            fg="#2B3A57"
+        ).grid(row=1, column=0, sticky=tk.W, pady=2)
+
+        github_lbl = tk.Label(
+            info_frame,
+            text="github.com/TheHexenjagd",
+            font=("Segoe UI", 9, "underline"),
+            bg="#FFFFFF",
+            fg="#2D9CDB",
+            cursor="hand2"
+        )
+        github_lbl.grid(row=1, column=1, sticky=tk.W, padx=8, pady=2)
+        github_lbl.bind("<Button-1>", lambda e: webbrowser.open_new("https://github.com/TheHexenjagd"))
+
+        # Close button at the bottom
+        btn_close = tk.Button(
+            dialog,
+            text="Cerrar",
+            command=dialog.destroy,
+            bg="#2D9CDB",
+            fg="white",
+            activebackground="#2D9CDB",
+            activeforeground="white",
+            relief=tk.FLAT,
+            padx=16,
+            pady=6,
+            cursor="hand2",
+            font=("Segoe UI", 9, "bold")
+        )
+        btn_close.pack(side=tk.BOTTOM, pady=16)
 
     def salir_aplicacion(self):
         if self.procesando and not messagebox.askyesno("Proceso activo", "Hay un proceso en curso. Salir de todos modos?"):
