@@ -59,6 +59,7 @@ DEFAULT_CONFIG = {
         "usar_nvidia": "True",
         "preset": "medium",
         "sufijo_idiomas": "True",
+        "limpiar_metadatos": "False",
     },
 }
 
@@ -212,6 +213,7 @@ class VPTSuite:
             self.config_ini["Options"]["usar_nvidia"] = str(self.var_usar_nvidia.get())
             self.config_ini["Options"]["preset"] = self.preset_var.get()
             self.config_ini["Options"]["sufijo_idiomas"] = str(self.var_sufijo_idiomas.get())
+            self.config_ini["Options"]["limpiar_metadatos"] = str(self.var_limpiar_metadatos.get())
 
             self._guardar_configuracion()
         except Exception as exc:
@@ -263,6 +265,7 @@ class VPTSuite:
         self.preset_var = tk.StringVar(value=self.config_ini.get("Options", "preset", fallback="medium"))
         self.salida_var = tk.StringVar(value=self.config_ini.get("Paths", "output_dir", fallback=""))
         self.var_sufijo_idiomas = tk.BooleanVar(value=self.config_ini.getboolean("Options", "sufijo_idiomas", fallback=True))
+        self.var_limpiar_metadatos = tk.BooleanVar(value=self.config_ini.getboolean("Options", "limpiar_metadatos", fallback=False))
 
         for var in [
             self.var_recursivo,
@@ -273,6 +276,7 @@ class VPTSuite:
             self.preset_var,
             self.salida_var,
             self.var_sufijo_idiomas,
+            self.var_limpiar_metadatos,
         ]:
             var.trace_add("write", self._actualizar_configuracion)
 
@@ -410,6 +414,7 @@ class VPTSuite:
         tk.Checkbutton(opts_frame, text="Backup original", variable=self.var_backup, bg="#FFFFFF", fg="#2B3A57", activebackground="#FFFFFF", selectcolor="#FFFFFF").pack(side=tk.LEFT, padx=8)
         tk.Checkbutton(opts_frame, text="Usar NVIDIA", variable=self.var_usar_nvidia, bg="#FFFFFF", fg="#2B3A57", activebackground="#FFFFFF", selectcolor="#FFFFFF", command=self._on_gpu_change).pack(side=tk.LEFT, padx=8)
         tk.Checkbutton(opts_frame, text="Añadir sufijo al nombre", variable=self.var_sufijo_idiomas, bg="#FFFFFF", fg="#2B3A57", activebackground="#FFFFFF", selectcolor="#FFFFFF").pack(side=tk.LEFT, padx=8)
+        tk.Checkbutton(opts_frame, text="Limpiar metadatos al finalizar", variable=self.var_limpiar_metadatos, bg="#FFFFFF", fg="#2B3A57", activebackground="#FFFFFF", selectcolor="#FFFFFF").pack(side=tk.LEFT, padx=8)
 
         prog = tk.Frame(base, bg="#FFFFFF")
         prog.pack(fill=tk.X, padx=12, pady=(4, 8))
@@ -993,6 +998,9 @@ class VPTSuite:
                     result = self._run_subprocess_cancellable(cmd)
                     if result.returncode == 0:
                         ok += 1
+                        if self.var_limpiar_metadatos.get():
+                            self._enviar_mensaje(f"Limpiando metadatos de {output_path.name}...")
+                            self._limpiar_metadatos_archivo(output_path)
                     else:
                         fail += 1
                         self._enviar_mensaje("Error al generar version hardsub")
@@ -1033,6 +1041,9 @@ class VPTSuite:
                 result = self._run_subprocess_cancellable(cmd)
                 if result.returncode == 0:
                     ok += 1
+                    if self.var_limpiar_metadatos.get():
+                        self._enviar_mensaje(f"Limpiando metadatos de {output_path.name}...")
+                        self._limpiar_metadatos_archivo(output_path)
                 else:
                     fail += 1
                     self._enviar_mensaje("Error al generar version")
@@ -1364,7 +1375,12 @@ class VPTSuite:
                 ]
 
             res = self._run_subprocess_cancellable(cmd)
-            return res.returncode == 0
+            if res.returncode == 0:
+                if self.var_limpiar_metadatos.get():
+                    self._enviar_mensaje(f"Limpiando metadatos de {out_file.name}...")
+                    self._limpiar_metadatos_archivo(out_file)
+                return True
+            return False
 
         finally:
             if temp_subtitle_path and os.path.exists(temp_subtitle_path):
