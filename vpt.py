@@ -45,6 +45,12 @@ PRESETS_QSV = {
     "veryfast": {"nombre": "Very Fast", "descripcion": "Maxima velocidad", "velocidad": "⚡⚡⚡⚡", "calidad": "★★☆☆"},
 }
 
+PRESETS_AMD = {
+    "quality": {"nombre": "Quality", "descripcion": "Prioriza calidad", "velocidad": "⚡☆☆", "calidad": "★★★★★"},
+    "balanced": {"nombre": "Balanced", "descripcion": "Balance entre velocidad y calidad", "velocidad": "⚡⚡☆", "calidad": "★★★☆"},
+    "speed": {"nombre": "Speed", "descripcion": "Prioriza velocidad", "velocidad": "⚡⚡⚡⚡", "calidad": "★★☆☆"},
+}
+
 DEFAULT_CONFIG = {
     "Paths": {
         "ffmpeg": os.path.join(FFMPEG_DIR, "ffmpeg.exe"),
@@ -57,6 +63,8 @@ DEFAULT_CONFIG = {
         "crear_subcarpeta": "False",
         "nombre_subcarpeta": "",
         "usar_nvidia": "True",
+        "gpu_acel": "nvidia",
+        "decod_hw": "Software",
         "preset": "medium",
         "sufijo_idiomas": "True",
         "limpiar_metadatos": "False",
@@ -118,8 +126,8 @@ def encontrar_pista_por_identificador(streams, identificador, codec_type):
     return None
 
 
-def obtener_preset_valido(preset, usar_nvidia):
-    if usar_nvidia:
+def obtener_preset_valido(preset, gpu_acel):
+    if gpu_acel == "nvidia":
         if preset in PRESETS_NVIDIA:
             return preset
         mapeo = {
@@ -129,25 +137,55 @@ def obtener_preset_valido(preset, usar_nvidia):
             "medium": "medium",
             "slow": "slow",
             "veryslow": "hq",
+            "speed": "hp",
+            "balanced": "medium",
+            "quality": "hq",
         }
         return mapeo.get(preset, "default")
 
-    if preset in PRESETS_QSV:
-        return preset
-    mapeo = {
-        "default": "medium",
-        "slow": "slow",
-        "medium": "medium",
-        "fast": "fast",
-        "hp": "veryfast",
-        "hq": "slow",
-        "bd": "slow",
-        "ll": "fast",
-        "llhq": "medium",
-        "llhp": "faster",
-        "lossless": "veryslow",
-    }
-    return mapeo.get(preset, "medium")
+    elif gpu_acel == "intel":
+        if preset in PRESETS_QSV:
+            return preset
+        mapeo = {
+            "default": "medium",
+            "slow": "slow",
+            "medium": "medium",
+            "fast": "fast",
+            "hp": "veryfast",
+            "hq": "slow",
+            "bd": "slow",
+            "ll": "fast",
+            "llhq": "medium",
+            "llhp": "faster",
+            "lossless": "veryslow",
+            "speed": "veryfast",
+            "balanced": "medium",
+            "quality": "slow",
+        }
+        return mapeo.get(preset, "medium")
+
+    elif gpu_acel == "amd":
+        if preset in PRESETS_AMD:
+            return preset
+        mapeo = {
+            "lossless": "quality",
+            "hq": "quality",
+            "slow": "quality",
+            "bd": "quality",
+            "default": "balanced",
+            "medium": "balanced",
+            "llhq": "balanced",
+            "fast": "speed",
+            "ll": "speed",
+            "llhp": "speed",
+            "hp": "speed",
+            "veryslow": "quality",
+            "faster": "speed",
+            "veryfast": "speed",
+        }
+        return mapeo.get(preset, "balanced")
+
+    return preset
 
 
 class VPTSuite:
@@ -156,6 +194,17 @@ class VPTSuite:
         self.root.title("VPT Studio - Video Processing Toolkit")
         self.root.geometry("1220x820")
         self.root.minsize(1100, 740)
+
+        self.gpus_status = {}
+        self.gpu_availability = {}
+        self.gpu_map_display_to_val = {
+            "NVIDIA (NVENC)": "nvidia",
+            "Intel (QSV)": "intel",
+            "AMD (AMF)": "amd",
+            "NVIDIA (NVENC) (No disponible)": "nvidia",
+            "Intel (QSV) (No disponible)": "intel",
+            "AMD (AMF) (No disponible)": "amd",
+        }
 
         self.config_ini = self._cargar_configuracion()
         self.ffmpeg_path = self.config_ini.get("Paths", "ffmpeg", fallback=DEFAULT_CONFIG["Paths"]["ffmpeg"])
@@ -174,12 +223,23 @@ class VPTSuite:
         self._crear_menu()
         self._crear_ui()
         self._verificar_ffmpeg_inicio()
+        self._iniciar_deteccion_gpus()
 
         self.root.protocol("WM_DELETE_WINDOW", self.salir_aplicacion)
 
     # -----------------------------
     # Configuracion
     # -----------------------------
+    def _obtener_gpu_inicial(self):
+        val = self.config_ini.get("Options", "gpu_acel", fallback=None)
+        if val is None:
+            usar_nvidia = self.config_ini.getboolean("Options", "usar_nvidia", fallback=True)
+            val = "nvidia" if usar_nvidia else "intel"
+        val = val.lower()
+        if val not in ("nvidia", "intel", "amd"):
+            val = "nvidia"
+        return val
+
     def _cargar_configuracion(self):
         config = configparser.ConfigParser()
         if os.path.exists(CONFIG_FILE):
@@ -217,7 +277,9 @@ class VPTSuite:
             self.config_ini["Options"]["backup_original"] = str(self.var_backup.get())
             self.config_ini["Options"]["crear_subcarpeta"] = str(self.var_subcarpeta.get())
             self.config_ini["Options"]["nombre_subcarpeta"] = self.var_nombre_subcarpeta.get()
-            self.config_ini["Options"]["usar_nvidia"] = str(self.var_usar_nvidia.get())
+            self.config_ini["Options"]["gpu_acel"] = self.gpu_acel_var.get()
+            self.config_ini["Options"]["decod_hw"] = self.decod_hw_var.get()
+            self.config_ini["Options"]["usar_nvidia"] = str(self.gpu_acel_var.get() == "nvidia")
             self.config_ini["Options"]["preset"] = self.preset_var.get()
             self.config_ini["Options"]["sufijo_idiomas"] = str(self.var_sufijo_idiomas.get())
             self.config_ini["Options"]["limpiar_metadatos"] = str(self.var_limpiar_metadatos.get())
@@ -268,7 +330,8 @@ class VPTSuite:
         self.var_backup = tk.BooleanVar(value=self.config_ini.getboolean("Options", "backup_original", fallback=True))
         self.var_subcarpeta = tk.BooleanVar(value=self.config_ini.getboolean("Options", "crear_subcarpeta", fallback=False))
         self.var_nombre_subcarpeta = tk.StringVar(value=self.config_ini.get("Options", "nombre_subcarpeta", fallback=""))
-        self.var_usar_nvidia = tk.BooleanVar(value=self.config_ini.getboolean("Options", "usar_nvidia", fallback=True))
+        self.gpu_acel_var = tk.StringVar(value=self._obtener_gpu_inicial())
+        self.decod_hw_var = tk.StringVar(value=self.config_ini.get("Options", "decod_hw", fallback="Software"))
         self.preset_var = tk.StringVar(value=self.config_ini.get("Options", "preset", fallback="medium"))
         self.salida_var = tk.StringVar(value=self.config_ini.get("Paths", "output_dir", fallback=""))
         self.var_sufijo_idiomas = tk.BooleanVar(value=self.config_ini.getboolean("Options", "sufijo_idiomas", fallback=True))
@@ -279,7 +342,8 @@ class VPTSuite:
             self.var_backup,
             self.var_subcarpeta,
             self.var_nombre_subcarpeta,
-            self.var_usar_nvidia,
+            self.gpu_acel_var,
+            self.decod_hw_var,
             self.preset_var,
             self.salida_var,
             self.var_sufijo_idiomas,
@@ -297,7 +361,6 @@ class VPTSuite:
         title_frame.pack(anchor=tk.W)
         
         tk.Label(title_frame, text="VPT Studio", font=("Segoe UI", 22, "bold"), fg="#1F2A44", bg="#F3F7FF").pack(side=tk.LEFT)
-        tk.Label(title_frame, text="Toolkit", font=("Segoe UI", 10, "bold"), fg="#2D9CDB", bg="#DDE8FF", padx=8, pady=2).pack(side=tk.LEFT, padx=10, pady=(6, 0))
         
         ttk.Label(hero, text="Herramienta de procesamiento de vídeo, codificación por hardware y multiplexación", style="SubHeader.TLabel").pack(anchor=tk.W, pady=(4, 0))
 
@@ -400,14 +463,14 @@ class VPTSuite:
         
         btn_build = tk.Button(
             subcarp_frame,
-            text="⚙️",
+            text="Configurar",
             command=self._abrir_constructor_rutas,
             bg="#2D9CDB",
             fg="white",
             activebackground="#2D9CDB",
             activeforeground="white",
             relief=tk.FLAT,
-            padx=6,
+            padx=8,
             pady=2,
             cursor="hand2",
             font=("Segoe UI", 9, "bold"),
@@ -419,7 +482,16 @@ class VPTSuite:
         opts_frame.pack(fill=tk.X, padx=12, pady=(6, 12))
         tk.Label(opts_frame, text="3. Opciones Generales:", bg="#FFFFFF", fg="#2B3A57", font=("Segoe UI", 9, "bold")).pack(side=tk.LEFT, padx=(0, 8))
         tk.Checkbutton(opts_frame, text="Backup original", variable=self.var_backup, bg="#FFFFFF", fg="#2B3A57", activebackground="#FFFFFF", selectcolor="#FFFFFF").pack(side=tk.LEFT, padx=8)
-        tk.Checkbutton(opts_frame, text="Usar NVIDIA", variable=self.var_usar_nvidia, bg="#FFFFFF", fg="#2B3A57", activebackground="#FFFFFF", selectcolor="#FFFFFF", command=self._on_gpu_change).pack(side=tk.LEFT, padx=8)
+        
+        tk.Label(opts_frame, text="GPU:", bg="#FFFFFF", fg="#2B3A57", font=("Segoe UI", 9, "bold")).pack(side=tk.LEFT, padx=(8, 4))
+        self.cb_gpu = ttk.Combobox(opts_frame, values=["NVIDIA (NVENC)", "Intel (QSV)", "AMD (AMF)"], state="readonly", width=16)
+        self.cb_gpu.pack(side=tk.LEFT, padx=4)
+        self.cb_gpu.bind("<<ComboboxSelected>>", self._on_gpu_selected)
+
+        tk.Label(opts_frame, text="Decodificación:", bg="#FFFFFF", fg="#2B3A57", font=("Segoe UI", 9, "bold")).pack(side=tk.LEFT, padx=(8, 4))
+        self.cb_decod = ttk.Combobox(opts_frame, values=["Software", "D3D11VA", "DXVA2"], state="readonly", textvariable=self.decod_hw_var, width=10)
+        self.cb_decod.pack(side=tk.LEFT, padx=4)
+        
         tk.Checkbutton(opts_frame, text="Añadir sufijo al nombre", variable=self.var_sufijo_idiomas, bg="#FFFFFF", fg="#2B3A57", activebackground="#FFFFFF", selectcolor="#FFFFFF").pack(side=tk.LEFT, padx=8)
         tk.Checkbutton(opts_frame, text="Limpiar metadatos al finalizar", variable=self.var_limpiar_metadatos, bg="#FFFFFF", fg="#2B3A57", activebackground="#FFFFFF", selectcolor="#FFFFFF").pack(side=tk.LEFT, padx=8)
 
@@ -585,46 +657,123 @@ class VPTSuite:
 
     def _on_gpu_change(self):
         preset_actual = self.preset_var.get()
-        nuevo = obtener_preset_valido(preset_actual, self.var_usar_nvidia.get())
+        nuevo = obtener_preset_valido(preset_actual, self.gpu_acel_var.get())
         if nuevo != preset_actual:
             self.preset_var.set(nuevo)
 
     def _nvidia_disponible(self):
-        if self.nvenc_verificado is not None:
-            return self.nvenc_verificado
+        return self._check_encoder("h264_nvenc")
 
+    def _check_encoder(self, encoder):
         if not os.path.exists(self.ffmpeg_path):
-            self.nvenc_verificado = (False, "FFmpeg no encontrado")
-            return self.nvenc_verificado
+            return False, "FFmpeg no encontrado"
 
-        encoders = subprocess.run([self.ffmpeg_path, "-hide_banner", "-encoders"], capture_output=True, text=True)
-        if encoders.returncode != 0 or "h264_nvenc" not in encoders.stdout:
-            self.nvenc_verificado = (False, "h264_nvenc no disponible")
-            return self.nvenc_verificado
+        try:
+            startupinfo = None
+            if os.name == 'nt':
+                startupinfo = subprocess.STARTUPINFO()
+                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                startupinfo.wShowWindow = subprocess.SW_HIDE
+            
+            # 1. Quick check in -encoders output
+            encoders_proc = subprocess.run(
+                [self.ffmpeg_path, "-hide_banner", "-encoders"],
+                capture_output=True,
+                text=True,
+                startupinfo=startupinfo,
+                timeout=5
+            )
+            if encoders_proc.returncode != 0 or encoder not in encoders_proc.stdout:
+                return False, "No soportado por FFmpeg"
+                
+            # 2. Test execution to see if hardware initializes
+            test_proc = subprocess.run(
+                [
+                    self.ffmpeg_path,
+                    "-hide_banner",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    "nullsrc=s=256x256:d=1",
+                    "-c:v",
+                    encoder,
+                    "-f",
+                    "null",
+                    "-",
+                ],
+                capture_output=True,
+                text=True,
+                startupinfo=startupinfo,
+                timeout=5
+            )
+            if test_proc.returncode != 0:
+                err_msg = test_proc.stderr.strip().split("\n")[-1] if test_proc.stderr else "Driver o GPU no disponible"
+                return False, err_msg
+            return True, "Disponible"
+        except Exception as exc:
+            return False, f"Error: {exc}"
 
-        test = subprocess.run(
-            [
-                self.ffmpeg_path,
-                "-hide_banner",
-                "-f",
-                "lavfi",
-                "-i",
-                "nullsrc=s=256x256:d=1",
-                "-c:v",
-                "h264_nvenc",
-                "-f",
-                "null",
-                "-",
-            ],
-            capture_output=True,
-            text=True,
-        )
-        if test.returncode != 0:
-            self.nvenc_verificado = (False, "NVENC no se pudo inicializar")
-            return self.nvenc_verificado
+    def _iniciar_deteccion_gpus(self):
+        self._enviar_mensaje("Iniciando detección de hardware gráfico...")
+        threading.Thread(target=self._detectar_gpus_thread, daemon=True).start()
 
-        self.nvenc_verificado = (True, "NVENC OK")
-        return self.nvenc_verificado
+    def _detectar_gpus_thread(self):
+        nv_ok, nv_msg = self._check_encoder("h264_nvenc")
+        intel_ok, intel_msg = self._check_encoder("h264_qsv")
+        amd_ok, amd_msg = self._check_encoder("h264_amf")
+
+        self.gpus_status = {
+            "nvidia": (nv_ok, nv_msg),
+            "intel": (intel_ok, intel_msg),
+            "amd": (amd_ok, amd_msg)
+        }
+        
+        self._enviar_mensaje(f"Detección GPU - NVIDIA NVENC: {'OK' if nv_ok else 'No disponible (' + nv_msg + ')'}")
+        self._enviar_mensaje(f"Detección GPU - Intel QSV: {'OK' if intel_ok else 'No disponible (' + intel_msg + ')'}")
+        self._enviar_mensaje(f"Detección GPU - AMD AMF: {'OK' if amd_ok else 'No disponible (' + amd_msg + ')'}")
+
+        self.root.after(0, self._actualizar_selector_gpus_ui)
+
+    def _actualizar_selector_gpus_ui(self):
+        values = []
+        self.gpu_availability = {}
+        for gpu_key, display_name in [("nvidia", "NVIDIA (NVENC)"), ("intel", "Intel (QSV)"), ("amd", "AMD (AMF)")]:
+            is_ok = self.gpus_status.get(gpu_key, (False, ""))[0]
+            self.gpu_availability[gpu_key] = is_ok
+            if is_ok:
+                lbl = display_name
+            else:
+                lbl = f"{display_name} (No disponible)"
+            values.append(lbl)
+            self.gpu_map_display_to_val[lbl] = gpu_key
+
+        self.cb_gpu.config(values=values)
+        self._sincronizar_combobox_con_variable()
+
+    def _sincronizar_combobox_con_variable(self):
+        current_val = self.gpu_acel_var.get()
+        for lbl in self.cb_gpu["values"]:
+            if self.gpu_map_display_to_val.get(lbl) == current_val:
+                self.cb_gpu.set(lbl)
+                break
+
+    def _on_gpu_selected(self, event=None):
+        selected_lbl = self.cb_gpu.get()
+        gpu_key = self.gpu_map_display_to_val.get(selected_lbl)
+        
+        is_ok = self.gpu_availability.get(gpu_key, True)
+        if not is_ok:
+            status = self.gpus_status.get(gpu_key, (False, "No disponible"))
+            messagebox.showwarning(
+                "Codificador no disponible",
+                f"El codificador seleccionado ({selected_lbl}) no está disponible o no se pudo inicializar en su sistema.\nDetalle: {status[1]}\n\nSe restablecerá la selección anterior.",
+                parent=self.root
+            )
+            self._sincronizar_combobox_con_variable()
+            return
+            
+        self.gpu_acel_var.set(gpu_key)
+        self._on_gpu_change()
 
     # -----------------------------
     # Selectores
@@ -950,6 +1099,14 @@ class VPTSuite:
             output_path = out_dir / f"{video_stem}{suffix}.mp4"
 
             if combo.get("hardsub"):
+                gpu = self.gpu_acel_var.get()
+                is_ok = self.gpu_availability.get(gpu, True)
+                if not is_ok:
+                    status = self.gpus_status.get(gpu, (False, "No disponible"))
+                    self._enviar_mensaje(f"Error: El codificador {gpu.upper()} no está disponible. Detalle: {status[1]}. Saltando hardsub.")
+                    fail += 1
+                    continue
+
                 audio_idx = audio_indices[0] if audio_indices else None
                 sub_idx = sub_indices[0] if sub_indices else None
                 temp_subtitle_path = None
@@ -978,11 +1135,16 @@ class VPTSuite:
                             break
                     audio_settings = ["-c:a", "aac", "-b:a", "320k"] if audio_codec == "flac" else ["-c:a", "copy"]
                     
-                    preset = obtener_preset_valido(self.preset_var.get(), self.var_usar_nvidia.get())
+                    preset = obtener_preset_valido(self.preset_var.get(), self.gpu_acel_var.get())
                     
-                    if self.var_usar_nvidia.get():
+                    decod_val = self.decod_hw_var.get().lower()
+                    hwaccel_opts = []
+                    if decod_val in ("d3d11va", "dxva2"):
+                        hwaccel_opts = ["-hwaccel", decod_val]
+
+                    if gpu == "nvidia":
                         cmd = [
-                            self.ffmpeg_path, "-i", input_file,
+                            self.ffmpeg_path, *hwaccel_opts, "-i", input_file,
                             "-map", "0:v:0", "-map", f"0:{audio_idx}",
                             "-vf", video_filter,
                             "-c:v", "h264_nvenc", "-preset", preset,
@@ -990,14 +1152,23 @@ class VPTSuite:
                             "-b:v", "5M", "-maxrate", "8M", "-bufsize", "10M",
                             *audio_settings, "-movflags", "+faststart", "-y", str(output_path)
                         ]
-                    else:
+                    elif gpu == "intel":
                         cmd = [
-                            self.ffmpeg_path, "-i", input_file,
+                            self.ffmpeg_path, *hwaccel_opts, "-i", input_file,
                             "-map", "0:v:0", "-map", f"0:{audio_idx}",
                             "-vf", video_filter,
                             "-c:v", "h264_qsv", "-preset", preset,
                             "-global_quality", "23",
                             "-b:v", "5M", "-maxrate", "8M", "-bufsize", "10M",
+                            *audio_settings, "-movflags", "+faststart", "-y", str(output_path)
+                        ]
+                    else:  # amd
+                        cmd = [
+                            self.ffmpeg_path, *hwaccel_opts, "-i", input_file,
+                            "-map", "0:v:0", "-map", f"0:{audio_idx}",
+                            "-vf", video_filter,
+                            "-c:v", "h264_amf", "-quality", preset,
+                            "-rc", "vbr_peak", "-b:v", "5M", "-maxrate", "8M", "-bufsize", "10M",
                             *audio_settings, "-movflags", "+faststart", "-y", str(output_path)
                         ]
                     
@@ -1367,11 +1538,19 @@ class VPTSuite:
             else:
                 video_filter = "format=yuv420p"
 
-            preset = obtener_preset_valido(self.preset_var.get(), self.var_usar_nvidia.get())
+            preset = obtener_preset_valido(self.preset_var.get(), self.gpu_acel_var.get())
 
-            if self.var_usar_nvidia.get():
+            decod_val = self.decod_hw_var.get().lower()
+            hwaccel_opts = []
+            if decod_val in ("d3d11va", "dxva2"):
+                hwaccel_opts = ["-hwaccel", decod_val]
+
+            gpu = self.gpu_acel_var.get()
+
+            if gpu == "nvidia":
                 cmd = [
                     self.ffmpeg_path,
+                    *hwaccel_opts,
                     "-i",
                     input_file,
                     "-map",
@@ -1402,9 +1581,10 @@ class VPTSuite:
                     "-y",
                     str(out_file),
                 ]
-            else:
+            elif gpu == "intel":
                 cmd = [
                     self.ffmpeg_path,
+                    *hwaccel_opts,
                     "-i",
                     input_file,
                     "-map",
@@ -1419,6 +1599,36 @@ class VPTSuite:
                     preset,
                     "-global_quality",
                     "23",
+                    "-b:v",
+                    "5M",
+                    "-maxrate",
+                    "8M",
+                    "-bufsize",
+                    "10M",
+                    *audio_settings,
+                    "-movflags",
+                    "+faststart",
+                    "-y",
+                    str(out_file),
+                ]
+            else:  # amd
+                cmd = [
+                    self.ffmpeg_path,
+                    *hwaccel_opts,
+                    "-i",
+                    input_file,
+                    "-map",
+                    "0:v:0",
+                    "-map",
+                    f"0:{audio_idx}",
+                    "-vf",
+                    video_filter,
+                    "-c:v",
+                    "h264_amf",
+                    "-quality",
+                    preset,
+                    "-rc",
+                    "vbr_peak",
                     "-b:v",
                     "5M",
                     "-maxrate",
@@ -1483,13 +1693,14 @@ class VPTSuite:
         fail = 0
         total = len(archivos)
 
-        if self.var_usar_nvidia.get():
-            disp, msg = self._nvidia_disponible()
-            self._enviar_mensaje(msg)
-            if not disp:
-                self.msg_queue.put(("FINALIZADO", 0, total))
-                self.procesando = False
-                return
+        gpu = self.gpu_acel_var.get()
+        is_ok = self.gpu_availability.get(gpu, True)
+        if not is_ok:
+            status = self.gpus_status.get(gpu, (False, "No disponible"))
+            self._enviar_mensaje(f"Error: El codificador {gpu.upper()} no está disponible. Detalle: {status[1]}")
+            self.msg_queue.put(("FINALIZADO", 0, total))
+            self.procesando = False
+            return
 
         self._enviar_mensaje("===== INICIO HARDCODE =====")
         for i, archivo in enumerate(archivos, 1):
@@ -2041,6 +2252,7 @@ class VPTSuite:
         else:
             messagebox.showinfo("Actualizado", f"FFmpeg actualizado\n\n{archivo}\n\nSelecciona FFProbe manualmente si hace falta")
         self._actualizar_configuracion()
+        self._iniciar_deteccion_gpus()
 
     def cambiar_ruta_ffprobe(self):
         archivo = filedialog.askopenfilename(
@@ -2060,9 +2272,19 @@ class VPTSuite:
         )
 
     def cambiar_preset(self):
-        usar_nvidia = self.var_usar_nvidia.get()
-        presets = PRESETS_NVIDIA if usar_nvidia else PRESETS_QSV
-        gpu_name = "NVIDIA NVENC" if usar_nvidia else "Intel QSV"
+        gpu_acel = self.gpu_acel_var.get()
+        if gpu_acel == "nvidia":
+            presets = PRESETS_NVIDIA
+            gpu_name = "NVIDIA NVENC"
+            orden_presets = ["lossless", "hq", "slow", "bd", "default", "medium", "llhq", "fast", "ll", "llhp", "hp"]
+        elif gpu_acel == "intel":
+            presets = PRESETS_QSV
+            gpu_name = "Intel QSV"
+            orden_presets = ["veryslow", "slow", "medium", "fast", "faster", "veryfast"]
+        else:
+            presets = PRESETS_AMD
+            gpu_name = "AMD AMF"
+            orden_presets = ["quality", "balanced", "speed"]
 
         dialog = tk.Toplevel(self.root)
         dialog.title(f"Preset - {gpu_name}")
@@ -2071,12 +2293,6 @@ class VPTSuite:
         dialog.grab_set()
 
         tk.Label(dialog, text=f"Selecciona preset para {gpu_name}", font=("Segoe UI", 12, "bold")).pack(pady=10)
-
-        # Ordenados manualmente de mas pesado (mejor calidad/mas lento) a mas liviano
-        if usar_nvidia:
-            orden_presets = ["lossless", "hq", "slow", "bd", "default", "medium", "llhq", "fast", "ll", "llhp", "hp"]
-        else:
-            orden_presets = ["veryslow", "slow", "medium", "fast", "faster", "veryfast"]
 
         options = []
         map_display = {}
@@ -2089,7 +2305,7 @@ class VPTSuite:
             map_display[disp] = key
 
         current = self.preset_var.get()
-        current = current if current in presets else obtener_preset_valido(current, usar_nvidia)
+        current = current if current in presets else obtener_preset_valido(current, gpu_acel)
         value = tk.StringVar(value=presets[current]["nombre"])
 
         cb = ttk.Combobox(dialog, values=options, state="readonly", textvariable=value, width=44)
@@ -2170,9 +2386,9 @@ class VPTSuite:
         ).pack(anchor=tk.W)
 
         desc = (
-            "Una suite profesional diseñada para la optimización de flujos de trabajo de vídeo, "
+            "Una suite diseñada para la optimización de flujos de trabajo de vídeo, "
             "automatizando la multiplexación de audio/subtítulos, la codificación acelerada por "
-            "hardware (NVIDIA NVENC, Intel QSV) y la depuración de metadatos."
+            "hardware (NVIDIA NVENC, Intel QSV, AMD AMF) y la depuración de metadatos."
         )
         tk.Label(
             content,
