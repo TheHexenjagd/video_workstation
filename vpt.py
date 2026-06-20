@@ -354,15 +354,31 @@ class VPTSuite:
         main = ttk.Frame(self.root, style="VPT.TFrame")
         main.pack(fill=tk.BOTH, expand=True)
 
-        hero = ttk.Frame(main, style="VPT.TFrame")
-        hero.pack(fill=tk.X, padx=18, pady=(16, 10))
+        # Hero section as a clean white card with a blue left accent bar
+        hero_card = tk.Frame(main, bg="#FFFFFF", highlightthickness=1, highlightbackground="#E5ECF9", bd=0)
+        hero_card.pack(fill=tk.X, padx=18, pady=(16, 10))
         
-        title_frame = tk.Frame(hero, bg="#F3F7FF")
-        title_frame.pack(anchor=tk.W)
+        accent_bar = tk.Frame(hero_card, width=4, bg="#2D9CDB")
+        accent_bar.pack(side=tk.LEFT, fill=tk.Y)
         
-        tk.Label(title_frame, text="VPT Studio", font=("Segoe UI", 22, "bold"), fg="#1F2A44", bg="#F3F7FF").pack(side=tk.LEFT)
+        text_container = tk.Frame(hero_card, bg="#FFFFFF")
+        text_container.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=16, pady=12)
         
-        ttk.Label(hero, text="Herramienta de procesamiento de vídeo, codificación por hardware y multiplexación", style="SubHeader.TLabel").pack(anchor=tk.W, pady=(4, 0))
+        tk.Label(
+            text_container,
+            text="VPT Studio",
+            font=("Segoe UI", 18, "bold"),
+            fg="#1F2A44",
+            bg="#FFFFFF"
+        ).pack(anchor=tk.W)
+        
+        tk.Label(
+            text_container,
+            text="Herramienta de procesamiento de vídeo, codificación por hardware y multiplexación",
+            font=("Segoe UI", 9),
+            fg="#5C6B8A",
+            bg="#FFFFFF"
+        ).pack(anchor=tk.W, pady=(2, 0))
 
         top = ttk.Frame(main, style="VPT.TFrame")
         top.pack(fill=tk.BOTH, expand=True, padx=18, pady=6)
