@@ -1155,7 +1155,7 @@ class VPTSuite:
                     
                     decod_val = self.decod_hw_var.get().lower()
                     hwaccel_opts = []
-                    if decod_val in ("d3d11va", "dxva2"):
+                    if decod_val in ("d3d11va", "dxva2") and sub_idx is None:
                         hwaccel_opts = ["-hwaccel", decod_val]
 
                     if gpu == "nvidia":
@@ -1558,7 +1558,7 @@ class VPTSuite:
 
             decod_val = self.decod_hw_var.get().lower()
             hwaccel_opts = []
-            if decod_val in ("d3d11va", "dxva2"):
+            if decod_val in ("d3d11va", "dxva2") and sub_idx is None:
                 hwaccel_opts = ["-hwaccel", decod_val]
 
             gpu = self.gpu_acel_var.get()
