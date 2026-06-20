@@ -1355,10 +1355,403 @@ class VPTSuite:
             messagebox.showerror("Error", "Agrega al menos un video")
             return
 
-        self._clear_log_and_progress("Preparando versiones...")
-        self._set_running_state(True)
-        threading.Thread(target=self._thread_versiones, args=(archivos, output), daemon=True).start()
-        self._actualizar_ui()
+        def callback_iniciar(archivos_validos):
+            self._clear_log_and_progress("Preparando versiones...")
+            self._set_running_state(True)
+            threading.Thread(target=self._thread_versiones, args=(archivos_validos, output), daemon=True).start()
+            self._actualizar_ui()
+
+        self.pre_verificar_cola("versiones", archivos, output, callback_iniciar)
+
+    # -----------------------------
+    # Pre-verificacion de la cola
+    # -----------------------------
+    def pre_verificar_cola(self, tipo_proceso, archivos, output_dir, callback_exito):
+        if tipo_proceso in ("versiones", "hardcode"):
+            if not os.path.exists(output_dir):
+                try:
+                    os.makedirs(output_dir, exist_ok=True)
+                except Exception as exc:
+                    messagebox.showerror("Error de carpeta de salida", f"No se puede crear el directorio de salida:\n{output_dir}\nDetalle: {exc}")
+                    return
+            if not os.access(output_dir, os.W_OK):
+                messagebox.showerror("Error de permisos", f"El directorio de salida no tiene permisos de escritura:\n{output_dir}")
+                return
+
+        progreso = tk.Toplevel(self.root)
+        progreso.title("Pre-verificando cola")
+        progreso.geometry("500x140")
+        progreso.transient(self.root)
+        progreso.grab_set()
+
+        progreso.update_idletasks()
+        x = self.root.winfo_x() + (self.root.winfo_width() - progreso.winfo_width()) // 2
+        y = self.root.winfo_y() + (self.root.winfo_height() - progreso.winfo_height()) // 2
+        progreso.geometry(f"+{x}+{y}")
+
+        lbl = tk.Label(progreso, text="Pre-verificando archivos en la cola...", font=("Segoe UI", 10, "bold"))
+        lbl.pack(pady=(18, 8))
+        status = tk.Label(progreso, text="Preparando analisis...", font=("Segoe UI", 9))
+        status.pack()
+        pbar = ttk.Progressbar(progreso, mode="determinate", maximum=len(archivos), length=420)
+        pbar.pack(pady=10)
+
+        resultados = []
+
+        def worker():
+            for i, archivo in enumerate(archivos, 1):
+                status.config(text=f"{i}/{len(archivos)} - {os.path.basename(archivo)}")
+                pbar["value"] = i
+                progreso.update_idletasks()
+
+                res = self._validar_archivo_pre_verificacion(archivo, tipo_proceso, output_dir)
+                resultados.append(res)
+
+            progreso.destroy()
+            self.root.after(0, lambda: self._procesar_resultados_pre_verificacion(resultados, tipo_proceso, archivos, callback_exito))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _validar_archivo_pre_verificacion(self, archivo, tipo_proceso, output_dir):
+        res = {
+            "archivo": archivo,
+            "basename": os.path.basename(archivo),
+            "has_error": False,
+            "has_warning": False,
+            "errors": [],
+            "warnings": []
+        }
+
+        if not os.path.exists(archivo):
+            res["has_error"] = True
+            res["errors"].append("El archivo no existe o la ruta no es valida.")
+            return res
+
+        if tipo_proceso == "metadatos":
+            if not os.access(archivo, os.W_OK):
+                res["has_error"] = True
+                res["errors"].append("No se tiene permiso de escritura en el archivo original (necesario para limpiar metadatos).")
+
+        info = self._ffprobe_info(archivo)
+        if info is None:
+            res["has_error"] = True
+            res["errors"].append("ffprobe no pudo analizar el archivo. Podria estar corrupto o no ser soportado.")
+            return res
+
+        streams = info.get("streams", [])
+        video_streams = [s for s in streams if s.get("codec_type") == "video"]
+        audio_streams = [s for s in streams if s.get("codec_type") == "audio"]
+        subtitle_streams = [s for s in streams if s.get("codec_type") == "subtitle"]
+
+        if not video_streams:
+            res["has_error"] = True
+            res["errors"].append("El archivo no contiene ninguna pista de video.")
+        
+        if tipo_proceso == "hardcode":
+            if not audio_streams:
+                res["has_error"] = True
+                res["errors"].append("No se encontro ninguna pista de audio (requerida para el hardcode).")
+
+        if res["has_error"]:
+            return res
+
+        video_stream = video_streams[0]
+        pix_fmt = video_stream.get("pix_fmt", "")
+        
+        is_10bit = False
+        if any(x in pix_fmt for x in ("10le", "10be", "12le", "12be", "16le", "10p", "12p")):
+            is_10bit = True
+        elif video_stream.get("bits_per_raw_sample") in ("10", "12", "16"):
+            is_10bit = True
+
+        is_hdr = False
+        if video_stream.get("color_transfer") in ("smpte2084", "arib-std-b67") or video_stream.get("color_primaries") == "bt2020":
+            is_hdr = True
+
+        if tipo_proceso == "hardcode":
+            audio_idx = None
+            sub_idx = None
+            if self.pistas_config["aplicar_a_todos"]:
+                audio_idx = encontrar_pista_por_identificador(streams, self.pistas_config["audio_tag"], "audio")
+                sub_idx = encontrar_pista_por_identificador(streams, self.pistas_config["subtitle_tag"], "subtitle")
+            if audio_idx is None and audio_streams:
+                audio_idx = audio_streams[0]["index"]
+            if sub_idx is None and subtitle_streams:
+                sub_idx = subtitle_streams[0]["index"]
+
+            sufijo = ""
+            if self.var_sufijo_idiomas.get():
+                sufijo = "_hardcoded" if sub_idx is not None else "_nosub"
+
+            out_dir = Path(output_dir)
+            if self.var_subcarpeta.get():
+                patron = self._resolver_patron_subcarpeta(archivo, info, sufijo.strip("_") or "hardcode", [audio_idx] if audio_idx is not None else [], [sub_idx] if sub_idx is not None else [])
+                out_dir = out_dir / Path(patron)
+            out_file = out_dir / f"{Path(archivo).stem}{sufijo}.mp4"
+            if out_file.exists():
+                res["has_warning"] = True
+                res["warnings"].append(f"El archivo de destino ya existe y sera sobrescrito: {out_file.name}")
+
+            if is_10bit or is_hdr:
+                desc = []
+                if is_10bit:
+                    desc.append("10-bit")
+                if is_hdr:
+                    desc.append("HDR")
+                res["has_warning"] = True
+                res["warnings"].append(f"Video en formato {' y '.join(desc)} ({pix_fmt}). Al incrustar subtitulos con H.264 (8-bit) sin tone-mapping, la calidad visual y colores podrian verse lavados.")
+
+            bitmap_subs = [s for s in subtitle_streams if s.get("codec_name", "").lower() in BITMAP_SUB_CODECS]
+            if sub_idx is not None:
+                s_selected = next((st for st in subtitle_streams if st.get("index") == sub_idx), None)
+                if s_selected and s_selected.get("codec_name", "").lower() in BITMAP_SUB_CODECS:
+                    res["has_warning"] = True
+                    res["warnings"].append(f"El subtitulo seleccionado ({s_selected.get('codec_name')}) es de tipo imagen/bitmap, lo que provocara fallos en la extraccion de texto a ASS.")
+            elif subtitle_streams and len(bitmap_subs) == len(subtitle_streams):
+                res["has_warning"] = True
+                res["warnings"].append("Todos los subtitulos disponibles son bitmap (PGS/DVD/etc.). La incrustacion de subtitulos (hardsub) fallara si intentas extraerlos a ASS.")
+
+        elif tipo_proceso == "versiones":
+            if self.combinaciones_a_aplicar["aplicar_a_todos"]:
+                combos = []
+                for c in self.combinaciones_a_aplicar["combinaciones"]:
+                    audio_indices = [encontrar_pista_por_identificador(streams, ident, "audio") for ident in c.get("audio_identifiers", [])]
+                    audio_indices = [x for x in audio_indices if x is not None]
+                    sub_indices = [encontrar_pista_por_identificador(streams, ident, "subtitle") for ident in c.get("sub_identifiers", [])]
+                    sub_indices = [x for x in sub_indices if x is not None]
+                    if audio_indices or sub_indices:
+                        combos.append({
+                            "audio_indices": audio_indices,
+                            "sub_indices": sub_indices,
+                            "label": c["label"],
+                            "hardsub": c.get("hardsub", False)
+                        })
+                
+                if not combos:
+                    res["has_warning"] = True
+                    res["warnings"].append("Ninguna combinacion de audio/subtitulo configurada esta disponible en este archivo.")
+                
+                for combo in combos:
+                    out_dir = Path(output_dir)
+                    label = combo["label"]
+                    if self.var_subcarpeta.get():
+                        patron = self._resolver_patron_subcarpeta(archivo, info, label, combo["audio_indices"], combo["sub_indices"])
+                        out_dir = out_dir / Path(patron)
+                    suffix = f"_{label}" if self.var_sufijo_idiomas.get() else ""
+                    output_path = out_dir / f"{Path(archivo).stem}{suffix}.mp4"
+                    if output_path.exists():
+                        res["has_warning"] = True
+                        res["warnings"].append(f"El archivo de destino ya existe y sera sobrescrito: {output_path.name}")
+                    
+                    if combo["hardsub"]:
+                        if is_10bit or is_hdr:
+                            desc = []
+                            if is_10bit:
+                                desc.append("10-bit")
+                            if is_hdr:
+                                desc.append("HDR")
+                            res["has_warning"] = True
+                            res["warnings"].append(f"La version '{label}' requiere hardsub y el video original es {' y '.join(desc)}. Colores podrian lavarse al transcodificar a H.264.")
+                        
+                        for s_idx in combo["sub_indices"]:
+                            s = next((st for st in streams if st.get("index") == s_idx), None)
+                            if s and s.get("codec_name", "").lower() in BITMAP_SUB_CODECS:
+                                res["has_warning"] = True
+                                res["warnings"].append(f"La version '{label}' requiere hardsub de un subtitulo bitmap ({s.get('codec_name')}), lo cual fallara en la extraccion a ASS.")
+            else:
+                if is_10bit or is_hdr:
+                    desc = []
+                    if is_10bit:
+                        desc.append("10-bit")
+                    if is_hdr:
+                        desc.append("HDR")
+                    res["has_warning"] = True
+                    res["warnings"].append(f"El video original es {' y '.join(desc)}. Si decides generar versiones con subtitulos incrustados (hardsub), los colores podrian verse lavados.")
+                
+                if any(s.get("codec_name", "").lower() in BITMAP_SUB_CODECS for s in subtitle_streams):
+                    res["has_warning"] = True
+                    res["warnings"].append("El archivo contiene subtitulos bitmap (PGS/DVD/etc.). La opcion de hacer hardsub (incrustacion) sobre estos subtitulos provocara un fallo.")
+
+        return res
+
+    def _procesar_resultados_pre_verificacion(self, resultados, tipo_proceso, archivos, callback_exito):
+        con_errores = [r for r in resultados if r["has_error"]]
+        con_advertencias = [r for r in resultados if r["has_warning"]]
+
+        if not con_errores and not con_advertencias:
+            callback_exito(archivos)
+            return
+
+        self._mostrar_reporte_pre_verificacion(resultados, tipo_proceso, archivos, callback_exito)
+
+    def _mostrar_reporte_pre_verificacion(self, resultados, tipo_proceso, archivos, callback_exito):
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Reporte de Pre-verificacion - VPT Studio")
+        dialog.geometry("820x600")
+        dialog.transient(self.root)
+        dialog.grab_set()
+        dialog.configure(bg="#F3F7FF")
+
+        dialog.update_idletasks()
+        x = self.root.winfo_x() + (self.root.winfo_width() - dialog.winfo_width()) // 2
+        y = self.root.winfo_y() + (self.root.winfo_height() - dialog.winfo_height()) // 2
+        dialog.geometry(f"+{x}+{y}")
+
+        header = tk.Frame(dialog, bg="#1F2A44", height=70)
+        header.pack(fill=tk.X)
+        header.pack_propagate(False)
+        
+        tk.Label(
+            header,
+            text="Pre-verificacion de Archivos",
+            font=("Segoe UI", 14, "bold"),
+            bg="#1F2A44",
+            fg="#FFFFFF"
+        ).pack(anchor=tk.W, padx=20, pady=(10, 2))
+        
+        tk.Label(
+            header,
+            text="Se han detectado posibles problemas antes de iniciar la cola de procesamiento.",
+            font=("Segoe UI", 9),
+            bg="#1F2A44",
+            fg="#B0C4DE"
+        ).pack(anchor=tk.W, padx=20)
+
+        body = tk.Frame(dialog, bg="#F3F7FF", padx=20, pady=15)
+        body.pack(fill=tk.BOTH, expand=True)
+
+        text_frame = tk.Frame(body, bg="#FFFFFF", highlightthickness=1, highlightbackground="#E5ECF9")
+        text_frame.pack(fill=tk.BOTH, expand=True)
+
+        log_text = tk.Text(
+            text_frame,
+            wrap=tk.WORD,
+            bg="#FFFFFF",
+            fg="#1F2A44",
+            font=("Segoe UI", 9),
+            relief=tk.FLAT,
+            padx=10,
+            pady=10
+        )
+        log_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        scrollbar = tk.Scrollbar(text_frame, command=log_text.yview)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        log_text.config(yscrollcommand=scrollbar.set)
+
+        log_text.tag_config("title", font=("Segoe UI", 10, "bold"), spacing1=8, spacing3=2)
+        log_text.tag_config("error_lbl", font=("Segoe UI", 9, "bold"), foreground="#EB5757")
+        log_text.tag_config("warn_lbl", font=("Segoe UI", 9, "bold"), foreground="#F2994A")
+        log_text.tag_config("detail", font=("Segoe UI", 9), foreground="#4F4F4F", lmargin1=25, lmargin2=25, spacing3=4)
+
+        num_errors = 0
+        num_warnings = 0
+        
+        for r in resultados:
+            if not r["has_error"] and not r["has_warning"]:
+                continue
+                
+            log_text.insert(tk.END, f"Archivo: {r['basename']}\n", "title")
+            
+            for err in r["errors"]:
+                num_errors += 1
+                log_text.insert(tk.END, "  [ERROR] ", "error_lbl")
+                log_text.insert(tk.END, f"{err}\n", "detail")
+                
+            for warn in r["warnings"]:
+                num_warnings += 1
+                log_text.insert(tk.END, "  [ADVERTENCIA] ", "warn_lbl")
+                log_text.insert(tk.END, f"{warn}\n", "detail")
+                
+        log_text.config(state=tk.DISABLED)
+
+        summary_text = f"Resumen: {num_errors} error(es) critico(s) y {num_warnings} advertencia(s) encontrada(s)."
+        lbl_summary = tk.Label(body, text=summary_text, font=("Segoe UI", 9, "bold"), bg="#F3F7FF", fg="#1F2A44", anchor=tk.W)
+        lbl_summary.pack(fill=tk.X, pady=(10, 5))
+        
+        if num_errors > 0:
+            lbl_err_note = tk.Label(
+                body, 
+                text="* Los archivos con errores criticos no podran ser procesados y seran excluidos si decide continuar.", 
+                font=("Segoe UI", 8, "italic"), 
+                bg="#F3F7FF", 
+                fg="#EB5757", 
+                anchor=tk.W
+            )
+            lbl_err_note.pack(fill=tk.X, pady=(0, 10))
+
+        btm = tk.Frame(dialog, bg="#F3F7FF")
+        btm.pack(side=tk.BOTTOM, fill=tk.X, padx=20, pady=(5, 15))
+
+        def cmd_continuar():
+            filtrados = [r["archivo"] for r in resultados if not r["has_error"]]
+            dialog.destroy()
+            if filtrados:
+                callback_exito(filtrados)
+            else:
+                messagebox.showwarning("Cola vacia", "No quedan archivos validos para procesar tras excluir los errores.")
+
+        def cmd_omitir_problemas():
+            filtrados = [r["archivo"] for r in resultados if not r["has_error"] and not r["has_warning"]]
+            dialog.destroy()
+            if filtrados:
+                callback_exito(filtrados)
+            else:
+                messagebox.showwarning("Cola vacia", "No quedan archivos limpios sin advertencias ni errores para procesar.")
+
+        def cmd_cancelar():
+            dialog.destroy()
+
+        btn_cancelar = tk.Button(
+            btm,
+            text="Cancelar",
+            command=cmd_cancelar,
+            bg="#95A5A6",
+            fg="white",
+            activebackground="#7F8C8D",
+            activeforeground="white",
+            relief=tk.FLAT,
+            padx=15,
+            pady=6,
+            cursor="hand2",
+            font=("Segoe UI", 9, "bold")
+        )
+        btn_cancelar.pack(side=tk.RIGHT, padx=5)
+
+        if num_warnings > 0 or num_errors > 0:
+            btn_omitir = tk.Button(
+                btm,
+                text="Omitir con advertencias/errores",
+                command=cmd_omitir_problemas,
+                bg="#F2994A",
+                fg="white",
+                activebackground="#D35400",
+                activeforeground="white",
+                relief=tk.FLAT,
+                padx=15,
+                pady=6,
+                cursor="hand2",
+                font=("Segoe UI", 9, "bold")
+            )
+            btn_omitir.pack(side=tk.RIGHT, padx=5)
+
+        archivos_sin_errores = [r for r in resultados if not r["has_error"]]
+        if archivos_sin_errores:
+            btn_continuar = tk.Button(
+                btm,
+                text="Continuar con el resto",
+                command=cmd_continuar,
+                bg="#27AE60",
+                fg="white",
+                activebackground="#219653",
+                activeforeground="white",
+                relief=tk.FLAT,
+                padx=15,
+                pady=6,
+                cursor="hand2",
+                font=("Segoe UI", 9, "bold")
+            )
+            btn_continuar.pack(side=tk.RIGHT, padx=5)
 
     # -----------------------------
     # Verificacion de condiciones
@@ -1750,10 +2143,13 @@ class VPTSuite:
             messagebox.showerror("Error", "Agrega al menos un video")
             return
 
-        self._clear_log_and_progress("Preparando hardcode...")
-        self._set_running_state(True)
-        threading.Thread(target=self._thread_hardcode, args=(archivos, output), daemon=True).start()
-        self._actualizar_ui()
+        def callback_iniciar(archivos_validos):
+            self._clear_log_and_progress("Preparando hardcode...")
+            self._set_running_state(True)
+            threading.Thread(target=self._thread_hardcode, args=(archivos_validos, output), daemon=True).start()
+            self._actualizar_ui()
+
+        self.pre_verificar_cola("hardcode", archivos, output, callback_iniciar)
 
     # -----------------------------
     # Mantenimiento
@@ -1848,10 +2244,13 @@ class VPTSuite:
         if not confirm:
             return
 
-        self._clear_log_and_progress("Preparando limpieza de metadatos...")
-        self._set_running_state(True)
-        threading.Thread(target=self._thread_limpiar_metadatos, args=(archivos,), daemon=True).start()
-        self._actualizar_ui()
+        def callback_iniciar(archivos_validos):
+            self._clear_log_and_progress("Preparando limpieza de metadatos...")
+            self._set_running_state(True)
+            threading.Thread(target=self._thread_limpiar_metadatos, args=(archivos_validos,), daemon=True).start()
+            self._actualizar_ui()
+
+        self.pre_verificar_cola("metadatos", archivos, None, callback_iniciar)
 
     # -----------------------------
     # Acciones UI
