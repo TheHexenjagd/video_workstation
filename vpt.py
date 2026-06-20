@@ -105,6 +105,13 @@ def encontrar_pista_por_identificador(streams, identificador, codec_type):
             return stream["index"]
 
     for stream in streams:
+        if stream.get("codec_type") != codec_type:
+            continue
+        tags = stream.get("tags", {})
+        if tags.get("language", "und") == lang_buscado:
+            return stream["index"]
+
+    for stream in streams:
         if stream.get("codec_type") == codec_type:
             return stream["index"]
 
@@ -998,6 +1005,32 @@ class VPTSuite:
                     result = self._run_subprocess_cancellable(cmd)
                     if result.returncode == 0:
                         ok += 1
+                        aud_langs = []
+                        for idx in audio_indices:
+                            s = next((st for st in info["streams"] if st.get("index") == idx), None)
+                            if s:
+                                lang = s.get("tags", {}).get("language", "und")
+                                title = s.get("tags", {}).get("title", "")
+                                codec = s.get("codec_name", "")
+                                aud_langs.append(f"{lang} ({title} - {codec})" if title else f"{lang} ({codec})")
+                        
+                        sub_langs = []
+                        sub_list = [sub_idx] if sub_idx is not None else []
+                        for idx in sub_list:
+                            s = next((st for st in info["streams"] if st.get("index") == idx), None)
+                            if s:
+                                lang = s.get("tags", {}).get("language", "und")
+                                title = s.get("tags", {}).get("title", "")
+                                codec = s.get("codec_name", "")
+                                sub_langs.append(f"{lang} ({title} - {codec})" if title else f"{lang} ({codec})")
+                        
+                        ruta_completa = os.path.abspath(output_path)
+                        audios_info = ", ".join(aud_langs) if aud_langs else "Ninguno"
+                        subs_info = ", ".join(sub_langs) if sub_langs else "Ninguno"
+                        self._enviar_mensaje(f"  -> Archivo generado: {ruta_completa}")
+                        self._enviar_mensaje(f"     Audios: {audios_info}")
+                        self._enviar_mensaje(f"     Subtítulos: {subs_info}")
+
                         if self.var_limpiar_metadatos.get():
                             self._enviar_mensaje(f"Limpiando metadatos de {output_path.name}...")
                             self._limpiar_metadatos_archivo(output_path)
@@ -1041,6 +1074,31 @@ class VPTSuite:
                 result = self._run_subprocess_cancellable(cmd)
                 if result.returncode == 0:
                     ok += 1
+                    aud_langs = []
+                    for idx in audio_indices:
+                        s = next((st for st in info["streams"] if st.get("index") == idx), None)
+                        if s:
+                            lang = s.get("tags", {}).get("language", "und")
+                            title = s.get("tags", {}).get("title", "")
+                            codec = s.get("codec_name", "")
+                            aud_langs.append(f"{lang} ({title} - {codec})" if title else f"{lang} ({codec})")
+                    
+                    sub_langs = []
+                    for idx in sub_incluir:
+                        s = next((st for st in info["streams"] if st.get("index") == idx), None)
+                        if s:
+                            lang = s.get("tags", {}).get("language", "und")
+                            title = s.get("tags", {}).get("title", "")
+                            codec = s.get("codec_name", "")
+                            sub_langs.append(f"{lang} ({title} - {codec})" if title else f"{lang} ({codec})")
+                    
+                    ruta_completa = os.path.abspath(output_path)
+                    audios_info = ", ".join(aud_langs) if aud_langs else "Ninguno"
+                    subs_info = ", ".join(sub_langs) if sub_langs else "Ninguno"
+                    self._enviar_mensaje(f"  -> Archivo generado: {ruta_completa}")
+                    self._enviar_mensaje(f"     Audios: {audios_info}")
+                    self._enviar_mensaje(f"     Subtítulos: {subs_info}")
+
                     if self.var_limpiar_metadatos.get():
                         self._enviar_mensaje(f"Limpiando metadatos de {output_path.name}...")
                         self._limpiar_metadatos_archivo(output_path)
@@ -1376,6 +1434,32 @@ class VPTSuite:
 
             res = self._run_subprocess_cancellable(cmd)
             if res.returncode == 0:
+                s_aud = next((st for st in info["streams"] if st.get("index") == audio_idx), None)
+                if s_aud:
+                    lang = s_aud.get("tags", {}).get("language", "und")
+                    title = s_aud.get("tags", {}).get("title", "")
+                    codec = s_aud.get("codec_name", "")
+                    audio_info = f"{lang} ({title} - {codec})" if title else f"{lang} ({codec})"
+                else:
+                    audio_info = "Desconocido"
+
+                if sub_idx is not None:
+                    s_sub = next((st for st in info["streams"] if st.get("index") == sub_idx), None)
+                    if s_sub:
+                        lang = s_sub.get("tags", {}).get("language", "und")
+                        title = s_sub.get("tags", {}).get("title", "")
+                        codec = s_sub.get("codec_name", "")
+                        sub_info = f"{lang} ({title} - {codec})" if title else f"{lang} ({codec})"
+                    else:
+                        sub_info = "Desconocido"
+                else:
+                    sub_info = "Ninguno"
+
+                ruta_completa = os.path.abspath(out_file)
+                self._enviar_mensaje(f"  -> Archivo generado: {ruta_completa}")
+                self._enviar_mensaje(f"     Audio: {audio_info}")
+                self._enviar_mensaje(f"     Subtítulo (Incrustado): {sub_info}")
+
                 if self.var_limpiar_metadatos.get():
                     self._enviar_mensaje(f"Limpiando metadatos de {out_file.name}...")
                     self._limpiar_metadatos_archivo(out_file)
