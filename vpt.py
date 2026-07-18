@@ -598,19 +598,29 @@ class VPTSuite:
 
                         # Actualizar la cola al finalizar: eliminar exitosos, mover fallidos a omitidos
                         if hasattr(self, "archivos_en_proceso") and self.archivos_en_proceso:
-                            failed_files = {err[0] for err in errores if err[0] in self.archivos_en_proceso}
+                            # Normalizar rutas para comparación robusta en Windows (mayúsculas/minúsculas y barras)
+                            norm_proc = {os.path.normcase(os.path.normpath(p)) for p in self.archivos_en_proceso}
+                            norm_exito = {os.path.normcase(os.path.normpath(p)) for p in archivos_exitosos}
+                            
+                            # Normalizar rutas de archivos con errores
+                            failed_files_norm = set()
+                            for err in errores:
+                                if err and isinstance(err, tuple) and len(err) > 0:
+                                    failed_files_norm.add(os.path.normcase(os.path.normpath(err[0])))
+
                             all_items = list(self.lista.get(0, tk.END))
                             self.lista.delete(0, tk.END)
                             for f in all_items:
-                                if f in self.archivos_en_proceso:
-                                    if f in failed_files:
+                                f_norm = os.path.normcase(os.path.normpath(f))
+                                if f_norm in norm_proc:
+                                    if f_norm in failed_files_norm:
                                         # Mover a la pestaña de omitidos
-                                        existentes = set(self.lista_omitidos.get(0, tk.END))
-                                        if f not in existentes:
+                                        existentes_norm = {os.path.normcase(os.path.normpath(x)) for x in self.lista_omitidos.get(0, tk.END)}
+                                        if f_norm not in existentes_norm:
                                             self.lista_omitidos.insert(tk.END, f)
                                     elif fue_cancelado:
                                         # Si fue cancelado y no falló ni fue exitoso -> mantener en la cola principal
-                                        if f not in archivos_exitosos:
+                                        if f_norm not in norm_exito:
                                             self.lista.insert(tk.END, f)
                                     # Si no fue cancelado y no falló, fue exitoso y por lo tanto se elimina de la cola activa
                                 else:
@@ -1104,32 +1114,68 @@ class VPTSuite:
     # -----------------------------
     def _obtener_combinaciones_a_generar(self, info, filename):
         if self.combinaciones_a_aplicar["aplicar_a_todos"]:
+            cumple_plantilla = True
             combos = []
             for c in self.combinaciones_a_aplicar["combinaciones"]:
-                audio_indices = [
-                    encontrar_pista_por_identificador(info["streams"], ident, "audio")
-                    for ident in c.get("audio_identifiers", [])
-                ]
-                audio_indices = [x for x in audio_indices if x is not None]
+                audio_indices = []
+                for ident in c.get("audio_identifiers", []):
+                    idx = encontrar_pista_por_identificador(info["streams"], ident, "audio")
+                    if idx is None:
+                        cumple_plantilla = False
+                        break
+                    
+                    # Verificar que el idioma coincida realmente y no sea una coincidencia fallback
+                    stream = next((s for s in info["streams"] if s.get("index") == idx), None)
+                    if stream:
+                        parts = ident.split("|")
+                        lang_buscado = parts[0] if parts else "und"
+                        lang_actual = stream.get("tags", {}).get("language", "und")
+                        if lang_actual != lang_buscado:
+                            cumple_plantilla = False
+                            break
+                    audio_indices.append(idx)
+                
+                if not cumple_plantilla:
+                    break
 
-                sub_indices = [
-                    encontrar_pista_por_identificador(info["streams"], ident, "subtitle")
-                    for ident in c.get("sub_identifiers", [])
-                ]
-                sub_indices = [x for x in sub_indices if x is not None]
+                sub_indices = []
+                for ident in c.get("sub_identifiers", []):
+                    if ident == "NINGUNO":
+                        continue
+                    idx = encontrar_pista_por_identificador(info["streams"], ident, "subtitle")
+                    if idx is None:
+                        cumple_plantilla = False
+                        break
+                    
+                    # Verificar que el idioma coincida realmente y no sea una coincidencia fallback
+                    stream = next((s for s in info["streams"] if s.get("index") == idx), None)
+                    if stream:
+                        parts = ident.split("|")
+                        lang_buscado = parts[0] if parts else "und"
+                        lang_actual = stream.get("tags", {}).get("language", "und")
+                        if lang_actual != lang_buscado:
+                            cumple_plantilla = False
+                            break
+                    sub_indices.append(idx)
 
-                if audio_indices or sub_indices:
-                    combos.append(
-                        {
-                            "audio_indices": audio_indices,
-                            "sub_indices": sub_indices,
-                            "audio_identifiers": c.get("audio_identifiers", []),
-                            "sub_identifiers": c.get("sub_identifiers", []),
-                            "label": c["label"],
-                            "hardsub": c.get("hardsub", False),
-                        }
-                    )
-            return combos
+                if not cumple_plantilla:
+                    break
+
+                combos.append(
+                    {
+                        "audio_indices": audio_indices,
+                        "sub_indices": sub_indices,
+                        "audio_identifiers": c.get("audio_identifiers", []),
+                        "sub_identifiers": c.get("sub_identifiers", []),
+                        "label": c["label"],
+                        "hardsub": c.get("hardsub", False),
+                    }
+                )
+
+            if cumple_plantilla and combos:
+                return combos
+            else:
+                self._enviar_mensaje("  -> El archivo no cuenta con los idiomas/pistas de la plantilla. Abriendo selección manual.")
 
         q = queue.Queue()
         self.msg_queue.put(("SELECTOR_COMBINACIONES", info, filename, q))
@@ -1499,25 +1545,32 @@ class VPTSuite:
         resultados = []
 
         def worker():
-            patron_comun = None
-            if tipo_proceso == "procesar_cola" and len(archivos) > 1:
-                estadisticas = {}
-                for f in archivos:
-                    info = self._ffprobe_info(f)
-                    if info:
-                        aud = [s for s in info.get("streams", []) if s.get("codec_type") == "audio"]
-                        sub = [s for s in info.get("streams", []) if s.get("codec_type") == "subtitle"]
-                        patron = (len(aud), len(sub))
-                        estadisticas.setdefault(patron, []).append(f)
-                if estadisticas:
-                    patron_comun = max(estadisticas, key=lambda k: len(estadisticas[k]))
+            estadisticas = {}
+            infos = {}
 
+            # Un solo bucle para ejecutar ffprobe una sola vez por archivo y actualizar progreso en tiempo real
             for i, archivo in enumerate(archivos, 1):
                 status.config(text=f"{i}/{len(archivos)} - {os.path.basename(archivo)}")
                 pbar["value"] = i
                 progreso.update_idletasks()
 
-                res = self._validar_archivo_pre_verificacion(archivo, tipo_proceso, output_dir, patron_comun)
+                info = self._ffprobe_info(archivo)
+                infos[archivo] = info
+
+                if tipo_proceso == "procesar_cola" and info:
+                    aud = [s for s in info.get("streams", []) if s.get("codec_type") == "audio"]
+                    sub = [s for s in info.get("streams", []) if s.get("codec_type") == "subtitle"]
+                    patron = (len(aud), len(sub))
+                    estadisticas.setdefault(patron, []).append(archivo)
+
+            # Obtener el patrón de pistas más común
+            patron_comun = None
+            if tipo_proceso == "procesar_cola" and len(archivos) > 1 and estadisticas:
+                patron_comun = max(estadisticas, key=lambda k: len(estadisticas[k]))
+
+            # Validar de forma inmediata con los infos pre-analizados
+            for archivo in archivos:
+                res = self._validar_archivo_pre_verificacion(archivo, tipo_proceso, output_dir, patron_comun, infos.get(archivo))
                 resultados.append(res)
 
             progreso.destroy()
@@ -1525,7 +1578,7 @@ class VPTSuite:
 
         threading.Thread(target=worker, daemon=True).start()
 
-    def _validar_archivo_pre_verificacion(self, archivo, tipo_proceso, output_dir, patron_comun=None):
+    def _validar_archivo_pre_verificacion(self, archivo, tipo_proceso, output_dir, patron_comun=None, info=None):
         res = {
             "archivo": archivo,
             "basename": os.path.basename(archivo),
@@ -1545,7 +1598,8 @@ class VPTSuite:
                 res["has_error"] = True
                 res["errors"].append("No se tiene permiso de escritura en el archivo original (necesario para modificar el archivo).")
 
-        info = self._ffprobe_info(archivo)
+        if info is None:
+            info = self._ffprobe_info(archivo)
         if info is None:
             res["has_error"] = True
             res["errors"].append("ffprobe no pudo analizar el archivo. Podria estar corrupto o no ser soportado.")
@@ -1794,7 +1848,6 @@ class VPTSuite:
         body.pack(fill=tk.BOTH, expand=True)
 
         text_frame = tk.Frame(body, bg="#FFFFFF", highlightthickness=1, highlightbackground="#E5ECF9")
-        text_frame.pack(fill=tk.BOTH, expand=True)
 
         log_text = tk.Text(
             text_frame,
@@ -1835,7 +1888,6 @@ class VPTSuite:
 
         summary_text = f"Resumen: {num_errors} error(es) critico(s) y {num_warnings} advertencia(s) encontrada(s)."
         lbl_summary = tk.Label(body, text=summary_text, font=("Segoe UI", 9, "bold"), bg="#F3F7FF", fg="#1F2A44", anchor=tk.W)
-        lbl_summary.pack(fill=tk.X, pady=(10, 5))
         
         if num_errors > 0:
             lbl_err_note = tk.Label(
@@ -1846,7 +1898,6 @@ class VPTSuite:
                 fg="#EB5757", 
                 anchor=tk.W
             )
-            lbl_err_note.pack(fill=tk.X, pady=(0, 5))
 
         lbl_legend = tk.Label(
             body,
@@ -1858,7 +1909,14 @@ class VPTSuite:
             justify=tk.LEFT,
             anchor=tk.W
         )
-        lbl_legend.pack(fill=tk.X, pady=(0, 10))
+
+        # Empaquetar de abajo hacia arriba para asegurar que el cuadro de texto se expanda y las etiquetas no se corten
+        lbl_legend.pack(side=tk.BOTTOM, fill=tk.X, pady=(5, 10))
+        if num_errors > 0:
+            lbl_err_note.pack(side=tk.BOTTOM, fill=tk.X, pady=(0, 5))
+        lbl_summary.pack(side=tk.BOTTOM, fill=tk.X, pady=(10, 5))
+        
+        text_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
 
     # -----------------------------
     # Verificacion de condiciones
@@ -2091,6 +2149,17 @@ class VPTSuite:
 
     def _eliminar_subtitulos_archivo(self, video_file, errores=None):
         video_file = Path(video_file)
+        info = self._ffprobe_info(video_file)
+        if info is None:
+            if errores is not None:
+                errores.append((str(video_file), "No se pudo leer streams con ffprobe."))
+            return False
+
+        subtitle_streams = [s for s in info.get("streams", []) if s.get("codec_type") == "subtitle"]
+        if not subtitle_streams:
+            self._enviar_mensaje("  -> El archivo no contiene subtítulos. Saltando.")
+            return True
+
         temp_output = video_file.parent / f"temp_{video_file.name}"
         cmd = [
             self.ffmpeg_path,
