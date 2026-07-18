@@ -1078,7 +1078,7 @@ class VPTSuite:
         tk.Button(bt, text="Quitar", command=quitar, bg="#EB5757", fg="white").pack(side=tk.LEFT, padx=4)
 
         apply_all = tk.BooleanVar(value=False)
-        tk.Checkbutton(dialog, text="Aplicar esta configuracion a todos los archivos", variable=apply_all).pack(pady=4)
+        tk.Checkbutton(dialog, text="Aplicar esta configuración a todos los similares (mismo subgrupo)", variable=apply_all).pack(pady=4)
 
         bottom = tk.Frame(dialog)
         bottom.pack(pady=10)
