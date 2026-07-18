@@ -11,6 +11,8 @@ from tkinter import filedialog, messagebox, ttk, simpledialog
 import tkinter.font as tkfont
 import math
 
+VERSION = "1.0.0"
+
 class RoundedButton(tk.Canvas):
     def __init__(self, master, text="", command=None, bg="#2D9CDB", fg="white",
                  activebackground=None, activeforeground="white", relief=None,
@@ -3443,7 +3445,7 @@ class VPTSuite:
 
         tk.Label(
             header_card,
-            text="v1.0.0",
+            text=f"v{VERSION}",
             font=("Segoe UI", 9, "bold"),
             bg="#F4F8FF",
             fg="#2D9CDB"

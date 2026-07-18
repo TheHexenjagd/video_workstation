@@ -75,6 +75,20 @@ Al abrir por primera vez la aplicación, se genera automáticamente un archivo d
 
 ---
 
+## 📦 Compilación y Generación del Ejecutable
+
+VPT Studio incluye una herramienta automatizada dentro de la carpeta `dist/` que permite compilar y empaquetar la aplicación en un único archivo ejecutable (`.exe`) independiente para Windows:
+
+1. Navega a la carpeta `dist/`.
+2. Ejecuta el archivo por lotes `build.bat` (haciendo doble clic o desde la terminal).
+3. El script constructor:
+   - Verificará e instalará automáticamente `pyinstaller` a través de `pip` si no está disponible en el sistema.
+   - Extraerá de forma dinámica el número de versión desde `vpt.py`.
+   - Generará un ejecutable autónomo llamado `VPT_Studio_v{versión}.exe` con la versión incrustada en las propiedades nativas de Windows.
+   - Limpiará todos los archivos temporales generados en el proceso (`build/`, `.spec`, etc.), dejando la carpeta `dist/` completamente limpia.
+
+---
+
 ## 👤 Desarrollador
 
 * **Autor**: [TheHexenjagd](https://github.com/TheHexenjagd)

@@ -17,3 +17,6 @@ env/
 *.njsproj
 *.sln
 *.swp
+
+# Executables
+*.exe
