@@ -15,6 +15,7 @@ from tkinter import filedialog, messagebox, ttk
 CONFIG_DIR = os.path.join(os.getenv("APPDATA"), "Galleon", "VPT")
 os.makedirs(CONFIG_DIR, exist_ok=True)
 CONFIG_FILE = os.path.join(CONFIG_DIR, "vpt_config.ini")
+QUEUE_FILE = os.path.join(CONFIG_DIR, "vpt_queue.ini")
 
 FFMPEG_DIR = os.path.join(os.getenv("APPDATA"), "Galleon", "bin")
 os.makedirs(FFMPEG_DIR, exist_ok=True)
@@ -218,6 +219,8 @@ class VPTSuite:
         self.pistas_config = {"audio_tag": None, "subtitle_tag": None, "aplicar_a_todos": False}
         self.combinaciones_a_aplicar = {"combinaciones": [], "aplicar_a_todos": False}
 
+        self.ffprobe_cache = {}
+
         self._crear_estilos()
         self._crear_menu()
         self._crear_ui()
@@ -244,6 +247,9 @@ class VPTSuite:
         if os.path.exists(CONFIG_FILE):
             try:
                 config.read(CONFIG_FILE, encoding="utf-8")
+                if config.has_section("Queue"):
+                    config.remove_section("Queue")
+                    self._guardar_configuracion(config)
             except Exception:
                 for section, values in DEFAULT_CONFIG.items():
                     config[section] = values
@@ -527,18 +533,21 @@ class VPTSuite:
         scr.pack(side=tk.RIGHT, fill=tk.Y)
         self.log.config(yscrollcommand=scr.set)
 
-        # Cargar cola persistida desde el archivo INI si existe
+        # Cargar cola persistida desde el archivo INI de colas si existe
         try:
-            if self.config_ini.has_section("Queue"):
-                lista_data = json.loads(self.config_ini.get("Queue", "lista", fallback="[]"))
-                for f in lista_data:
-                    if os.path.exists(f):
-                        self.lista.insert(tk.END, os.path.normpath(f))
-                
-                omitidos_data = json.loads(self.config_ini.get("Queue", "lista_omitidos", fallback="[]"))
-                for f in omitidos_data:
-                    if os.path.exists(f):
-                        self.lista_omitidos.insert(tk.END, os.path.normpath(f))
+            if os.path.exists(QUEUE_FILE):
+                queue_ini = configparser.ConfigParser()
+                queue_ini.read(QUEUE_FILE, encoding="utf-8")
+                if queue_ini.has_section("Queue"):
+                    lista_data = json.loads(queue_ini.get("Queue", "lista", fallback="[]"))
+                    for f in lista_data:
+                        if os.path.exists(f):
+                            self.lista.insert(tk.END, os.path.normpath(f))
+                    
+                    omitidos_data = json.loads(queue_ini.get("Queue", "lista_omitidos", fallback="[]"))
+                    for f in omitidos_data:
+                        if os.path.exists(f):
+                            self.lista_omitidos.insert(tk.END, os.path.normpath(f))
         except Exception as e:
             print(f"Error al cargar cola persistida: {e}")
 
@@ -629,7 +638,7 @@ class VPTSuite:
                             
                             self.archivos_en_proceso = []
                             # Si hubo fallos, enfocar la pestaña de omitidos para que el usuario los revise
-                            if failed_files:
+                            if failed_files_norm:
                                 self.queue_notebook.select(self.tab_queue_skipped)
 
                         title = "Proceso cancelado" if fue_cancelado else "Completado"
@@ -643,8 +652,8 @@ class VPTSuite:
                         _, info, filename, q = msg
                         q.put(self._mostrar_selector_pistas(info, filename))
                     elif msg[0] == "SELECTOR_COMBINACIONES":
-                        _, info, filename, q = msg
-                        q.put(self._mostrar_selector_combinaciones(info, filename))
+                        _, info, filename, subgrupo_label, q = msg
+                        q.put(self._mostrar_selector_combinaciones(info, filename, subgrupo_label))
                 else:
                     self._append_log(msg)
         except queue.Empty:
@@ -714,6 +723,9 @@ class VPTSuite:
 
     def _ffprobe_info(self, filepath):
         filepath = os.path.abspath(os.path.normpath(filepath))
+        if hasattr(self, "ffprobe_cache") and filepath in self.ffprobe_cache:
+            return self.ffprobe_cache[filepath]
+
         if len(filepath) > 260 and not filepath.startswith("\\\\?\\"):
             filepath = "\\\\?\\" + filepath
 
@@ -727,9 +739,39 @@ class VPTSuite:
             data = json.loads(result.stdout)
             if "streams" not in data:
                 return None
+            if hasattr(self, "ffprobe_cache"):
+                self.ffprobe_cache[filepath] = data
             return data
         except json.JSONDecodeError:
             return None
+
+    def _invalidar_cache_archivo(self, filepath):
+        if not hasattr(self, "ffprobe_cache"):
+            return
+        filepath_norm = os.path.abspath(os.path.normpath(filepath))
+        if filepath_norm in self.ffprobe_cache:
+            del self.ffprobe_cache[filepath_norm]
+        
+        path_obj = Path(filepath_norm)
+        ext = path_obj.suffix
+        if ext != ext.lower():
+            lower_norm = os.path.abspath(os.path.normpath(path_obj.with_suffix(ext.lower())))
+            if lower_norm in self.ffprobe_cache:
+                del self.ffprobe_cache[lower_norm]
+
+    def _obtener_firma_idiomas(self, info):
+        if not info or "streams" not in info:
+            return ((), ())
+        audio_streams = [s for s in info["streams"] if s.get("codec_type") == "audio"]
+        subtitle_streams = [s for s in info["streams"] if s.get("codec_type") == "subtitle"]
+        audio_langs = tuple(s.get("tags", {}).get("language", "und").lower() for s in audio_streams)
+        sub_langs = tuple(s.get("tags", {}).get("language", "und").lower() for s in subtitle_streams)
+        return (audio_langs, sub_langs)
+
+    def _encontrar_firma_compatible(self, firma):
+        if hasattr(self, "combinaciones_por_grupo") and firma in self.combinaciones_por_grupo:
+            return firma
+        return None
 
     def _verificar_ffmpeg_inicio(self):
         if os.path.exists(self.ffmpeg_path) and os.path.exists(self.ffprobe_path):
@@ -950,7 +992,7 @@ class VPTSuite:
                 return self._mostrar_selector_pistas(info, filename)
         return resultado
 
-    def _mostrar_selector_combinaciones(self, info, filename):
+    def _mostrar_selector_combinaciones(self, info, filename, subgrupo_label=None):
         audio_streams = [s for s in info["streams"] if s.get("codec_type") == "audio"]
         subtitle_streams = [s for s in info["streams"] if s.get("codec_type") == "subtitle"]
 
@@ -958,7 +1000,8 @@ class VPTSuite:
             return {"ok": True, "combinaciones": [], "aplicar_todos": False}
 
         dialog = tk.Toplevel(self.root)
-        dialog.title(f"Versiones a generar - {os.path.basename(filename)}")
+        title_prefix = f" - {subgrupo_label}" if subgrupo_label else ""
+        dialog.title(f"Versiones a generar{title_prefix} - {os.path.basename(filename)}")
         dialog.geometry("900x620")
         dialog.transient(self.root)
         dialog.grab_set()
@@ -968,7 +1011,11 @@ class VPTSuite:
         resultado = {"ok": False, "combinaciones": [], "aplicar_todos": False}
         combinaciones = []
 
-        tk.Label(dialog, text="Marca pistas para cada version y agrega", font=("Segoe UI", 10, "bold")).pack(pady=8)
+        if subgrupo_label:
+            tk.Label(dialog, text=subgrupo_label, font=("Segoe UI", 11, "bold"), fg="#2D9CDB").pack(pady=(8, 2))
+            tk.Label(dialog, text="Marca las pistas para cada versión y agrégala", font=("Segoe UI", 9)).pack(pady=(0, 6))
+        else:
+            tk.Label(dialog, text="Marca pistas para cada version y agrega", font=("Segoe UI", 10, "bold")).pack(pady=8)
 
         body = tk.Frame(dialog)
         body.pack(fill=tk.BOTH, expand=True, padx=10)
@@ -1081,6 +1128,7 @@ class VPTSuite:
             if not combinaciones:
                 messagebox.showwarning("Sin versiones", "Agrega al menos una version", parent=dialog)
                 return
+
             resultado["ok"] = True
             resultado["combinaciones"] = list(combinaciones)
             resultado["aplicar_todos"] = apply_all.get()
@@ -1106,79 +1154,50 @@ class VPTSuite:
             elif ans is False:
                 resultado["ok"] = False
             else:
-                return self._mostrar_selector_combinaciones(info, filename)
+                return self._mostrar_selector_combinaciones(info, filename, subgrupo_label)
         return resultado
 
     # -----------------------------
     # Procesamiento ASRT
     # -----------------------------
     def _obtener_combinaciones_a_generar(self, info, filename):
-        if self.combinaciones_a_aplicar["aplicar_a_todos"]:
-            cumple_plantilla = True
+        # 1. Obtener firma del archivo actual
+        firma = self._obtener_firma_idiomas(info)
+
+        # 2. Si ya configuramos este diseño de idiomas en este lote, aplicarlo
+        signature_match = self._encontrar_firma_compatible(firma)
+        if signature_match:
+            self._enviar_mensaje(f"  -> Aplicando configuración previamente guardada para el grupo de idiomas.")
+            config_grupo = self.combinaciones_por_grupo[signature_match]
             combos = []
-            for c in self.combinaciones_a_aplicar["combinaciones"]:
-                audio_indices = []
-                for ident in c.get("audio_identifiers", []):
-                    idx = encontrar_pista_por_identificador(info["streams"], ident, "audio")
-                    if idx is None:
-                        cumple_plantilla = False
-                        break
-                    
-                    # Verificar que el idioma coincida realmente y no sea una coincidencia fallback
-                    stream = next((s for s in info["streams"] if s.get("index") == idx), None)
-                    if stream:
-                        parts = ident.split("|")
-                        lang_buscado = parts[0] if parts else "und"
-                        lang_actual = stream.get("tags", {}).get("language", "und")
-                        if lang_actual != lang_buscado:
-                            cumple_plantilla = False
-                            break
-                    audio_indices.append(idx)
+            for c in config_grupo:
+                audio_indices = [encontrar_pista_por_identificador(info["streams"], ident, "audio") for ident in c["audio_identifiers"]]
+                sub_indices = [encontrar_pista_por_identificador(info["streams"], ident, "subtitle") for ident in c["sub_identifiers"] if ident != "NINGUNO"]
                 
-                if not cumple_plantilla:
-                    break
+                # Filtrar None
+                audio_indices = [x for x in audio_indices if x is not None]
+                sub_indices = [x for x in sub_indices if x is not None]
 
-                sub_indices = []
-                for ident in c.get("sub_identifiers", []):
-                    if ident == "NINGUNO":
-                        continue
-                    idx = encontrar_pista_por_identificador(info["streams"], ident, "subtitle")
-                    if idx is None:
-                        cumple_plantilla = False
-                        break
-                    
-                    # Verificar que el idioma coincida realmente y no sea una coincidencia fallback
-                    stream = next((s for s in info["streams"] if s.get("index") == idx), None)
-                    if stream:
-                        parts = ident.split("|")
-                        lang_buscado = parts[0] if parts else "und"
-                        lang_actual = stream.get("tags", {}).get("language", "und")
-                        if lang_actual != lang_buscado:
-                            cumple_plantilla = False
-                            break
-                    sub_indices.append(idx)
+                combos.append({
+                    "audio_indices": audio_indices,
+                    "sub_indices": sub_indices,
+                    "audio_identifiers": c["audio_identifiers"],
+                    "sub_identifiers": c["sub_identifiers"],
+                    "label": c["label"],
+                    "hardsub": c["hardsub"]
+                })
+            return combos
 
-                if not cumple_plantilla:
-                    break
+        # 3. Si no, obtener la etiqueta del subgrupo
+        subgrupo_num = self.subgrupos.get(firma, 1)
+        audio_langs_str = ", ".join(firma[0]).upper() if firma[0] else "NINGUNO"
+        sub_langs_str = ", ".join(firma[1]).upper() if firma[1] else "NINGUNO"
+        subgrupo_label = f"Subgrupo {subgrupo_num} (Audio: {audio_langs_str} | Subs: {sub_langs_str})"
 
-                combos.append(
-                    {
-                        "audio_indices": audio_indices,
-                        "sub_indices": sub_indices,
-                        "audio_identifiers": c.get("audio_identifiers", []),
-                        "sub_identifiers": c.get("sub_identifiers", []),
-                        "label": c["label"],
-                        "hardsub": c.get("hardsub", False),
-                    }
-                )
-
-            if cumple_plantilla and combos:
-                return combos
-            else:
-                self._enviar_mensaje("  -> El archivo no cuenta con los idiomas/pistas de la plantilla. Abriendo selección manual.")
+        self._enviar_mensaje(f"  -> Abriendo selección de versiones para el {subgrupo_label}...")
 
         q = queue.Queue()
-        self.msg_queue.put(("SELECTOR_COMBINACIONES", info, filename, q))
+        self.msg_queue.put(("SELECTOR_COMBINACIONES", info, filename, subgrupo_label, q))
         try:
             r = q.get(timeout=300)
         except queue.Empty:
@@ -1187,10 +1206,10 @@ class VPTSuite:
         if not r.get("ok"):
             return None
 
+        # 4. Guardar en la caché del grupo si se seleccionó "aplicar a todos"
         if r.get("aplicar_todos"):
-            self.combinaciones_a_aplicar = {
-                "aplicar_a_todos": True,
-                "combinaciones": [
+            if hasattr(self, "combinaciones_por_grupo"):
+                self.combinaciones_por_grupo[firma] = [
                     {
                         "audio_identifiers": c.get("audio_identifiers", []),
                         "sub_identifiers": c.get("sub_identifiers", []),
@@ -1198,8 +1217,7 @@ class VPTSuite:
                         "hardsub": c.get("hardsub", False),
                     }
                     for c in r["combinaciones"]
-                ],
-            }
+                ]
 
         return r["combinaciones"]
 
@@ -1226,6 +1244,7 @@ class VPTSuite:
             out_dir.mkdir(parents=True, exist_ok=True)
             suffix = f"_{label}" if self.var_sufijo_idiomas.get() else ""
             output_path = out_dir / f"{video_stem}{suffix}.mp4"
+            self._invalidar_cache_archivo(output_path)
 
             if combo.get("hardsub"):
                 gpu = self.gpu_acel_var.get()
@@ -1445,6 +1464,18 @@ class VPTSuite:
         self.procesando = True
         self.cancelar_procesamiento = False
         self.combinaciones_a_aplicar = {"combinaciones": [], "aplicar_a_todos": False}
+        self.combinaciones_por_grupo = {}
+
+        # Pre-calcular subgrupos por firma de idiomas
+        self.subgrupos = {}
+        subgrupo_counter = 1
+        for archivo in archivos:
+            info = self._ffprobe_info(archivo)
+            if info:
+                firma = self._obtener_firma_idiomas(info)
+                if firma not in self.subgrupos:
+                    self.subgrupos[firma] = subgrupo_counter
+                    subgrupo_counter += 1
 
         ok = 0
         fail = 0
@@ -1545,7 +1576,6 @@ class VPTSuite:
         resultados = []
 
         def worker():
-            estadisticas = {}
             infos = {}
 
             # Un solo bucle para ejecutar ffprobe una sola vez por archivo y actualizar progreso en tiempo real
@@ -1557,20 +1587,9 @@ class VPTSuite:
                 info = self._ffprobe_info(archivo)
                 infos[archivo] = info
 
-                if tipo_proceso == "procesar_cola" and info:
-                    aud = [s for s in info.get("streams", []) if s.get("codec_type") == "audio"]
-                    sub = [s for s in info.get("streams", []) if s.get("codec_type") == "subtitle"]
-                    patron = (len(aud), len(sub))
-                    estadisticas.setdefault(patron, []).append(archivo)
-
-            # Obtener el patrón de pistas más común
-            patron_comun = None
-            if tipo_proceso == "procesar_cola" and len(archivos) > 1 and estadisticas:
-                patron_comun = max(estadisticas, key=lambda k: len(estadisticas[k]))
-
             # Validar de forma inmediata con los infos pre-analizados
             for archivo in archivos:
-                res = self._validar_archivo_pre_verificacion(archivo, tipo_proceso, output_dir, patron_comun, infos.get(archivo))
+                res = self._validar_archivo_pre_verificacion(archivo, tipo_proceso, output_dir, infos.get(archivo))
                 resultados.append(res)
 
             progreso.destroy()
@@ -1578,7 +1597,7 @@ class VPTSuite:
 
         threading.Thread(target=worker, daemon=True).start()
 
-    def _validar_archivo_pre_verificacion(self, archivo, tipo_proceso, output_dir, patron_comun=None, info=None):
+    def _validar_archivo_pre_verificacion(self, archivo, tipo_proceso, output_dir, info=None):
         res = {
             "archivo": archivo,
             "basename": os.path.basename(archivo),
@@ -1607,7 +1626,6 @@ class VPTSuite:
 
         streams = info.get("streams", [])
         video_streams = [s for s in streams if s.get("codec_type") == "video"]
-        audio_streams = [s for s in streams if s.get("codec_type") == "audio"]
         subtitle_streams = [s for s in streams if s.get("codec_type") == "subtitle"]
 
         if not video_streams:
@@ -1631,75 +1649,18 @@ class VPTSuite:
             is_hdr = True
 
         if tipo_proceso == "procesar_cola":
-            if patron_comun is not None:
-                patron_actual = (len(audio_streams), len(subtitle_streams))
-                if patron_actual != patron_comun:
-                    res["has_warning"] = True
-                    res["warnings"].append(
-                        f"El diseño de pistas ({patron_actual[0]} audios, {patron_actual[1]} subtítulos) "
-                        f"no coincide con el patrón común de la cola ({patron_comun[0]} audios, {patron_comun[1]} subtítulos). "
-                        f"Esto podría causar que falten pistas al aplicar la plantilla de combinaciones."
-                    )
-
-            if self.combinaciones_a_aplicar["aplicar_a_todos"]:
-                combos = []
-                for c in self.combinaciones_a_aplicar["combinaciones"]:
-                    audio_indices = [encontrar_pista_por_identificador(streams, ident, "audio") for ident in c.get("audio_identifiers", [])]
-                    audio_indices = [x for x in audio_indices if x is not None]
-                    sub_indices = [encontrar_pista_por_identificador(streams, ident, "subtitle") for ident in c.get("sub_identifiers", [])]
-                    sub_indices = [x for x in sub_indices if x is not None]
-                    if audio_indices or sub_indices:
-                        combos.append({
-                            "audio_indices": audio_indices,
-                            "sub_indices": sub_indices,
-                            "label": c["label"],
-                            "hardsub": c.get("hardsub", False)
-                        })
-                
-                if not combos:
-                    res["has_warning"] = True
-                    res["warnings"].append("Ninguna combinacion de audio/subtitulo configurada esta disponible en este archivo.")
-                
-                for combo in combos:
-                    out_dir = Path(output_dir)
-                    label = combo["label"]
-                    if self.var_subcarpeta.get():
-                        patron = self._resolver_patron_subcarpeta(archivo, info, label, combo["audio_indices"], combo["sub_indices"])
-                        out_dir = out_dir / Path(patron)
-                    suffix = f"_{label}" if self.var_sufijo_idiomas.get() else ""
-                    output_path = out_dir / f"{Path(archivo).stem}{suffix}.mp4"
-                    if output_path.exists():
-                        res["has_warning"] = True
-                        res["warnings"].append(f"El archivo de destino ya existe y sera sobrescrito: {output_path.name}")
-                    
-                    if combo["hardsub"]:
-                        if is_10bit or is_hdr:
-                            desc = []
-                            if is_10bit:
-                                desc.append("10-bit")
-                            if is_hdr:
-                                desc.append("HDR")
-                            res["has_warning"] = True
-                            res["warnings"].append(f"La version '{label}' requiere hardsub y el video original es {' y '.join(desc)}. Colores podrian lavarse al transcodificar a H.264.")
-                        
-                        for s_idx in combo["sub_indices"]:
-                            s = next((st for st in streams if st.get("index") == s_idx), None)
-                            if s and s.get("codec_name", "").lower() in BITMAP_SUB_CODECS:
-                                res["has_warning"] = True
-                                res["warnings"].append(f"La version '{label}' requiere hardsub de un subtitulo bitmap ({s.get('codec_name')}), lo cual fallara en la extraccion a ASS.")
-            else:
-                if is_10bit or is_hdr:
-                    desc = []
-                    if is_10bit:
-                        desc.append("10-bit")
-                    if is_hdr:
-                        desc.append("HDR")
-                    res["has_warning"] = True
-                    res["warnings"].append(f"El video original es {' y '.join(desc)}. Si decides generar versiones con subtitulos incrustados (hardsub), los colores podrian verse lavados.")
-                
-                if any(s.get("codec_name", "").lower() in BITMAP_SUB_CODECS for s in subtitle_streams):
-                    res["has_warning"] = True
-                    res["warnings"].append("El archivo contiene subtitulos bitmap (PGS/DVD/etc.). La opcion de hacer hardsub (incrustacion) sobre estos subtitulos provocara un fallo.")
+            if is_10bit or is_hdr:
+                desc = []
+                if is_10bit:
+                    desc.append("10-bit")
+                if is_hdr:
+                    desc.append("HDR")
+                res["has_warning"] = True
+                res["warnings"].append(f"El video original es {' y '.join(desc)}. Si decides generar versiones con subtitulos incrustados (hardsub), los colores podrian verse lavados.")
+            
+            if any(s.get("codec_name", "").lower() in BITMAP_SUB_CODECS for s in subtitle_streams):
+                res["has_warning"] = True
+                res["warnings"].append("El archivo contiene subtitulos bitmap (PGS/DVD/etc.). La opcion de hacer hardsub (incrustacion) sobre estos subtitulos provocara un fallo.")
 
         return res
 
@@ -1918,33 +1879,31 @@ class VPTSuite:
         
         text_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
 
-    # -----------------------------
-    # Verificacion de condiciones
-    # -----------------------------
     def verificar_condiciones_carpeta(self):
         archivos = list(self.lista.get(0, tk.END))
         if not archivos:
             messagebox.showwarning("Sin archivos", "No hay archivos cargados")
             return
 
-        resultados = {"conformes": [], "no_conformes": [], "errores": [], "patron_comun": None}
-        estadisticas = {}
-        info_archivos = {}
+        if hasattr(self, "ffprobe_cache"):
+            self.ffprobe_cache.clear()
 
         progreso = tk.Toplevel(self.root)
-        progreso.title("Analizando")
+        progreso.title("Analizando cola")
         progreso.geometry("500x140")
         progreso.transient(self.root)
         progreso.grab_set()
         self.root.attributes('-disabled', True)
         progreso.bind("<Destroy>", lambda e: self.root.attributes('-disabled', False) if (e.widget == progreso and self.root.winfo_exists()) else None)
 
-        lbl = tk.Label(progreso, text="Analizando archivos...", font=("Segoe UI", 10, "bold"))
+        lbl = tk.Label(progreso, text="Analizando archivos de la cola...", font=("Segoe UI", 10, "bold"))
         lbl.pack(pady=(18, 8))
         status = tk.Label(progreso, text="Preparando...", font=("Segoe UI", 9))
         status.pack()
         pbar = ttk.Progressbar(progreso, mode="determinate", maximum=len(archivos), length=420)
         pbar.pack(pady=10)
+
+        resultados = []
 
         def worker():
             for i, archivo in enumerate(archivos, 1):
@@ -1952,80 +1911,87 @@ class VPTSuite:
                 pbar["value"] = i
                 progreso.update_idletasks()
 
-                info = self._ffprobe_info(archivo)
-                if info is None:
-                    resultados["errores"].append({"archivo": archivo, "razon": "No se pudo obtener informacion"})
-                    continue
-
-                aud = [s for s in info["streams"] if s.get("codec_type") == "audio"]
-                sub = [s for s in info["streams"] if s.get("codec_type") == "subtitle"]
-                patron = (len(aud), len(sub))
-                estadisticas.setdefault(patron, []).append(archivo)
-                info_archivos[archivo] = {"audio": aud, "sub": sub, "patron": patron}
-
-            if estadisticas:
-                patron_comun = max(estadisticas, key=lambda k: len(estadisticas[k]))
-                resultados["patron_comun"] = patron_comun
-
-                for archivo, inf in info_archivos.items():
-                    if inf["patron"] == patron_comun:
-                        resultados["conformes"].append({"archivo": archivo, "patron": inf["patron"]})
-                    else:
-                        resultados["no_conformes"].append(
-                            {
-                                "archivo": archivo,
-                                "patron": inf["patron"],
-                                "razon": f"Patron {inf['patron'][0]}a/{inf['patron'][1]}s, esperado {patron_comun[0]}a/{patron_comun[1]}s",
-                            }
-                        )
+                res = self._validar_archivo_pre_verificacion(archivo, "procesar_cola", None)
+                resultados.append(res)
 
             progreso.destroy()
-            self._mostrar_resultados_verificacion(resultados)
+            self.root.after(0, lambda: self._mostrar_resultados_verificacion(resultados))
 
         threading.Thread(target=worker, daemon=True).start()
 
     def _mostrar_resultados_verificacion(self, resultados):
         win = tk.Toplevel(self.root)
-        win.title("Resultados de verificacion")
+        win.title("Diagnóstico de la cola - VPT Studio")
         win.geometry("980x700")
+        win.transient(self.root)
+        win.configure(bg="#F3F7FF")
 
         header = tk.Frame(win, bg="#1C2541")
         header.pack(fill=tk.X)
-        tk.Label(header, text="Analisis estadistico de streams", bg="#1C2541", fg="white", font=("Segoe UI", 14, "bold")).pack(pady=10)
-
-        if resultados.get("patron_comun"):
-            p = resultados["patron_comun"]
-            tk.Label(header, text=f"Patron comun: {p[0]} audio(s), {p[1]} subtitulo(s)", bg="#1C2541", fg="#4DA8DA", font=("Segoe UI", 10, "bold")).pack(pady=(0, 8))
+        tk.Label(header, text="Diagnóstico e Integridad de Videos", bg="#1C2541", fg="white", font=("Segoe UI", 14, "bold")).pack(pady=(12, 4))
+        tk.Label(header, text="Análisis de legibilidad, códecs, HDR y pistas de la cola activa.", bg="#1C2541", fg="#B0C4DE", font=("Segoe UI", 9)).pack(pady=(0, 12))
 
         nb = ttk.Notebook(win)
-        nb.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        nb.pack(fill=tk.BOTH, expand=True, padx=15, pady=15)
 
-        t1 = tk.Frame(nb)
-        t2 = tk.Frame(nb)
-        t3 = tk.Frame(nb)
-        nb.add(t1, text=f"Conformes ({len(resultados['conformes'])})")
-        nb.add(t2, text=f"No conformes ({len(resultados['no_conformes'])})")
-        nb.add(t3, text=f"Errores ({len(resultados['errores'])})")
+        t_ok = tk.Frame(nb, bg="#FFFFFF")
+        t_warn = tk.Frame(nb, bg="#FFFFFF")
+        t_err = tk.Frame(nb, bg="#FFFFFF")
 
-        tx1 = tk.Text(t1, font=("Consolas", 9))
+        saludables = [r for r in resultados if not r["has_error"] and not r["has_warning"]]
+        advertencias = [r for r in resultados if r["has_warning"] and not r["has_error"]]
+        errores = [r for r in resultados if r["has_error"]]
+
+        nb.add(t_ok, text=f"Saludables ({len(saludables)})")
+        nb.add(t_warn, text=f"Advertencias ({len(advertencias)})")
+        nb.add(t_err, text=f"Errores/Inaccesibles ({len(errores)})")
+
+        # Tab Saludables
+        tx1 = tk.Text(t_ok, font=("Consolas", 9), relief=tk.FLAT, padx=10, pady=10)
         tx1.pack(fill=tk.BOTH, expand=True)
-        for i in resultados["conformes"]:
-            tx1.insert(tk.END, f"✅ {i['archivo']}\n")
+        for r in saludables:
+            tx1.insert(tk.END, f"✅ {r['archivo']}\n")
         tx1.config(state=tk.DISABLED)
 
-        tx2 = tk.Text(t2, font=("Consolas", 9), fg="red")
+        # Tab Advertencias
+        tx2 = tk.Text(t_warn, font=("Segoe UI", 9), relief=tk.FLAT, padx=10, pady=10)
         tx2.pack(fill=tk.BOTH, expand=True)
-        for i in resultados["no_conformes"]:
-            tx2.insert(tk.END, f"❌ {i['archivo']}\n   {i['razon']}\n\n")
+        tx2.tag_config("title", font=("Segoe UI", 9, "bold"), spacing1=6)
+        tx2.tag_config("detail", font=("Segoe UI", 9), foreground="#5C6B8A", lmargin1=15, lmargin2=15)
+        for r in advertencias:
+            tx2.insert(tk.END, f"⚠️ {r['basename']}\n", "title")
+            tx2.insert(tk.END, f"Ruta: {r['archivo']}\n", "detail")
+            for w in r["warnings"]:
+                tx2.insert(tk.END, f"• {w}\n", "detail")
         tx2.config(state=tk.DISABLED)
 
-        tx3 = tk.Text(t3, font=("Consolas", 9), fg="#B9770E")
+        # Tab Errores
+        tx3 = tk.Text(t_err, font=("Segoe UI", 9), relief=tk.FLAT, fg="#EB5757", padx=10, pady=10)
         tx3.pack(fill=tk.BOTH, expand=True)
-        for i in resultados["errores"]:
-            tx3.insert(tk.END, f"⚠️ {i['archivo']}\n   {i['razon']}\n\n")
+        tx3.tag_config("title", font=("Segoe UI", 9, "bold"), foreground="#EB5757", spacing1=6)
+        tx3.tag_config("detail", font=("Segoe UI", 9), foreground="#7F8C8D", lmargin1=15, lmargin2=15)
+        for r in errores:
+            tx3.insert(tk.END, f"❌ {r['basename']}\n", "title")
+            tx3.insert(tk.END, f"Ruta: {r['archivo']}\n", "detail")
+            for e in r["errors"]:
+                tx3.insert(tk.END, f"• {e}\n", "detail")
         tx3.config(state=tk.DISABLED)
 
-
+        btm = tk.Frame(win, bg="#F3F7FF")
+        btm.pack(fill=tk.X, padx=15, pady=(0, 15))
+        
+        # Cerrar button
+        tk.Button(
+            btm,
+            text="Cerrar",
+            command=win.destroy,
+            bg="#2D9CDB",
+            fg="white",
+            relief=tk.FLAT,
+            padx=20,
+            pady=6,
+            font=("Segoe UI", 9, "bold")
+        ).pack(side=tk.RIGHT)
 
     # -----------------------------
     # Mantenimiento
@@ -2065,6 +2031,7 @@ class VPTSuite:
             if temp_output.exists():
                 video_file.unlink()
                 ext = video_file.suffix
+                self._invalidar_cache_archivo(video_file)
                 if ext != ext.lower():
                     temp_output.rename(video_file.with_suffix(ext.lower()))
                 else:
@@ -2183,6 +2150,7 @@ class VPTSuite:
             if temp_output.exists():
                 video_file.unlink()
                 ext = video_file.suffix
+                self._invalidar_cache_archivo(video_file)
                 if ext != ext.lower():
                     temp_output.rename(video_file.with_suffix(ext.lower()))
                 else:
@@ -2315,6 +2283,8 @@ class VPTSuite:
             return
         if messagebox.askyesno("Confirmar", "Deseas limpiar toda la lista?"):
             self.lista.delete(0, tk.END)
+            if hasattr(self, "ffprobe_cache"):
+                self.ffprobe_cache.clear()
 
     def seleccionar_directorio(self):
         carpeta = filedialog.askdirectory(title="Seleccionar salida")
@@ -3012,16 +2982,31 @@ class VPTSuite:
                 parent=self.root
             )
             if guardar:
-                if not self.config_ini.has_section("Queue"):
-                    self.config_ini.add_section("Queue")
-                self.config_ini.set("Queue", "lista", json.dumps(list(self.lista.get(0, tk.END))))
-                self.config_ini.set("Queue", "lista_omitidos", json.dumps(list(self.lista_omitidos.get(0, tk.END))))
+                queue_ini = configparser.ConfigParser()
+                queue_ini.add_section("Queue")
+                queue_ini.set("Queue", "lista", json.dumps(list(self.lista.get(0, tk.END))))
+                queue_ini.set("Queue", "lista_omitidos", json.dumps(list(self.lista_omitidos.get(0, tk.END))))
+                try:
+                    with open(QUEUE_FILE, "w", encoding="utf-8") as f:
+                        queue_ini.write(f)
+                except Exception as exc:
+                    print(f"Error guardando cola: {exc}")
             else:
-                if self.config_ini.has_section("Queue"):
-                    self.config_ini.remove_section("Queue")
+                if os.path.exists(QUEUE_FILE):
+                    try:
+                        os.remove(QUEUE_FILE)
+                    except Exception as exc:
+                        print(f"Error eliminando archivo de cola: {exc}")
         else:
-            if self.config_ini.has_section("Queue"):
-                self.config_ini.remove_section("Queue")
+            if os.path.exists(QUEUE_FILE):
+                try:
+                    os.remove(QUEUE_FILE)
+                except Exception as exc:
+                    print(f"Error eliminando archivo de cola: {exc}")
+
+        # Limpiar cualquier sección "Queue" residual del archivo ini principal antes de guardar
+        if self.config_ini.has_section("Queue"):
+            self.config_ini.remove_section("Queue")
 
         self._actualizar_configuracion()
         self.root.destroy()
