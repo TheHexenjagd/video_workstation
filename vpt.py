@@ -926,7 +926,13 @@ class VPTSuite:
             filepath = "\\\\?\\" + filepath
 
         cmd = [self.ffprobe_path, "-v", "error", "-print_format", "json", "-show_streams", filepath]
-        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace")
+        startupinfo = None
+        if os.name == 'nt':
+            startupinfo = subprocess.STARTUPINFO()
+            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            startupinfo.wShowWindow = subprocess.SW_HIDE
+
+        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace", startupinfo=startupinfo)
         if result.returncode != 0:
             self._enviar_mensaje(f"Error ffprobe: {result.stderr[:220]}")
             return None
@@ -3273,10 +3279,17 @@ class VPTSuite:
             self._enviar_mensaje("Solicitud de cancelacion enviada...")
 
     def _run_subprocess_cancellable(self, cmd, stdout_devnull=False):
+        startupinfo = None
+        if os.name == 'nt':
+            startupinfo = subprocess.STARTUPINFO()
+            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            startupinfo.wShowWindow = subprocess.SW_HIDE
+
         self.proceso_actual = subprocess.Popen(
             cmd,
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL
+            stderr=subprocess.DEVNULL,
+            startupinfo=startupinfo
         )
 
         import time
