@@ -3200,7 +3200,7 @@ class VPTSuite:
 
         tk.Label(
             top_banner,
-            text="v2.1.0",
+            text="v1.0.0",
             font=("Segoe UI", 10, "bold"),
             bg="#1F2A44",
             fg="#2D9CDB"
