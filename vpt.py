@@ -9,9 +9,6 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
-# -----------------------------
-# CONFIGURACION VPT
-# -----------------------------
 CONFIG_DIR = os.path.join(os.getenv("APPDATA"), "Galleon", "VPT")
 os.makedirs(CONFIG_DIR, exist_ok=True)
 CONFIG_FILE = os.path.join(CONFIG_DIR, "vpt_config.ini")
@@ -71,11 +68,9 @@ DEFAULT_CONFIG = {
     },
 }
 
-
 def obtener_identificador_pista(stream):
     tags = stream.get("tags", {})
     return f"{tags.get('language', 'und')}|{tags.get('title', '')}|{stream.get('codec_name', 'unknown')}"
-
 
 def encontrar_pista_por_identificador(streams, identificador, codec_type):
     if identificador in (None, "NINGUNO"):
@@ -124,7 +119,6 @@ def encontrar_pista_por_identificador(streams, identificador, codec_type):
             return stream["index"]
 
     return None
-
 
 def obtener_preset_valido(preset, gpu_acel):
     if gpu_acel == "nvidia":
@@ -187,7 +181,6 @@ def obtener_preset_valido(preset, gpu_acel):
 
     return preset
 
-
 class VPTSuite:
     def __init__(self):
         self.root = tk.Tk()
@@ -229,9 +222,6 @@ class VPTSuite:
 
         self.root.protocol("WM_DELETE_WINDOW", self.salir_aplicacion)
 
-    # -----------------------------
-    # Configuracion
-    # -----------------------------
     def _obtener_gpu_inicial(self):
         val = self.config_ini.get("Options", "gpu_acel", fallback=None)
         if val is None:
@@ -292,9 +282,6 @@ class VPTSuite:
         except Exception as exc:
             print(f"Error actualizando configuracion: {exc}")
 
-    # -----------------------------
-    # UI moderna
-    # -----------------------------
     def _crear_estilos(self):
         self.root.configure(bg="#F3F7FF")
         style = ttk.Style()
@@ -339,7 +326,7 @@ class VPTSuite:
         self.salida_var = tk.StringVar(value=self.config_ini.get("Paths", "output_dir", fallback=""))
         self.var_sufijo_idiomas = tk.BooleanVar(value=self.config_ini.getboolean("Options", "sufijo_idiomas", fallback=True))
         self.var_eliminar_metadatos = tk.BooleanVar(
-            value=self.config_ini.getboolean("Options", "eliminar_metadatos", 
+            value=self.config_ini.getboolean("Options", "eliminar_metadatos",
                   fallback=self.config_ini.getboolean("Options", "limpiar_metadatos", fallback=False))
         )
 
@@ -359,16 +346,15 @@ class VPTSuite:
         main = ttk.Frame(self.root, style="VPT.TFrame")
         main.pack(fill=tk.BOTH, expand=True)
 
-        # Hero section as a clean compact white card with a blue left accent bar
         hero_card = tk.Frame(main, bg="#FFFFFF", highlightthickness=1, highlightbackground="#E5ECF9", bd=0)
         hero_card.pack(fill=tk.X, padx=18, pady=(8, 4))
-        
+
         accent_bar = tk.Frame(hero_card, width=4, bg="#2D9CDB")
         accent_bar.pack(side=tk.LEFT, fill=tk.Y)
-        
+
         text_container = tk.Frame(hero_card, bg="#FFFFFF")
         text_container.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=16, pady=6)
-        
+
         tk.Label(
             text_container,
             text="VPT Studio",
@@ -376,7 +362,7 @@ class VPTSuite:
             fg="#1F2A44",
             bg="#FFFFFF"
         ).pack(side=tk.LEFT)
-        
+
         tk.Label(
             text_container,
             text="  |  Herramienta de procesamiento de vídeo, codificación por hardware y multiplexación",
@@ -400,7 +386,6 @@ class VPTSuite:
         self.tab_queue_skipped = ttk.Frame(self.queue_notebook, style="Card.TFrame")
         self.queue_notebook.add(self.tab_queue_skipped, text="Omitidos / Errores")
 
-        # Active queue elements
         self.lista = tk.Listbox(self.tab_queue_active, selectmode=tk.EXTENDED, bg="#F9FBFF", fg="#1F2A44", selectbackground="#2D9CDB", selectforeground="#FFFFFF", relief=tk.FLAT, font=("Consolas", 10), height=12)
         self.lista.pack(fill=tk.BOTH, expand=True, padx=12, pady=(8, 8))
 
@@ -413,7 +398,6 @@ class VPTSuite:
         self._btn(acciones, "Limpiar", self.limpiar_lista, "#EB5757").pack(side=tk.LEFT, padx=3)
         tk.Checkbutton(acciones, text="Buscar recursivo", variable=self.var_recursivo, bg="#FFFFFF", fg="#2B3A57", activebackground="#FFFFFF", selectcolor="#FFFFFF").pack(side=tk.LEFT, padx=8)
 
-        # Skipped/Error queue elements
         self.lista_omitidos = tk.Listbox(self.tab_queue_skipped, selectmode=tk.EXTENDED, bg="#FFF9F9", fg="#8B0000", selectbackground="#EB5757", selectforeground="#FFFFFF", relief=tk.FLAT, font=("Consolas", 10), height=12)
         self.lista_omitidos.pack(fill=tk.BOTH, expand=True, padx=12, pady=(8, 8))
 
@@ -428,16 +412,13 @@ class VPTSuite:
         right.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(8, 0), pady=4)
 
         ttk.Label(right, text="Opciones de Procesamiento", style="CardTitle.TLabel").pack(anchor=tk.W, padx=12, pady=(10, 6))
-        
-        # Separator
+
         tab_divider = tk.Frame(right, height=1, bg="#E5ECF9")
         tab_divider.pack(fill=tk.X, padx=12, pady=(0, 10))
 
-        # Container for modules
         modules_container = tk.Frame(right, bg="#FFFFFF")
         modules_container.pack(fill=tk.BOTH, expand=True, padx=12, pady=(0, 10))
 
-        # Module 1: Procesar Videos
         m1_frame = tk.LabelFrame(modules_container, text="Procesar Videos", font=("Segoe UI", 9, "bold"), bg="#FFFFFF", fg="#2B3A57", padx=12, pady=10)
         m1_frame.pack(fill=tk.X, pady=(0, 12))
         tk.Label(m1_frame, text="Procesa los videos de la cola aplicando combinaciones de pistas y formatos.", font=("Segoe UI", 9), bg="#FFFFFF", fg="#5C6B8A").pack(anchor=tk.W, pady=(0, 8))
@@ -448,7 +429,6 @@ class VPTSuite:
         self.btn_verificar = self._btn(m1_btns, "Verificar cola", self.verificar_condiciones_carpeta, "#27AE60")
         self.btn_verificar.pack(side=tk.LEFT)
 
-        # Module 3: Mantenimiento
         m3_frame = tk.LabelFrame(modules_container, text="Mantenimiento", font=("Segoe UI", 9, "bold"), bg="#FFFFFF", fg="#2B3A57", padx=12, pady=10)
         m3_frame.pack(fill=tk.X, pady=(0, 12))
         tk.Label(m3_frame, text="Herramientas de modificación in-place para los archivos originales de la cola.", font=("Segoe UI", 9), bg="#FFFFFF", fg="#5C6B8A").pack(anchor=tk.W, pady=(0, 8))
@@ -459,46 +439,41 @@ class VPTSuite:
         self.btn_eliminar_subs = self._btn(m3_btns, "Eliminar subs", self.eliminar_subtitulos, "#F2994A")
         self.btn_eliminar_subs.pack(side=tk.LEFT)
 
-        # Cancel Panel
         cancel_frame = tk.Frame(modules_container, bg="#FFFFFF")
         cancel_frame.pack(fill=tk.X, side=tk.BOTTOM, pady=(10, 0))
         self.btn_cancelar = self._btn(cancel_frame, "Cancelar todo", self.cancelar, "#EB5757")
         self.btn_cancelar.config(state=tk.DISABLED)
         self.btn_cancelar.pack(anchor=tk.W)
 
-        # Options Card (Compact)
         opts_card = ttk.Frame(main, style="Card.TFrame")
         opts_card.pack(fill=tk.X, padx=18, pady=(2, 4))
-        
-        # Row 1: Salida
+
         row1 = tk.Frame(opts_card, bg="#FFFFFF")
         row1.pack(fill=tk.X, padx=12, pady=(6, 2))
         tk.Label(row1, text="1. Salida:", bg="#FFFFFF", fg="#2B3A57", font=("Segoe UI", 9, "bold")).pack(side=tk.LEFT, padx=(0, 6))
         tk.Entry(row1, textvariable=self.salida_var, bg="#F4F8FF", fg="#1F2A44", relief=tk.FLAT).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 6))
         self._btn(row1, "Seleccionar", self.seleccionar_directorio, "#4DA8DA").pack(side=tk.LEFT)
-        
-        # Row 2: Subcarpeta
+
         row2 = tk.Frame(opts_card, bg="#FFFFFF")
         row2.pack(fill=tk.X, padx=12, pady=2)
         tk.Label(row2, text="2. Subcarpeta:", bg="#FFFFFF", fg="#2B3A57", font=("Segoe UI", 9, "bold")).pack(side=tk.LEFT, padx=(0, 6))
         tk.Checkbutton(row2, text="Crear", variable=self.var_subcarpeta, bg="#FFFFFF", fg="#2B3A57", activebackground="#FFFFFF", selectcolor="#FFFFFF").pack(side=tk.LEFT, padx=(0, 6))
-        
+
         try:
             presets_data = json.loads(self.config_ini.get("Options", "presets", fallback='[]'))
         except Exception:
             presets_data = []
         self.cb_nombre_subcarpeta = ttk.Combobox(row2, textvariable=self.var_nombre_subcarpeta, values=presets_data, width=32)
         self.cb_nombre_subcarpeta.pack(side=tk.LEFT, padx=(0, 6))
-        
+
         btn_build = self._btn(row2, "Configurar", self._abrir_constructor_rutas, "#2D9CDB")
         btn_build.pack(side=tk.LEFT)
 
-        # Row 3: Opciones Generales
         row3 = tk.Frame(opts_card, bg="#FFFFFF")
         row3.pack(fill=tk.X, padx=12, pady=(2, 6))
-        
+
         tk.Label(row3, text="3. Opciones:", bg="#FFFFFF", fg="#2B3A57", font=("Segoe UI", 9, "bold")).pack(side=tk.LEFT, padx=(0, 6))
-        
+
         tk.Label(row3, text="GPU:", bg="#FFFFFF", fg="#2B3A57", font=("Segoe UI", 9, "bold")).pack(side=tk.LEFT, padx=(6, 2))
         self.cb_gpu = ttk.Combobox(row3, values=["NVIDIA (NVENC)", "Intel (QSV)", "AMD (AMF)"], state="readonly", width=32)
         self.cb_gpu.pack(side=tk.LEFT, padx=4)
@@ -507,15 +482,13 @@ class VPTSuite:
         tk.Label(row3, text="Decod.:", bg="#FFFFFF", fg="#2B3A57", font=("Segoe UI", 9, "bold")).pack(side=tk.LEFT, padx=(6, 2))
         self.cb_decod = ttk.Combobox(row3, values=["Software", "D3D11VA", "DXVA2"], state="readonly", textvariable=self.decod_hw_var, width=8)
         self.cb_decod.pack(side=tk.LEFT, padx=4)
-        
+
         tk.Checkbutton(row3, text="Sufijo al nombre", variable=self.var_sufijo_idiomas, bg="#FFFFFF", fg="#2B3A57", activebackground="#FFFFFF", selectcolor="#FFFFFF").pack(side=tk.LEFT, padx=6)
         tk.Checkbutton(row3, text="Eliminar metadatos al finalizar", variable=self.var_eliminar_metadatos, bg="#FFFFFF", fg="#2B3A57", activebackground="#FFFFFF", selectcolor="#FFFFFF").pack(side=tk.LEFT, padx=6)
 
-        # Activity Card (Separate Container)
         activity_card = ttk.Frame(main, style="Card.TFrame")
         activity_card.pack(fill=tk.BOTH, expand=True, padx=18, pady=(0, 14))
-        
-        # Progress section
+
         prog = tk.Frame(activity_card, bg="#FFFFFF")
         prog.pack(fill=tk.X, padx=12, pady=(8, 4))
         self.progress_label = tk.Label(prog, text="Listo", bg="#FFFFFF", fg="#5C6B8A", font=("Segoe UI", 9))
@@ -523,7 +496,6 @@ class VPTSuite:
         self.progress = ttk.Progressbar(prog, style="Modern.Horizontal.TProgressbar", mode="determinate")
         self.progress.pack(fill=tk.X, pady=(4, 0))
 
-        # Activity log section
         tk.Label(activity_card, text="Actividad", bg="#FFFFFF", fg="#2B3A57", font=("Segoe UI", 10, "bold")).pack(anchor=tk.W, padx=12, pady=(4, 0))
         log_frame = tk.Frame(activity_card, bg="#FFFFFF")
         log_frame.pack(fill=tk.BOTH, expand=True, padx=12, pady=(4, 8))
@@ -533,7 +505,6 @@ class VPTSuite:
         scr.pack(side=tk.RIGHT, fill=tk.Y)
         self.log.config(yscrollcommand=scr.set)
 
-        # Cargar cola persistida desde el archivo INI de colas si existe
         try:
             if os.path.exists(QUEUE_FILE):
                 queue_ini = configparser.ConfigParser()
@@ -543,7 +514,7 @@ class VPTSuite:
                     for f in lista_data:
                         if os.path.exists(f):
                             self.lista.insert(tk.END, os.path.normpath(f))
-                    
+
                     omitidos_data = json.loads(queue_ini.get("Queue", "lista_omitidos", fallback="[]"))
                     for f in omitidos_data:
                         if os.path.exists(f):
@@ -567,11 +538,6 @@ class VPTSuite:
             font=("Segoe UI", 9, "bold"),
         )
 
-
-
-    # -----------------------------
-    # Utilidades comunes
-    # -----------------------------
     def _enviar_mensaje(self, msg):
         self.msg_queue.put(msg)
 
@@ -597,7 +563,7 @@ class VPTSuite:
                         errores = msg[3] if len(msg) > 3 else []
                         fue_cancelado = msg[4] if len(msg) > 4 else False
                         archivos_exitosos = msg[5] if len(msg) > 5 else []
-                        
+
                         self.progress["value"] = 100
                         if fue_cancelado:
                             self.progress_label.config(text=f"Cancelado | Exitos: {ok} | Fallos: {fail}")
@@ -605,13 +571,11 @@ class VPTSuite:
                             self.progress_label.config(text=f"Completado | Exitos: {ok} | Fallos: {fail}")
                         self._set_running_state(False)
 
-                        # Actualizar la cola al finalizar: eliminar exitosos, mover fallidos a omitidos
                         if hasattr(self, "archivos_en_proceso") and self.archivos_en_proceso:
-                            # Normalizar rutas para comparación robusta en Windows (mayúsculas/minúsculas y barras)
+
                             norm_proc = {os.path.normcase(os.path.normpath(p)) for p in self.archivos_en_proceso}
                             norm_exito = {os.path.normcase(os.path.normpath(p)) for p in archivos_exitosos}
-                            
-                            # Normalizar rutas de archivos con errores
+
                             failed_files_norm = set()
                             for err in errores:
                                 if err and isinstance(err, tuple) and len(err) > 0:
@@ -623,28 +587,28 @@ class VPTSuite:
                                 f_norm = os.path.normcase(os.path.normpath(f))
                                 if f_norm in norm_proc:
                                     if f_norm in failed_files_norm:
-                                        # Mover a la pestaña de omitidos
+
                                         existentes_norm = {os.path.normcase(os.path.normpath(x)) for x in self.lista_omitidos.get(0, tk.END)}
                                         if f_norm not in existentes_norm:
                                             self.lista_omitidos.insert(tk.END, f)
                                     elif fue_cancelado:
-                                        # Si fue cancelado y no falló ni fue exitoso -> mantener en la cola principal
+
                                         if f_norm not in norm_exito:
                                             self.lista.insert(tk.END, f)
-                                    # Si no fue cancelado y no falló, fue exitoso y por lo tanto se elimina de la cola activa
+
                                 else:
-                                    # No se procesó en esta tanda -> mantener en la cola principal
+
                                     self.lista.insert(tk.END, f)
-                            
+
                             self.archivos_en_proceso = []
-                            # Si hubo fallos, enfocar la pestaña de omitidos para que el usuario los revise
+
                             if failed_files_norm:
                                 self.queue_notebook.select(self.tab_queue_skipped)
 
                         title = "Proceso cancelado" if fue_cancelado else "Completado"
                         desc = "El procesamiento fue cancelado por el usuario." if fue_cancelado else "Proceso terminado."
                         messagebox.showinfo(title, f"{desc}\n\nExitos: {ok}\nFallos: {fail}")
-                        
+
                         total = ok + fail
                         if total > 1 and fail > 0 and errores:
                             self._mostrar_resumen_errores(errores)
@@ -664,21 +628,18 @@ class VPTSuite:
 
     def _mover_a_omitidos(self, archivos):
         archivos_set = set(archivos)
-        
-        # 1. Eliminar de la lista activa
+
         all_items = list(self.lista.get(0, tk.END))
         self.lista.delete(0, tk.END)
         for f in all_items:
             if f not in archivos_set:
                 self.lista.insert(tk.END, f)
-                
-        # 2. Agregar a la lista de omitidos
+
         existentes = set(self.lista_omitidos.get(0, tk.END))
         for f in archivos:
             if f not in existentes:
                 self.lista_omitidos.insert(tk.END, f)
-                
-        # Cambiar el foco a la pestaña de omitidos para que el usuario los vea
+
         self.queue_notebook.select(self.tab_queue_skipped)
 
     def reincorporar_omitidos(self):
@@ -686,17 +647,17 @@ class VPTSuite:
         if not sel:
             messagebox.showwarning("Sin seleccion", "Selecciona elementos en la lista de omitidos", parent=self.root)
             return
-        
+
         items_to_move = [self.lista_omitidos.get(i) for i in sel]
-        
+
         for i in reversed(sel):
             self.lista_omitidos.delete(i)
-            
+
         existentes = set(self.lista.get(0, tk.END))
         for item in items_to_move:
             if item not in existentes:
                 self.lista.insert(tk.END, item)
-                
+
         self.queue_notebook.select(self.tab_queue_active)
 
     def eliminar_omitidos_seleccionados(self):
@@ -751,7 +712,7 @@ class VPTSuite:
         filepath_norm = os.path.abspath(os.path.normpath(filepath))
         if filepath_norm in self.ffprobe_cache:
             del self.ffprobe_cache[filepath_norm]
-        
+
         path_obj = Path(filepath_norm)
         ext = path_obj.suffix
         if ext != ext.lower():
@@ -803,8 +764,7 @@ class VPTSuite:
                 startupinfo = subprocess.STARTUPINFO()
                 startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
                 startupinfo.wShowWindow = subprocess.SW_HIDE
-            
-            # 1. Quick check in -encoders output
+
             encoders_proc = subprocess.run(
                 [self.ffmpeg_path, "-hide_banner", "-encoders"],
                 capture_output=True,
@@ -814,8 +774,7 @@ class VPTSuite:
             )
             if encoders_proc.returncode != 0 or encoder not in encoders_proc.stdout:
                 return False, "No soportado por FFmpeg"
-                
-            # 2. Test execution to see if hardware initializes
+
             test_proc = subprocess.run(
                 [
                     self.ffmpeg_path,
@@ -856,7 +815,7 @@ class VPTSuite:
             "intel": (intel_ok, intel_msg),
             "amd": (amd_ok, amd_msg)
         }
-        
+
         self._enviar_mensaje(f"Detección GPU - NVIDIA NVENC: {'OK' if nv_ok else 'No disponible (' + nv_msg + ')'}")
         self._enviar_mensaje(f"Detección GPU - Intel QSV: {'OK' if intel_ok else 'No disponible (' + intel_msg + ')'}")
         self._enviar_mensaje(f"Detección GPU - AMD AMF: {'OK' if amd_ok else 'No disponible (' + amd_msg + ')'}")
@@ -889,7 +848,7 @@ class VPTSuite:
     def _on_gpu_selected(self, event=None):
         selected_lbl = self.cb_gpu.get()
         gpu_key = self.gpu_map_display_to_val.get(selected_lbl)
-        
+
         is_ok = self.gpu_availability.get(gpu_key, True)
         if not is_ok:
             status = self.gpus_status.get(gpu_key, (False, "No disponible"))
@@ -900,13 +859,10 @@ class VPTSuite:
             )
             self._sincronizar_combobox_con_variable()
             return
-            
+
         self.gpu_acel_var.set(gpu_key)
         self._on_gpu_change()
 
-    # -----------------------------
-    # Selectores
-    # -----------------------------
     def _mostrar_selector_pistas(self, info, filename):
         audio_streams = [s for s in info["streams"] if s.get("codec_type") == "audio"]
         subtitle_streams = [s for s in info["streams"] if s.get("codec_type") == "subtitle"]
@@ -1157,14 +1113,10 @@ class VPTSuite:
                 return self._mostrar_selector_combinaciones(info, filename, subgrupo_label)
         return resultado
 
-    # -----------------------------
-    # Procesamiento ASRT
-    # -----------------------------
     def _obtener_combinaciones_a_generar(self, info, filename):
-        # 1. Obtener firma del archivo actual
+
         firma = self._obtener_firma_idiomas(info)
 
-        # 2. Si ya configuramos este diseño de idiomas en este lote, aplicarlo
         signature_match = self._encontrar_firma_compatible(firma)
         if signature_match:
             self._enviar_mensaje(f"  -> Aplicando configuración previamente guardada para el grupo de idiomas.")
@@ -1173,8 +1125,7 @@ class VPTSuite:
             for c in config_grupo:
                 audio_indices = [encontrar_pista_por_identificador(info["streams"], ident, "audio") for ident in c["audio_identifiers"]]
                 sub_indices = [encontrar_pista_por_identificador(info["streams"], ident, "subtitle") for ident in c["sub_identifiers"] if ident != "NINGUNO"]
-                
-                # Filtrar None
+
                 audio_indices = [x for x in audio_indices if x is not None]
                 sub_indices = [x for x in sub_indices if x is not None]
 
@@ -1188,7 +1139,6 @@ class VPTSuite:
                 })
             return combos
 
-        # 3. Si no, obtener la etiqueta del subgrupo
         subgrupo_num = self.subgrupos.get(firma, 1)
         audio_langs_str = ", ".join(firma[0]).upper() if firma[0] else "NINGUNO"
         sub_langs_str = ", ".join(firma[1]).upper() if firma[1] else "NINGUNO"
@@ -1206,7 +1156,6 @@ class VPTSuite:
         if not r.get("ok"):
             return None
 
-        # 4. Guardar en la caché del grupo si se seleccionó "aplicar a todos"
         if r.get("aplicar_todos"):
             if hasattr(self, "combinaciones_por_grupo"):
                 self.combinaciones_por_grupo[firma] = [
@@ -1235,7 +1184,6 @@ class VPTSuite:
             sub_indices = combo.get("sub_indices", [])
             label = combo.get("label", "VERSION")
 
-            # Resolve output directory and output path common to both branches
             out_dir = Path(output_dir)
             if self.var_subcarpeta.get():
                 patron = self._resolver_patron_subcarpeta(input_file, info, label, audio_indices, sub_indices)
@@ -1260,13 +1208,13 @@ class VPTSuite:
                 audio_idx = audio_indices[0] if audio_indices else None
                 sub_idx = sub_indices[0] if sub_indices else None
                 temp_subtitle_path = None
-                
+
                 try:
                     if sub_idx is not None:
                         tf = tempfile.NamedTemporaryFile(mode="w", suffix=".ass", delete=False, encoding="utf-8")
                         temp_subtitle_path = tf.name
                         tf.close()
-                        
+
                         extract = [self.ffmpeg_path, "-i", input_file, "-map", f"0:{sub_idx}", "-y", temp_subtitle_path]
                         res = self._run_subprocess_cancellable(extract)
                         if res.returncode != 0:
@@ -1275,21 +1223,21 @@ class VPTSuite:
                             errores.append((input_file, f"Versión '{label}': {err_msg}"))
                             fail += 1
                             continue
-                            
+
                         esc = temp_subtitle_path.replace("\\", "/").replace(":", "\\:")
                         video_filter = f"ass='{esc}',format=yuv420p"
                     else:
                         video_filter = "format=yuv420p"
-                        
+
                     audio_codec = None
                     for s in info["streams"]:
                         if s.get("codec_type") == "audio" and s.get("index") == audio_idx:
                             audio_codec = s.get("codec_name")
                             break
                     audio_settings = ["-c:a", "aac", "-b:a", "320k"] if audio_codec == "flac" else ["-c:a", "copy"]
-                    
+
                     preset = obtener_preset_valido(self.preset_var.get(), self.gpu_acel_var.get())
-                    
+
                     decod_val = self.decod_hw_var.get().lower()
                     hwaccel_opts = []
                     if decod_val in ("d3d11va", "dxva2") and sub_idx is None:
@@ -1315,7 +1263,7 @@ class VPTSuite:
                             "-b:v", "5M", "-maxrate", "8M", "-bufsize", "10M",
                             *audio_settings, "-movflags", "+faststart", "-y", str(output_path)
                         ]
-                    else:  # amd
+                    else:
                         cmd = [
                             self.ffmpeg_path, *hwaccel_opts, "-i", input_file,
                             "-map", "0:v:0", "-map", f"0:{audio_idx}",
@@ -1324,7 +1272,7 @@ class VPTSuite:
                             "-rc", "vbr_peak", "-b:v", "5M", "-maxrate", "8M", "-bufsize", "10M",
                             *audio_settings, "-movflags", "+faststart", "-y", str(output_path)
                         ]
-                    
+
                     self._enviar_mensaje(f"[{i}/{len(combinaciones)}] {output_path.name} (Incrustando subtítulos...)")
                     result = self._run_subprocess_cancellable(cmd)
                     if result.returncode == 0:
@@ -1337,7 +1285,7 @@ class VPTSuite:
                                 title = s.get("tags", {}).get("title", "")
                                 codec = s.get("codec_name", "")
                                 aud_langs.append(f"{lang} ({title} - {codec})" if title else f"{lang} ({codec})")
-                        
+
                         sub_langs = []
                         sub_list = [sub_idx] if sub_idx is not None else []
                         for idx in sub_list:
@@ -1347,7 +1295,7 @@ class VPTSuite:
                                 title = s.get("tags", {}).get("title", "")
                                 codec = s.get("codec_name", "")
                                 sub_langs.append(f"{lang} ({title} - {codec})" if title else f"{lang} ({codec})")
-                        
+
                         ruta_completa = os.path.abspath(output_path)
                         audios_info = ", ".join(aud_langs) if aud_langs else "Ninguno"
                         subs_info = ", ".join(sub_langs) if sub_langs else "Ninguno"
@@ -1408,7 +1356,7 @@ class VPTSuite:
                             title = s.get("tags", {}).get("title", "")
                             codec = s.get("codec_name", "")
                             aud_langs.append(f"{lang} ({title} - {codec})" if title else f"{lang} ({codec})")
-                    
+
                     sub_langs = []
                     for idx in sub_incluir:
                         s = next((st for st in info["streams"] if st.get("index") == idx), None)
@@ -1417,7 +1365,7 @@ class VPTSuite:
                             title = s.get("tags", {}).get("title", "")
                             codec = s.get("codec_name", "")
                             sub_langs.append(f"{lang} ({title} - {codec})" if title else f"{lang} ({codec})")
-                    
+
                     ruta_completa = os.path.abspath(output_path)
                     audios_info = ", ".join(aud_langs) if aud_langs else "Ninguno"
                     subs_info = ", ".join(sub_langs) if sub_langs else "Ninguno"
@@ -1466,7 +1414,6 @@ class VPTSuite:
         self.combinaciones_a_aplicar = {"combinaciones": [], "aplicar_a_todos": False}
         self.combinaciones_por_grupo = {}
 
-        # Pre-calcular subgrupos por firma de idiomas
         self.subgrupos = {}
         subgrupo_counter = 1
         for archivo in archivos:
@@ -1493,12 +1440,12 @@ class VPTSuite:
             self.msg_queue.put(("PROGRESO", i, total))
             self._enviar_mensaje(f"Archivo {i}/{total}: {os.path.basename(archivo)}")
             result = self._eliminar_pistas_procesamiento(archivo, output_dir, errores)
-            
+
             if self.cancelar_procesamiento:
                 fue_cancelado = True
                 errores = [err for err in errores if err[0] != archivo]
                 break
-                
+
             if isinstance(result, tuple):
                 o, f = result
                 if f == 0 and o > 0:
@@ -1538,9 +1485,6 @@ class VPTSuite:
 
         self.pre_verificar_cola("procesar_cola", archivos, output, callback_iniciar)
 
-    # -----------------------------
-    # Pre-verificacion de la cola
-    # -----------------------------
     def pre_verificar_cola(self, tipo_proceso, archivos, output_dir, callback_exito):
         if tipo_proceso in ("procesar_cola",):
             if not os.path.exists(output_dir):
@@ -1578,7 +1522,6 @@ class VPTSuite:
         def worker():
             infos = {}
 
-            # Un solo bucle para ejecutar ffprobe una sola vez por archivo y actualizar progreso en tiempo real
             for i, archivo in enumerate(archivos, 1):
                 status.config(text=f"{i}/{len(archivos)} - {os.path.basename(archivo)}")
                 pbar["value"] = i
@@ -1587,7 +1530,6 @@ class VPTSuite:
                 info = self._ffprobe_info(archivo)
                 infos[archivo] = info
 
-            # Validar de forma inmediata con los infos pre-analizados
             for archivo in archivos:
                 res = self._validar_archivo_pre_verificacion(archivo, tipo_proceso, output_dir, infos.get(archivo))
                 resultados.append(res)
@@ -1631,13 +1573,13 @@ class VPTSuite:
         if not video_streams:
             res["has_error"] = True
             res["errors"].append("El archivo no contiene ninguna pista de video.")
-        
+
         if res["has_error"]:
             return res
 
         video_stream = video_streams[0]
         pix_fmt = video_stream.get("pix_fmt", "")
-        
+
         is_10bit = False
         if any(x in pix_fmt for x in ("10le", "10be", "12le", "12be", "16le", "10p", "12p")):
             is_10bit = True
@@ -1657,7 +1599,7 @@ class VPTSuite:
                     desc.append("HDR")
                 res["has_warning"] = True
                 res["warnings"].append(f"El video original es {' y '.join(desc)}. Si decides generar versiones con subtitulos incrustados (hardsub), los colores podrian verse lavados.")
-            
+
             if any(s.get("codec_name", "").lower() in BITMAP_SUB_CODECS for s in subtitle_streams):
                 res["has_warning"] = True
                 res["warnings"].append("El archivo contiene subtitulos bitmap (PGS/DVD/etc.). La opcion de hacer hardsub (incrustacion) sobre estos subtitulos provocara un fallo.")
@@ -1689,11 +1631,10 @@ class VPTSuite:
         y = self.root.winfo_y() + (self.root.winfo_height() - dialog.winfo_height()) // 2
         dialog.geometry(f"+{x}+{y}")
 
-        # 1. Header
         header = tk.Frame(dialog, bg="#1F2A44", height=70)
         header.pack(fill=tk.X)
         header.pack_propagate(False)
-        
+
         tk.Label(
             header,
             text="Pre-verificacion de Archivos",
@@ -1701,7 +1642,7 @@ class VPTSuite:
             bg="#1F2A44",
             fg="#FFFFFF"
         ).pack(anchor=tk.W, padx=20, pady=(10, 2))
-        
+
         tk.Label(
             header,
             text="Se han detectado posibles problemas. Elige cómo deseas proceder con la cola de procesamiento.",
@@ -1710,7 +1651,6 @@ class VPTSuite:
             fg="#B0C4DE"
         ).pack(anchor=tk.W, padx=20)
 
-        # Pre-calculate counts to configure buttons and text correctly
         num_errors = 0
         num_warnings = 0
         for r in resultados:
@@ -1719,14 +1659,13 @@ class VPTSuite:
             if r["has_warning"]:
                 num_warnings += len(r["warnings"])
 
-        # 2. Bottom Button Bar (Packed FIRST with side=BOTTOM to avoid expand issues)
         btm = tk.Frame(dialog, bg="#F3F7FF")
         btm.pack(side=tk.BOTTOM, fill=tk.X, padx=20, pady=(5, 15))
 
         def cmd_continuar():
             filtrados = [r["archivo"] for r in resultados if not r["has_error"]]
             dialog.destroy()
-            
+
             con_errores = [r["archivo"] for r in resultados if r["has_error"]]
             if con_errores:
                 self.root.after(0, lambda: self._mover_a_omitidos(con_errores))
@@ -1739,7 +1678,7 @@ class VPTSuite:
         def cmd_omitir_problemas():
             filtrados = [r["archivo"] for r in resultados if not r["has_error"] and not r["has_warning"]]
             dialog.destroy()
-            
+
             con_problemas = [r["archivo"] for r in resultados if r["has_error"] or r["has_warning"]]
             if con_problemas:
                 self.root.after(0, lambda: self._mover_a_omitidos(con_problemas))
@@ -1752,7 +1691,6 @@ class VPTSuite:
         def cmd_cancelar():
             dialog.destroy()
 
-        # Pack buttons to the right
         btn_cancelar = tk.Button(
             btm,
             text="Cancelar",
@@ -1804,7 +1742,6 @@ class VPTSuite:
             )
             btn_continuar.pack(side=tk.RIGHT, padx=5)
 
-        # 3. Middle Body (Packed LAST with fill=BOTH, expand=True)
         body = tk.Frame(dialog, bg="#F3F7FF", padx=20, pady=15)
         body.pack(fill=tk.BOTH, expand=True)
 
@@ -1834,29 +1771,29 @@ class VPTSuite:
         for r in resultados:
             if not r["has_error"] and not r["has_warning"]:
                 continue
-                
+
             log_text.insert(tk.END, f"Archivo: {r['basename']}\n", "title")
-            
+
             for err in r["errors"]:
                 log_text.insert(tk.END, "  [ERROR] ", "error_lbl")
                 log_text.insert(tk.END, f"{err}\n", "detail")
-                
+
             for warn in r["warnings"]:
                 log_text.insert(tk.END, "  [ADVERTENCIA] ", "warn_lbl")
                 log_text.insert(tk.END, f"{warn}\n", "detail")
-                
+
         log_text.config(state=tk.DISABLED)
 
         summary_text = f"Resumen: {num_errors} error(es) critico(s) y {num_warnings} advertencia(s) encontrada(s)."
         lbl_summary = tk.Label(body, text=summary_text, font=("Segoe UI", 9, "bold"), bg="#F3F7FF", fg="#1F2A44", anchor=tk.W)
-        
+
         if num_errors > 0:
             lbl_err_note = tk.Label(
-                body, 
-                text="* Los archivos con errores criticos no podran ser procesados y seran excluidos si decide continuar.", 
-                font=("Segoe UI", 8, "italic"), 
-                bg="#F3F7FF", 
-                fg="#EB5757", 
+                body,
+                text="* Los archivos con errores criticos no podran ser procesados y seran excluidos si decide continuar.",
+                font=("Segoe UI", 8, "italic"),
+                bg="#F3F7FF",
+                fg="#EB5757",
                 anchor=tk.W
             )
 
@@ -1871,12 +1808,11 @@ class VPTSuite:
             anchor=tk.W
         )
 
-        # Empaquetar de abajo hacia arriba para asegurar que el cuadro de texto se expanda y las etiquetas no se corten
         lbl_legend.pack(side=tk.BOTTOM, fill=tk.X, pady=(5, 10))
         if num_errors > 0:
             lbl_err_note.pack(side=tk.BOTTOM, fill=tk.X, pady=(0, 5))
         lbl_summary.pack(side=tk.BOTTOM, fill=tk.X, pady=(10, 5))
-        
+
         text_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
 
     def verificar_condiciones_carpeta(self):
@@ -1946,14 +1882,12 @@ class VPTSuite:
         nb.add(t_warn, text=f"Advertencias ({len(advertencias)})")
         nb.add(t_err, text=f"Errores/Inaccesibles ({len(errores)})")
 
-        # Tab Saludables
         tx1 = tk.Text(t_ok, font=("Consolas", 9), relief=tk.FLAT, padx=10, pady=10)
         tx1.pack(fill=tk.BOTH, expand=True)
         for r in saludables:
             tx1.insert(tk.END, f"✅ {r['archivo']}\n")
         tx1.config(state=tk.DISABLED)
 
-        # Tab Advertencias
         tx2 = tk.Text(t_warn, font=("Segoe UI", 9), relief=tk.FLAT, padx=10, pady=10)
         tx2.pack(fill=tk.BOTH, expand=True)
         tx2.tag_config("title", font=("Segoe UI", 9, "bold"), spacing1=6)
@@ -1965,7 +1899,6 @@ class VPTSuite:
                 tx2.insert(tk.END, f"• {w}\n", "detail")
         tx2.config(state=tk.DISABLED)
 
-        # Tab Errores
         tx3 = tk.Text(t_err, font=("Segoe UI", 9), relief=tk.FLAT, fg="#EB5757", padx=10, pady=10)
         tx3.pack(fill=tk.BOTH, expand=True)
         tx3.tag_config("title", font=("Segoe UI", 9, "bold"), foreground="#EB5757", spacing1=6)
@@ -1979,8 +1912,7 @@ class VPTSuite:
 
         btm = tk.Frame(win, bg="#F3F7FF")
         btm.pack(fill=tk.X, padx=15, pady=(0, 15))
-        
-        # Cerrar button
+
         tk.Button(
             btm,
             text="Cerrar",
@@ -1993,9 +1925,6 @@ class VPTSuite:
             font=("Segoe UI", 9, "bold")
         ).pack(side=tk.RIGHT)
 
-    # -----------------------------
-    # Mantenimiento
-    # -----------------------------
     def _eliminar_metadatos_archivo(self, video_file, errores=None):
         video_file = Path(video_file)
         temp_output = video_file.parent / f"temp_{video_file.name}"
@@ -2071,12 +2000,12 @@ class VPTSuite:
             self.msg_queue.put(("PROGRESO", i, total))
             self._enviar_mensaje(f"Eliminando metadatos {i}/{total}: {os.path.basename(archivo)}")
             result = self._eliminar_metadatos_archivo(archivo, errores)
-            
+
             if self.cancelar_procesamiento:
                 fue_cancelado = True
                 errores = [err for err in errores if err[0] != archivo]
                 break
-                
+
             if result:
                 archivos_exitosos.append(archivo)
                 ok += 1
@@ -2190,12 +2119,12 @@ class VPTSuite:
             self.msg_queue.put(("PROGRESO", i, total))
             self._enviar_mensaje(f"Eliminando subs {i}/{total}: {os.path.basename(archivo)}")
             result = self._eliminar_subtitulos_archivo(archivo, errores)
-            
+
             if self.cancelar_procesamiento:
                 fue_cancelado = True
                 errores = [err for err in errores if err[0] != archivo]
                 break
-                
+
             if result:
                 archivos_exitosos.append(archivo)
                 ok += 1
@@ -2233,9 +2162,6 @@ class VPTSuite:
 
         self.pre_verificar_cola("eliminar_subtitulos", archivos, None, callback_iniciar)
 
-    # -----------------------------
-    # Acciones UI
-    # -----------------------------
     def _clear_log_and_progress(self, status):
         self.log.config(state=tk.NORMAL)
         self.log.delete("1.0", tk.END)
@@ -2308,7 +2234,7 @@ class VPTSuite:
 
         video_stream = next((s for s in info["streams"] if s.get("codec_type") == "video"), {})
         codec_v = video_stream.get("codec_name", "unknown")
-        
+
         try:
             width = int(video_stream.get("width", 0))
             height = int(video_stream.get("height", 0))
@@ -2359,7 +2285,7 @@ class VPTSuite:
         sub_langs_str = "_".join(sub_langs) if sub_langs else "NONE"
 
         patron = self.var_nombre_subcarpeta.get().strip()
-        
+
         mapping = {
             "{name}": video_stem,
             "{folder}": parent_folder,
@@ -2370,10 +2296,10 @@ class VPTSuite:
             "{codec_a}": codec_a,
             "{resolution}": resolution
         }
-        
+
         for placeholder, val in mapping.items():
             patron = patron.replace(placeholder, str(val))
-            
+
         return patron
 
     def _abrir_constructor_rutas(self):
@@ -2394,28 +2320,27 @@ class VPTSuite:
         entry.pack(fill=tk.X, padx=20, pady=8)
         entry.focus_set()
 
-        # Presets Row
         presets_frame = tk.Frame(dialog, bg="#F3F7FF")
         presets_frame.pack(fill=tk.X, padx=20, pady=(4, 8))
-        
+
         tk.Label(presets_frame, text="Presets:", font=("Segoe UI", 9, "bold"), bg="#F3F7FF", fg="#2B3A57").pack(side=tk.LEFT, padx=(0, 6))
-        
+
         try:
             presets_data = json.loads(self.config_ini.get("Options", "presets", fallback='[]'))
         except Exception:
             presets_data = []
-        
+
         presets_var = tk.StringVar()
         cb_presets = ttk.Combobox(presets_frame, values=presets_data, textvariable=presets_var, state="readonly", width=40)
         cb_presets.pack(side=tk.LEFT, padx=6)
         if presets_data:
             presets_var.set(presets_data[0])
-        
+
         def on_preset_selected(*_):
             selected = presets_var.get()
             if selected:
                 patron_var.set(selected)
-                
+
         cb_presets.bind("<<ComboboxSelected>>", on_preset_selected)
 
         def guardar_nuevo_preset():
@@ -2426,7 +2351,7 @@ class VPTSuite:
                 curr = json.loads(self.config_ini.get("Options", "presets", fallback='[]'))
             except Exception:
                 curr = []
-                
+
             if nuevo not in curr:
                 curr.append(nuevo)
                 if "Options" not in self.config_ini:
@@ -2437,7 +2362,7 @@ class VPTSuite:
                 cb_presets["values"] = curr
                 presets_var.set(nuevo)
                 messagebox.showinfo("Preset Guardado", f"Se ha guardado el preset:\n{nuevo}", parent=dialog)
-        
+
         btn_add_preset = tk.Button(
             presets_frame,
             text="Guardar actual",
@@ -2462,7 +2387,7 @@ class VPTSuite:
                 curr = json.loads(self.config_ini.get("Options", "presets", fallback='[]'))
             except Exception:
                 curr = []
-                
+
             if seleccionado in curr:
                 curr.remove(seleccionado)
                 if "Options" not in self.config_ini:
@@ -2478,7 +2403,7 @@ class VPTSuite:
                     presets_var.set("")
                     patron_var.set("")
                 messagebox.showinfo("Preset Eliminado", "El preset seleccionado ha sido eliminado.", parent=dialog)
-                
+
         btn_del_preset = tk.Button(
             presets_frame,
             text="Eliminar",
@@ -2519,7 +2444,7 @@ class VPTSuite:
         for i, (flag, desc) in enumerate(flags):
             row = tk.Frame(flags_frame, bg="#FFFFFF")
             row.pack(fill=tk.X, pady=3)
-            
+
             btn = tk.Button(
                 row,
                 text=flag,
@@ -2534,13 +2459,12 @@ class VPTSuite:
                 cursor="hand2"
             )
             btn.pack(side=tk.LEFT, padx=(0, 10))
-            
+
             tk.Label(row, text=desc, font=("Segoe UI", 9), bg="#FFFFFF", fg="#5C6B8A").pack(side=tk.LEFT)
 
         preview_frame = tk.Frame(dialog, bg="#E5ECF9", padx=10, pady=10)
         btm = tk.Frame(dialog, bg="#F3F7FF")
 
-        # Pack bottom elements first to ensure visibility
         btm.pack(side=tk.BOTTOM, pady=(5, 12))
         preview_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=20, pady=10)
         flags_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
@@ -2552,7 +2476,7 @@ class VPTSuite:
         def actualizar_preview(*_):
             archivos = list(self.lista.get(0, tk.END))
             patron = patron_var.get()
-            
+
             dummy_info = {
                 "streams": [
                     {"codec_type": "video", "codec_name": "h264", "width": 1920, "height": 1080, "index": 0},
@@ -2561,12 +2485,12 @@ class VPTSuite:
                     {"codec_type": "subtitle", "codec_name": "subrip", "index": 3, "tags": {"language": "eng"}}
                 ]
             }
-            
+
             video_name = "Ejemplo_Video"
             info = dummy_info
             audio_indices = [1, 2]
             sub_indices = [3]
-            
+
             if archivos:
                 video_name = Path(archivos[0]).stem
                 real_info = self._ffprobe_info(archivos[0])
@@ -2579,7 +2503,7 @@ class VPTSuite:
             self.var_nombre_subcarpeta.set(patron)
             resolved = self._resolver_patron_subcarpeta(f"C:/ruta/de/ejemplo/{video_name}.mp4", info, "ESP_subENG", audio_indices, sub_indices)
             self.var_nombre_subcarpeta.set(old_val)
-            
+
             base_dir = self.salida_var.get() or "C:/Salida/Seleccionada"
             preview_lbl.config(text=f"{base_dir}/{resolved}")
 
@@ -2613,7 +2537,7 @@ class VPTSuite:
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL
         )
-        
+
         import time
         while True:
             if self.cancelar_procesamiento:
@@ -2626,11 +2550,11 @@ class VPTSuite:
                     except Exception:
                         pass
                 return subprocess.CompletedProcess(cmd, returncode=-1)
-                
+
             ret = self.proceso_actual.poll()
             if ret is not None:
                 return subprocess.CompletedProcess(cmd, returncode=ret)
-                
+
             time.sleep(0.1)
 
     def cambiar_ruta_ffmpeg(self):
@@ -2737,7 +2661,7 @@ class VPTSuite:
 
     def mostrar_acerca_de(self):
         import webbrowser
-        
+
         dialog = tk.Toplevel(self.root)
         dialog.title("Acerca de VPT Studio")
         dialog.geometry("540x370")
@@ -2748,13 +2672,11 @@ class VPTSuite:
         self.root.attributes('-disabled', True)
         dialog.bind("<Destroy>", lambda e: self.root.attributes('-disabled', False) if (e.widget == dialog and self.root.winfo_exists()) else None)
 
-        # Center dialog relative to main window
         dialog.update_idletasks()
         x = self.root.winfo_x() + (self.root.winfo_width() - dialog.winfo_width()) // 2
         y = self.root.winfo_y() + (self.root.winfo_height() - dialog.winfo_height()) // 2
         dialog.geometry(f"+{x}+{y}")
 
-        # Top banner frame
         top_banner = tk.Frame(dialog, bg="#1F2A44", height=60)
         top_banner.pack(fill=tk.X)
         top_banner.pack_propagate(False)
@@ -2775,7 +2697,6 @@ class VPTSuite:
             fg="#2D9CDB"
         ).pack(side=tk.RIGHT, padx=20, pady=16)
 
-        # Content frame
         content = tk.Frame(dialog, bg="#FFFFFF", padx=24, pady=16)
         content.pack(fill=tk.BOTH, expand=True)
 
@@ -2802,15 +2723,12 @@ class VPTSuite:
             wraplength=490
         ).pack(anchor=tk.W, pady=(6, 10))
 
-        # Divider
         tk.Frame(content, height=1, bg="#E5ECF9").pack(fill=tk.X, pady=(0, 10))
 
-        # Grid for info
         info_frame = tk.Frame(content, bg="#FFFFFF")
         info_frame.pack(fill=tk.X)
         info_frame.columnconfigure(1, weight=1)
 
-        # Developer Row
         tk.Label(
             info_frame,
             text="Desarrollador:",
@@ -2830,7 +2748,6 @@ class VPTSuite:
         dev_lbl.grid(row=0, column=1, sticky=tk.W, padx=12, pady=3)
         dev_lbl.bind("<Button-1>", lambda e: webbrowser.open_new("https://github.com/TheHexenjagd"))
 
-        # Base Projects Row
         tk.Label(
             info_frame,
             text="Proyectos base:",
@@ -2864,7 +2781,6 @@ class VPTSuite:
         audio_lbl.pack(anchor=tk.W, pady=1)
         audio_lbl.bind("<Button-1>", lambda e: webbrowser.open_new("https://github.com/TheHexenjagd/audioselector"))
 
-        # Close button at the bottom
         btn_close = tk.Button(
             dialog,
             text="Cerrar",
@@ -2899,7 +2815,7 @@ class VPTSuite:
         header = tk.Frame(dialog, bg="#1F2A44", height=70)
         header.pack(fill=tk.X)
         header.pack_propagate(False)
-        
+
         tk.Label(
             header,
             text="Resumen de Errores de Procesamiento",
@@ -2907,7 +2823,7 @@ class VPTSuite:
             bg="#1F2A44",
             fg="#FFFFFF"
         ).pack(anchor=tk.W, padx=20, pady=(10, 2))
-        
+
         tk.Label(
             header,
             text="Los siguientes problemas ocurrieron al procesar los archivos de la cola:",
@@ -2972,8 +2888,7 @@ class VPTSuite:
     def salir_aplicacion(self):
         if self.procesando and not messagebox.askyesno("Proceso activo", "Hay un proceso en curso. Salir de todos modos?"):
             return
-            
-        # Preguntar si guardar la cola actual al cerrar
+
         has_items = self.lista.size() > 0 or self.lista_omitidos.size() > 0
         if has_items:
             guardar = messagebox.askyesno(
@@ -3004,7 +2919,6 @@ class VPTSuite:
                 except Exception as exc:
                     print(f"Error eliminando archivo de cola: {exc}")
 
-        # Limpiar cualquier sección "Queue" residual del archivo ini principal antes de guardar
         if self.config_ini.has_section("Queue"):
             self.config_ini.remove_section("Queue")
 
@@ -3013,7 +2927,6 @@ class VPTSuite:
 
     def run(self):
         self.root.mainloop()
-
 
 if __name__ == "__main__":
     app = VPTSuite()
