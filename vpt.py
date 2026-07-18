@@ -8,6 +8,236 @@ import threading
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk, simpledialog
+import tkinter.font as tkfont
+import math
+
+class RoundedButton(tk.Canvas):
+    def __init__(self, master, text="", command=None, bg="#2D9CDB", fg="white",
+                 activebackground=None, activeforeground="white", relief=None,
+                 width=None, height=None, font=("Segoe UI", 9, "bold"),
+                 padx=10, pady=4, state=tk.NORMAL, cursor="hand2", **kwargs):
+        
+        self.master = master
+        self.text = text
+        self.command = command
+        self.bg_color = bg
+        self.fg_color = fg
+        self.active_bg = activebackground if activebackground else self._adjust_brightness(bg, -15)
+        self.active_fg = activeforeground
+        self.font = font
+        self.state = state
+        self.padx = padx
+        self.pady = pady
+        self.fixed_width = width is not None
+        
+        # Measure text width/height
+        f_obj = tkfont.Font(font=self.font)
+        text_w = f_obj.measure(text)
+        text_h = f_obj.metrics("linespace")
+        
+        # Determine height
+        if height is not None:
+            self.height = height
+        else:
+            self.height = text_h + 2 * pady + 6
+            
+        # Determine width
+        if width is not None:
+            if width <= 40:  # character count
+                self.width = max(text_w + 2 * padx, width * 8)
+            else:  # pixel count
+                self.width = width
+        else:
+            self.width = text_w + 2 * padx + 12
+            
+        # Parent background for canvas edges (transparency simulation)
+        parent_bg = "#F3F7FF"  # default app background
+        if master:
+            try:
+                bg_val = master.cget("bg")
+                if bg_val:
+                    parent_bg = bg_val
+            except Exception:
+                try:
+                    bg_val = master.cget("background")
+                    if bg_val:
+                        parent_bg = bg_val
+                except Exception:
+                    try:
+                        style_name = master.cget("style")
+                        if style_name:
+                            style = ttk.Style()
+                            bg_val = style.lookup(style_name, "background")
+                            if bg_val:
+                                parent_bg = bg_val
+                    except Exception:
+                        pass
+        
+        # Pop standard button options that Canvas config doesn't accept
+        kwargs.pop("activebackground", None)
+        kwargs.pop("activeforeground", None)
+        kwargs.pop("relief", None)
+        kwargs.pop("compound", None)
+        kwargs.pop("overrelief", None)
+        kwargs.pop("repeatdelay", None)
+        kwargs.pop("repeatinterval", None)
+        kwargs.pop("takefocus", None)
+        kwargs.pop("text", None)
+        kwargs.pop("command", None)
+        
+        super().__init__(master, bg=parent_bg, bd=0, highlightthickness=0,
+                         width=self.width, height=self.height, cursor=cursor if state == tk.NORMAL else "", **kwargs)
+        
+        self.rect_id = None
+        self.text_id = None
+        self.pressed = False
+        
+        self.draw_button()
+        
+        self.bind("<Enter>", self.on_enter)
+        self.bind("<Leave>", self.on_leave)
+        self.bind("<ButtonPress-1>", self.on_press)
+        self.bind("<ButtonRelease-1>", self.on_release)
+        
+    def _adjust_brightness(self, hex_color, percent):
+        try:
+            if not hex_color.startswith("#") or len(hex_color) != 7:
+                return hex_color
+            r = int(hex_color[1:3], 16)
+            g = int(hex_color[3:5], 16)
+            b = int(hex_color[5:7], 16)
+            
+            r = max(0, min(255, r + percent))
+            g = max(0, min(255, g + percent))
+            b = max(0, min(255, b + percent))
+            return f"#{r:02x}{g:02x}{b:02x}"
+        except Exception:
+            return hex_color
+
+    def get_rounded_rect_points(self, x1, y1, x2, y2, r):
+        points = []
+        steps = 8
+        # Top-right
+        for i in range(steps + 1):
+            theta = -math.pi/2 + (math.pi/2) * (i / steps)
+            points.append(x2 - r + r * math.cos(theta))
+            points.append(y1 + r + r * math.sin(theta))
+        # Bottom-right
+        for i in range(steps + 1):
+            theta = 0 + (math.pi/2) * (i / steps)
+            points.append(x2 - r + r * math.cos(theta))
+            points.append(y2 - r + r * math.sin(theta))
+        # Bottom-left
+        for i in range(steps + 1):
+            theta = math.pi/2 + (math.pi/2) * (i / steps)
+            points.append(x1 + r + r * math.cos(theta))
+            points.append(y2 - r + r * math.sin(theta))
+        # Top-left
+        for i in range(steps + 1):
+            theta = math.pi + (math.pi/2) * (i / steps)
+            points.append(x1 + r + r * math.cos(theta))
+            points.append(y1 + r + r * math.sin(theta))
+        return points
+
+    def draw_button(self, fill_color=None):
+        self.delete("all")
+        if fill_color is None:
+            if self.state == tk.DISABLED:
+                fill_color = "#E0E0E0"
+            else:
+                fill_color = self.bg_color
+                
+        text_color = self.fg_color
+        if self.state == tk.DISABLED:
+            text_color = "#A0A0A0"
+            self.config(cursor="")
+        else:
+            self.config(cursor="hand2")
+            
+        r = 6  # corner radius
+        r = min(r, self.width // 2, self.height // 2)
+        
+        points = self.get_rounded_rect_points(0, 0, self.width, self.height, r)
+        self.rect_id = self.create_polygon(points, fill=fill_color, outline="", smooth=False)
+        self.text_id = self.create_text(self.width / 2, self.height / 2, text=self.text, fill=text_color, font=self.font, justify=tk.CENTER)
+
+    def config(self, cnf=None, **kw):
+        if cnf is not None:
+            kw.update(cnf)
+        
+        redraw = False
+        if "state" in kw:
+            self.state = kw.pop("state")
+            redraw = True
+        if "text" in kw:
+            self.text = kw.pop("text")
+            if not self.fixed_width:
+                f_obj = tkfont.Font(font=self.font)
+                self.width = f_obj.measure(self.text) + 2 * self.padx + 12
+                super().config(width=self.width)
+            redraw = True
+        if "command" in kw:
+            self.command = kw.pop("command")
+        if "bg" in kw or "background" in kw:
+            self.bg_color = kw.pop("bg") if "bg" in kw else kw.pop("background")
+            self.active_bg = self._adjust_brightness(self.bg_color, -15)
+            redraw = True
+        if "fg" in kw or "foreground" in kw:
+            self.fg_color = kw.pop("fg") if "fg" in kw else kw.pop("foreground")
+            redraw = True
+            
+        kw.pop("activebackground", None)
+        kw.pop("activeforeground", None)
+        kw.pop("relief", None)
+        kw.pop("compound", None)
+        
+        if kw:
+            super().config(**kw)
+            
+        if redraw:
+            self.draw_button()
+            
+    def configure(self, cnf=None, **kw):
+        self.config(cnf, **kw)
+        
+    def cget(self, option):
+        if option == "state":
+            return self.state
+        elif option in ("bg", "background"):
+            return self.bg_color
+        elif option in ("fg", "foreground"):
+            return self.fg_color
+        elif option == "text":
+            return self.text
+        return super().cget(option)
+        
+    def __getitem__(self, item):
+        return self.cget(item)
+
+    def on_enter(self, event):
+        if self.state == tk.NORMAL:
+            self.draw_button(self.active_bg)
+
+    def on_leave(self, event):
+        if self.state == tk.NORMAL:
+            self.draw_button(self.bg_color)
+            self.pressed = False
+
+    def on_press(self, event):
+        if self.state == tk.NORMAL:
+            self.pressed = True
+            press_bg = self._adjust_brightness(self.bg_color, -30)
+            self.draw_button(press_bg)
+
+    def on_release(self, event):
+        if self.state == tk.NORMAL and self.pressed:
+            self.pressed = False
+            self.draw_button(self.active_bg)
+            if self.command:
+                self.command()
+
+tk.Button = RoundedButton
+
 
 CONFIG_DIR = os.path.join(os.getenv("APPDATA"), "Galleon", "VPT")
 os.makedirs(CONFIG_DIR, exist_ok=True)
@@ -346,13 +576,13 @@ class VPTSuite:
         main = ttk.Frame(self.root, style="VPT.TFrame")
         main.pack(fill=tk.BOTH, expand=True)
 
-        hero_card = tk.Frame(main, bg="#FFFFFF", highlightthickness=1, highlightbackground="#E5ECF9", bd=0)
+        hero_card = tk.Frame(main, bg="#F4F8FF", highlightthickness=1, highlightbackground="#D1E2FF", bd=0)
         hero_card.pack(fill=tk.X, padx=18, pady=(8, 4))
 
         accent_bar = tk.Frame(hero_card, width=4, bg="#2D9CDB")
         accent_bar.pack(side=tk.LEFT, fill=tk.Y)
 
-        text_container = tk.Frame(hero_card, bg="#FFFFFF")
+        text_container = tk.Frame(hero_card, bg="#F4F8FF")
         text_container.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=16, pady=6)
 
         tk.Label(
@@ -360,7 +590,7 @@ class VPTSuite:
             text="VPT Studio",
             font=("Segoe UI", 12, "bold"),
             fg="#1F2A44",
-            bg="#FFFFFF"
+            bg="#F4F8FF"
         ).pack(side=tk.LEFT)
 
         tk.Label(
@@ -368,7 +598,7 @@ class VPTSuite:
             text="  |  Herramienta de procesamiento de vídeo, codificación por hardware y multiplexación",
             font=("Segoe UI", 9),
             fg="#5C6B8A",
-            bg="#FFFFFF"
+            bg="#F4F8FF"
         ).pack(side=tk.LEFT, padx=(4, 0))
 
         top = ttk.Frame(main, style="VPT.TFrame")
@@ -1634,7 +1864,7 @@ class VPTSuite:
         y = self.root.winfo_y() + (self.root.winfo_height() - dialog.winfo_height()) // 2
         dialog.geometry(f"+{x}+{y}")
 
-        header = tk.Frame(dialog, bg="#1F2A44", height=70)
+        header = tk.Frame(dialog, bg="#1A2536", height=70)
         header.pack(fill=tk.X)
         header.pack_propagate(False)
 
@@ -1642,7 +1872,7 @@ class VPTSuite:
             header,
             text="Pre-verificacion de Archivos",
             font=("Segoe UI", 14, "bold"),
-            bg="#1F2A44",
+            bg="#1A2536",
             fg="#FFFFFF"
         ).pack(anchor=tk.W, padx=20, pady=(10, 2))
 
@@ -1650,7 +1880,7 @@ class VPTSuite:
             header,
             text="Se han detectado posibles problemas. Elige cómo deseas proceder con la cola de procesamiento.",
             font=("Segoe UI", 9),
-            bg="#1F2A44",
+            bg="#1A2536",
             fg="#B0C4DE"
         ).pack(anchor=tk.W, padx=20)
 
@@ -2221,14 +2451,14 @@ class VPTSuite:
         dialog.bind("<Destroy>", lambda e: self.root.attributes('-disabled', False) if (e.widget == dialog and self.root.winfo_exists()) else None)
         dialog.configure(bg="#F3F7FF")
 
-        header_frame = tk.Frame(dialog, bg="#FFFFFF", highlightthickness=1, highlightbackground="#E5ECF9")
+        header_frame = tk.Frame(dialog, bg="#F4F8FF", highlightthickness=1, highlightbackground="#D1E2FF")
         header_frame.pack(fill=tk.X, padx=18, pady=(12, 6))
         accent_bar = tk.Frame(header_frame, width=4, bg="#2D9CDB")
         accent_bar.pack(side=tk.LEFT, fill=tk.Y)
-        text_container = tk.Frame(header_frame, bg="#FFFFFF", padx=16, pady=8)
+        text_container = tk.Frame(header_frame, bg="#F4F8FF", padx=16, pady=8)
         text_container.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        tk.Label(text_container, text="Renombrar Archivos de la Cola", font=("Segoe UI", 12, "bold"), fg="#1F2A44", bg="#FFFFFF").pack(anchor=tk.W)
-        tk.Label(text_container, text="Configura un patrón de nombre para renombrar todos los archivos de la lista principal.", font=("Segoe UI", 9), fg="#5C6B8A", bg="#FFFFFF").pack(anchor=tk.W, pady=(2, 0))
+        tk.Label(text_container, text="Renombrar Archivos de la Cola", font=("Segoe UI", 12, "bold"), fg="#1F2A44", bg="#F4F8FF").pack(anchor=tk.W)
+        tk.Label(text_container, text="Configura un patrón de nombre para renombrar todos los archivos de la lista principal.", font=("Segoe UI", 9), fg="#5C6B8A", bg="#F4F8FF").pack(anchor=tk.W, pady=(2, 0))
 
         content = tk.Frame(dialog, bg="#F3F7FF", padx=18)
         content.pack(fill=tk.BOTH, expand=True)
@@ -3173,9 +3403,9 @@ class VPTSuite:
 
         dialog = tk.Toplevel(self.root)
         dialog.title("Acerca de VPT Studio")
-        dialog.geometry("540x370")
+        dialog.geometry("540x390")
         dialog.resizable(False, False)
-        dialog.configure(bg="#FFFFFF")
+        dialog.configure(bg="#F3F7FF")
         dialog.transient(self.root)
         dialog.grab_set()
         self.root.attributes('-disabled', True)
@@ -3186,27 +3416,43 @@ class VPTSuite:
         y = self.root.winfo_y() + (self.root.winfo_height() - dialog.winfo_height()) // 2
         dialog.geometry(f"+{x}+{y}")
 
-        top_banner = tk.Frame(dialog, bg="#1F2A44", height=60)
-        top_banner.pack(fill=tk.X)
-        top_banner.pack_propagate(False)
+        header_card = tk.Frame(dialog, bg="#F4F8FF", highlightthickness=1, highlightbackground="#D1E2FF", bd=0)
+        header_card.pack(fill=tk.X, padx=18, pady=(12, 6))
+
+        accent_bar = tk.Frame(header_card, width=4, bg="#2D9CDB")
+        accent_bar.pack(side=tk.LEFT, fill=tk.Y)
+
+        text_container = tk.Frame(header_card, bg="#F4F8FF")
+        text_container.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=16, pady=8)
 
         tk.Label(
-            top_banner,
+            text_container,
             text="VPT Studio",
-            font=("Segoe UI", 16, "bold"),
-            bg="#1F2A44",
-            fg="#FFFFFF"
-        ).pack(side=tk.LEFT, padx=20, pady=12)
+            font=("Segoe UI", 12, "bold"),
+            fg="#1F2A44",
+            bg="#F4F8FF"
+        ).pack(side=tk.LEFT)
 
         tk.Label(
-            top_banner,
-            text="v1.0.0",
-            font=("Segoe UI", 10, "bold"),
-            bg="#1F2A44",
-            fg="#2D9CDB"
-        ).pack(side=tk.RIGHT, padx=20, pady=16)
+            text_container,
+            text="  |  Acerca de la herramienta",
+            font=("Segoe UI", 9),
+            fg="#5C6B8A",
+            bg="#F4F8FF"
+        ).pack(side=tk.LEFT, padx=(4, 0))
 
-        content = tk.Frame(dialog, bg="#FFFFFF", padx=24, pady=16)
+        tk.Label(
+            header_card,
+            text="v1.0.0",
+            font=("Segoe UI", 9, "bold"),
+            bg="#F4F8FF",
+            fg="#2D9CDB"
+        ).pack(side=tk.RIGHT, padx=16, pady=10)
+
+        content_card = tk.Frame(dialog, bg="#FFFFFF", highlightthickness=1, highlightbackground="#E5ECF9", bd=0)
+        content_card.pack(fill=tk.BOTH, expand=True, padx=18, pady=(4, 10))
+
+        content = tk.Frame(content_card, bg="#FFFFFF", padx=16, pady=12)
         content.pack(fill=tk.BOTH, expand=True)
 
         tk.Label(
@@ -3218,9 +3464,10 @@ class VPTSuite:
         ).pack(anchor=tk.W)
 
         desc = (
-            "Una suite diseñada para la optimización de flujos de trabajo de vídeo, "
-            "automatizando la multiplexación de audio/subtítulos, la codificación acelerada por "
-            "hardware (NVIDIA NVENC, Intel QSV, AMD AMF) y la depuración de metadatos."
+            "VPT Studio es una suite integral para la optimización de flujos de trabajo de vídeo. "
+            "Automatiza la multiplexación de audio/subtítulos (remux), la codificación acelerada por hardware "
+            "(NVIDIA NVENC, Intel QSV, AMD AMF) con incrustado de subtítulos (hardsub), el renombrado masivo "
+            "por lotes con expresiones regulares, la limpieza de metadatos in-place y la organización en rutas dinámicas."
         )
         tk.Label(
             content,
@@ -3229,7 +3476,7 @@ class VPTSuite:
             bg="#FFFFFF",
             fg="#5C6B8A",
             justify=tk.LEFT,
-            wraplength=490
+            wraplength=460
         ).pack(anchor=tk.W, pady=(6, 10))
 
         tk.Frame(content, height=1, bg="#E5ECF9").pack(fill=tk.X, pady=(0, 10))
@@ -3304,12 +3551,13 @@ class VPTSuite:
             cursor="hand2",
             font=("Segoe UI", 9, "bold")
         )
-        btn_close.pack(side=tk.BOTTOM, pady=12)
+        btn_close.pack(side=tk.BOTTOM, pady=(0, 12))
 
     def _mostrar_resumen_errores(self, errores):
         dialog = tk.Toplevel(self.root)
         dialog.title("Resumen de Errores - VPT Studio")
         dialog.geometry("740x500")
+        dialog.resizable(False, False)
         dialog.transient(self.root)
         dialog.grab_set()
         self.root.attributes('-disabled', True)
@@ -3321,7 +3569,7 @@ class VPTSuite:
         y = self.root.winfo_y() + (self.root.winfo_height() - dialog.winfo_height()) // 2
         dialog.geometry(f"+{x}+{y}")
 
-        header = tk.Frame(dialog, bg="#1F2A44", height=70)
+        header = tk.Frame(dialog, bg="#1A2536", height=70)
         header.pack(fill=tk.X)
         header.pack_propagate(False)
 
@@ -3329,7 +3577,7 @@ class VPTSuite:
             header,
             text="Resumen de Errores de Procesamiento",
             font=("Segoe UI", 14, "bold"),
-            bg="#1F2A44",
+            bg="#1A2536",
             fg="#FFFFFF"
         ).pack(anchor=tk.W, padx=20, pady=(10, 2))
 
@@ -3337,7 +3585,7 @@ class VPTSuite:
             header,
             text="Los siguientes problemas ocurrieron al procesar los archivos de la cola:",
             font=("Segoe UI", 9),
-            bg="#1F2A44",
+            bg="#1A2536",
             fg="#B0C4DE"
         ).pack(anchor=tk.W, padx=20)
 
