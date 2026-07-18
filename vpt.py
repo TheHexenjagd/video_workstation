@@ -59,7 +59,6 @@ DEFAULT_CONFIG = {
     },
     "Options": {
         "buscar_recursivo": "True",
-        "backup_original": "True",
         "crear_subcarpeta": "False",
         "nombre_subcarpeta": "",
         "usar_nvidia": "True",
@@ -67,7 +66,7 @@ DEFAULT_CONFIG = {
         "decod_hw": "Software",
         "preset": "medium",
         "sufijo_idiomas": "True",
-        "limpiar_metadatos": "False",
+        "eliminar_metadatos": "False",
     },
 }
 
@@ -274,7 +273,6 @@ class VPTSuite:
             if "Options" not in self.config_ini:
                 self.config_ini["Options"] = {}
             self.config_ini["Options"]["buscar_recursivo"] = str(self.var_recursivo.get())
-            self.config_ini["Options"]["backup_original"] = str(self.var_backup.get())
             self.config_ini["Options"]["crear_subcarpeta"] = str(self.var_subcarpeta.get())
             self.config_ini["Options"]["nombre_subcarpeta"] = self.var_nombre_subcarpeta.get()
             self.config_ini["Options"]["gpu_acel"] = self.gpu_acel_var.get()
@@ -282,7 +280,7 @@ class VPTSuite:
             self.config_ini["Options"]["usar_nvidia"] = str(self.gpu_acel_var.get() == "nvidia")
             self.config_ini["Options"]["preset"] = self.preset_var.get()
             self.config_ini["Options"]["sufijo_idiomas"] = str(self.var_sufijo_idiomas.get())
-            self.config_ini["Options"]["limpiar_metadatos"] = str(self.var_limpiar_metadatos.get())
+            self.config_ini["Options"]["eliminar_metadatos"] = str(self.var_eliminar_metadatos.get())
 
             self._guardar_configuracion()
         except Exception as exc:
@@ -327,7 +325,6 @@ class VPTSuite:
 
     def _crear_ui(self):
         self.var_recursivo = tk.BooleanVar(value=self.config_ini.getboolean("Options", "buscar_recursivo", fallback=True))
-        self.var_backup = tk.BooleanVar(value=self.config_ini.getboolean("Options", "backup_original", fallback=True))
         self.var_subcarpeta = tk.BooleanVar(value=self.config_ini.getboolean("Options", "crear_subcarpeta", fallback=False))
         self.var_nombre_subcarpeta = tk.StringVar(value=self.config_ini.get("Options", "nombre_subcarpeta", fallback=""))
         self.gpu_acel_var = tk.StringVar(value=self._obtener_gpu_inicial())
@@ -335,11 +332,13 @@ class VPTSuite:
         self.preset_var = tk.StringVar(value=self.config_ini.get("Options", "preset", fallback="medium"))
         self.salida_var = tk.StringVar(value=self.config_ini.get("Paths", "output_dir", fallback=""))
         self.var_sufijo_idiomas = tk.BooleanVar(value=self.config_ini.getboolean("Options", "sufijo_idiomas", fallback=True))
-        self.var_limpiar_metadatos = tk.BooleanVar(value=self.config_ini.getboolean("Options", "limpiar_metadatos", fallback=False))
+        self.var_eliminar_metadatos = tk.BooleanVar(
+            value=self.config_ini.getboolean("Options", "eliminar_metadatos", 
+                  fallback=self.config_ini.getboolean("Options", "limpiar_metadatos", fallback=False))
+        )
 
         for var in [
             self.var_recursivo,
-            self.var_backup,
             self.var_subcarpeta,
             self.var_nombre_subcarpeta,
             self.gpu_acel_var,
@@ -347,185 +346,201 @@ class VPTSuite:
             self.preset_var,
             self.salida_var,
             self.var_sufijo_idiomas,
-            self.var_limpiar_metadatos,
+            self.var_eliminar_metadatos,
         ]:
             var.trace_add("write", self._actualizar_configuracion)
 
         main = ttk.Frame(self.root, style="VPT.TFrame")
         main.pack(fill=tk.BOTH, expand=True)
 
-        # Hero section as a clean white card with a blue left accent bar
+        # Hero section as a clean compact white card with a blue left accent bar
         hero_card = tk.Frame(main, bg="#FFFFFF", highlightthickness=1, highlightbackground="#E5ECF9", bd=0)
-        hero_card.pack(fill=tk.X, padx=18, pady=(16, 10))
+        hero_card.pack(fill=tk.X, padx=18, pady=(8, 4))
         
         accent_bar = tk.Frame(hero_card, width=4, bg="#2D9CDB")
         accent_bar.pack(side=tk.LEFT, fill=tk.Y)
         
         text_container = tk.Frame(hero_card, bg="#FFFFFF")
-        text_container.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=16, pady=12)
+        text_container.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=16, pady=6)
         
         tk.Label(
             text_container,
             text="VPT Studio",
-            font=("Segoe UI", 18, "bold"),
+            font=("Segoe UI", 12, "bold"),
             fg="#1F2A44",
             bg="#FFFFFF"
-        ).pack(anchor=tk.W)
+        ).pack(side=tk.LEFT)
         
         tk.Label(
             text_container,
-            text="Herramienta de procesamiento de vídeo, codificación por hardware y multiplexación",
+            text="  |  Herramienta de procesamiento de vídeo, codificación por hardware y multiplexación",
             font=("Segoe UI", 9),
             fg="#5C6B8A",
             bg="#FFFFFF"
-        ).pack(anchor=tk.W, pady=(2, 0))
+        ).pack(side=tk.LEFT, padx=(4, 0))
 
         top = ttk.Frame(main, style="VPT.TFrame")
-        top.pack(fill=tk.BOTH, expand=True, padx=18, pady=6)
+        top.pack(fill=tk.BOTH, expand=False, padx=18, pady=6)
 
         left = ttk.Frame(top, style="Card.TFrame")
         left.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 8), pady=4)
 
-        ttk.Label(left, text="Cola de videos", style="CardTitle.TLabel").pack(anchor=tk.W, padx=12, pady=(10, 6))
-        self.lista = tk.Listbox(left, selectmode=tk.EXTENDED, bg="#F9FBFF", fg="#1F2A44", selectbackground="#2D9CDB", selectforeground="#FFFFFF", relief=tk.FLAT, font=("Consolas", 10))
-        self.lista.pack(fill=tk.BOTH, expand=True, padx=12, pady=(0, 8))
+        self.queue_notebook = ttk.Notebook(left)
+        self.queue_notebook.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
 
-        acciones = tk.Frame(left, bg="#FFFFFF")
+        self.tab_queue_active = ttk.Frame(self.queue_notebook, style="Card.TFrame")
+        self.queue_notebook.add(self.tab_queue_active, text="Cola principal")
+
+        self.tab_queue_skipped = ttk.Frame(self.queue_notebook, style="Card.TFrame")
+        self.queue_notebook.add(self.tab_queue_skipped, text="Omitidos / Errores")
+
+        # Active queue elements
+        self.lista = tk.Listbox(self.tab_queue_active, selectmode=tk.EXTENDED, bg="#F9FBFF", fg="#1F2A44", selectbackground="#2D9CDB", selectforeground="#FFFFFF", relief=tk.FLAT, font=("Consolas", 10), height=12)
+        self.lista.pack(fill=tk.BOTH, expand=True, padx=12, pady=(8, 8))
+
+        acciones = tk.Frame(self.tab_queue_active, bg="#FFFFFF")
         acciones.pack(fill=tk.X, padx=12, pady=(0, 10))
 
         self._btn(acciones, "Agregar", self.seleccionar_archivos, "#2F80ED").pack(side=tk.LEFT, padx=3)
         self._btn(acciones, "Cargar carpeta", self.cargar_carpeta, "#2F80ED").pack(side=tk.LEFT, padx=3)
-        self._btn(acciones, "Quitar seleccion", self.eliminar_seleccionados, "#F2994A").pack(side=tk.LEFT, padx=3)
+        self._btn(acciones, "Quitar sel.", self.eliminar_seleccionados, "#F2994A").pack(side=tk.LEFT, padx=3)
         self._btn(acciones, "Limpiar", self.limpiar_lista, "#EB5757").pack(side=tk.LEFT, padx=3)
         tk.Checkbutton(acciones, text="Buscar recursivo", variable=self.var_recursivo, bg="#FFFFFF", fg="#2B3A57", activebackground="#FFFFFF", selectcolor="#FFFFFF").pack(side=tk.LEFT, padx=8)
+
+        # Skipped/Error queue elements
+        self.lista_omitidos = tk.Listbox(self.tab_queue_skipped, selectmode=tk.EXTENDED, bg="#FFF9F9", fg="#8B0000", selectbackground="#EB5757", selectforeground="#FFFFFF", relief=tk.FLAT, font=("Consolas", 10), height=12)
+        self.lista_omitidos.pack(fill=tk.BOTH, expand=True, padx=12, pady=(8, 8))
+
+        acciones_omitidos = tk.Frame(self.tab_queue_skipped, bg="#FFFFFF")
+        acciones_omitidos.pack(fill=tk.X, padx=12, pady=(0, 10))
+
+        self._btn(acciones_omitidos, "Reincorporar", self.reincorporar_omitidos, "#27AE60").pack(side=tk.LEFT, padx=3)
+        self._btn(acciones_omitidos, "Quitar sel.", self.eliminar_omitidos_seleccionados, "#F2994A").pack(side=tk.LEFT, padx=3)
+        self._btn(acciones_omitidos, "Limpiar", self.limpiar_omitidos, "#EB5757").pack(side=tk.LEFT, padx=3)
 
         right = ttk.Frame(top, style="Card.TFrame")
         right.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(8, 0), pady=4)
 
-        ttk.Label(right, text="Modulos", style="CardTitle.TLabel").pack(anchor=tk.W, padx=12, pady=(10, 6))
+        ttk.Label(right, text="Opciones de Procesamiento", style="CardTitle.TLabel").pack(anchor=tk.W, padx=12, pady=(10, 6))
         
-        # Modern custom tab header
-        self.tab_header = tk.Frame(right, bg="#FFFFFF")
-        self.tab_header.pack(fill=tk.X, padx=12, pady=(0, 2))
-
-        # Underline separator for the tab header
+        # Separator
         tab_divider = tk.Frame(right, height=1, bg="#E5ECF9")
         tab_divider.pack(fill=tk.X, padx=12, pady=(0, 10))
 
-        self.tab_content_container = ttk.Frame(right, style="Card.TFrame")
-        self.tab_content_container.pack(fill=tk.BOTH, expand=True, padx=12, pady=(0, 10))
-        self.tab_content_container.grid_rowconfigure(0, weight=1)
-        self.tab_content_container.grid_columnconfigure(0, weight=1)
+        # Container for modules
+        modules_container = tk.Frame(right, bg="#FFFFFF")
+        modules_container.pack(fill=tk.BOTH, expand=True, padx=12, pady=(0, 10))
 
-        self.tab_asrt = ttk.Frame(self.tab_content_container, style="Card.TFrame")
-        self.tab_hst = ttk.Frame(self.tab_content_container, style="Card.TFrame")
-        self.tab_tools = ttk.Frame(self.tab_content_container, style="Card.TFrame")
+        # Module 1: Procesar Videos
+        m1_frame = tk.LabelFrame(modules_container, text="Procesar Videos", font=("Segoe UI", 9, "bold"), bg="#FFFFFF", fg="#2B3A57", padx=12, pady=10)
+        m1_frame.pack(fill=tk.X, pady=(0, 12))
+        tk.Label(m1_frame, text="Procesa los videos de la cola aplicando combinaciones de pistas y formatos.", font=("Segoe UI", 9), bg="#FFFFFF", fg="#5C6B8A").pack(anchor=tk.W, pady=(0, 8))
+        m1_btns = tk.Frame(m1_frame, bg="#FFFFFF")
+        m1_btns.pack(anchor=tk.W)
+        self.btn_procesar_cola = self._btn(m1_btns, "Procesar cola", self.procesar_cola, "#2D9CDB")
+        self.btn_procesar_cola.pack(side=tk.LEFT, padx=(0, 8))
+        self.btn_verificar = self._btn(m1_btns, "Verificar cola", self.verificar_condiciones_carpeta, "#27AE60")
+        self.btn_verificar.pack(side=tk.LEFT)
 
-        self.tab_asrt.grid(row=0, column=0, sticky="nsew")
-        self.tab_hst.grid(row=0, column=0, sticky="nsew")
-        self.tab_tools.grid(row=0, column=0, sticky="nsew")
+        # Module 3: Mantenimiento
+        m3_frame = tk.LabelFrame(modules_container, text="Mantenimiento", font=("Segoe UI", 9, "bold"), bg="#FFFFFF", fg="#2B3A57", padx=12, pady=10)
+        m3_frame.pack(fill=tk.X, pady=(0, 12))
+        tk.Label(m3_frame, text="Herramientas de modificación in-place para los archivos originales de la cola.", font=("Segoe UI", 9), bg="#FFFFFF", fg="#5C6B8A").pack(anchor=tk.W, pady=(0, 8))
+        m3_btns = tk.Frame(m3_frame, bg="#FFFFFF")
+        m3_btns.pack(anchor=tk.W)
+        self.btn_eliminar_meta = self._btn(m3_btns, "Eliminar meta", self.eliminar_metadatos, "#F2C94C")
+        self.btn_eliminar_meta.pack(side=tk.LEFT, padx=(0, 8))
+        self.btn_eliminar_subs = self._btn(m3_btns, "Eliminar subs", self.eliminar_subtitulos, "#F2994A")
+        self.btn_eliminar_subs.pack(side=tk.LEFT)
 
-        self.tab_frames = [self.tab_asrt, self.tab_hst, self.tab_tools]
-        self.tab_labels_text = ["Versiones Audio/Sub", "Hardcode", "Mantenimiento"]
-        self.tab_buttons = []
-        self.tab_indicators = []
-        self.tab_label_widgets = []
+        # Cancel Panel
+        cancel_frame = tk.Frame(modules_container, bg="#FFFFFF")
+        cancel_frame.pack(fill=tk.X, side=tk.BOTTOM, pady=(10, 0))
+        self.btn_cancelar = self._btn(cancel_frame, "Cancelar todo", self.cancelar, "#EB5757")
+        self.btn_cancelar.config(state=tk.DISABLED)
+        self.btn_cancelar.pack(anchor=tk.W)
 
-        for i, text in enumerate(self.tab_labels_text):
-            btn_frame = tk.Frame(self.tab_header, bg="#FFFFFF", cursor="hand2")
-            btn_frame.pack(side=tk.LEFT, padx=(0, 16))
-
-            lbl = tk.Label(btn_frame, text=text, font=("Segoe UI", 10, "bold"), bg="#FFFFFF", fg="#5C6B8A", pady=6)
-            lbl.pack(fill=tk.X)
-
-            ind = tk.Frame(btn_frame, height=3, bg="#FFFFFF")
-            ind.pack(fill=tk.X)
-
-            lbl.bind("<Button-1>", lambda e, idx=i: self._seleccionar_pestana(idx))
-            btn_frame.bind("<Button-1>", lambda e, idx=i: self._seleccionar_pestana(idx))
-
-            self.tab_buttons.append(btn_frame)
-            self.tab_label_widgets.append(lbl)
-            self.tab_indicators.append(ind)
-
-        self._crear_tab_asrt()
-        self._crear_tab_hst()
-        self._crear_tab_tools()
+        # Options Card (Compact)
+        opts_card = ttk.Frame(main, style="Card.TFrame")
+        opts_card.pack(fill=tk.X, padx=18, pady=(2, 4))
         
-        self._seleccionar_pestana(0)
-
-        base = ttk.Frame(main, style="Card.TFrame")
-        base.pack(fill=tk.BOTH, expand=True, padx=18, pady=(0, 14))
-
-        # 1. Directorio de Salida
-        salida_frame = tk.Frame(base, bg="#FFFFFF")
-        salida_frame.pack(fill=tk.X, padx=12, pady=(12, 6))
-        tk.Label(salida_frame, text="1. Directorio de Salida:", bg="#FFFFFF", fg="#2B3A57", font=("Segoe UI", 9, "bold")).pack(side=tk.LEFT, padx=(0, 8))
-        tk.Entry(salida_frame, textvariable=self.salida_var, bg="#F4F8FF", fg="#1F2A44", relief=tk.FLAT).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 8))
-        self._btn(salida_frame, "Seleccionar", self.seleccionar_directorio, "#4DA8DA").pack(side=tk.LEFT)
-
-        # 2. Estructura de Subcarpetas
-        subcarp_frame = tk.Frame(base, bg="#FFFFFF")
-        subcarp_frame.pack(fill=tk.X, padx=12, pady=6)
-        tk.Label(subcarp_frame, text="2. Estructura de Subcarpeta:", bg="#FFFFFF", fg="#2B3A57", font=("Segoe UI", 9, "bold")).pack(side=tk.LEFT, padx=(0, 8))
-        tk.Checkbutton(subcarp_frame, text="Crear subcarpeta", variable=self.var_subcarpeta, bg="#FFFFFF", fg="#2B3A57", activebackground="#FFFFFF", selectcolor="#FFFFFF").pack(side=tk.LEFT, padx=(0, 8))
+        # Row 1: Salida
+        row1 = tk.Frame(opts_card, bg="#FFFFFF")
+        row1.pack(fill=tk.X, padx=12, pady=(6, 2))
+        tk.Label(row1, text="1. Salida:", bg="#FFFFFF", fg="#2B3A57", font=("Segoe UI", 9, "bold")).pack(side=tk.LEFT, padx=(0, 6))
+        tk.Entry(row1, textvariable=self.salida_var, bg="#F4F8FF", fg="#1F2A44", relief=tk.FLAT).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 6))
+        self._btn(row1, "Seleccionar", self.seleccionar_directorio, "#4DA8DA").pack(side=tk.LEFT)
+        
+        # Row 2: Subcarpeta
+        row2 = tk.Frame(opts_card, bg="#FFFFFF")
+        row2.pack(fill=tk.X, padx=12, pady=2)
+        tk.Label(row2, text="2. Subcarpeta:", bg="#FFFFFF", fg="#2B3A57", font=("Segoe UI", 9, "bold")).pack(side=tk.LEFT, padx=(0, 6))
+        tk.Checkbutton(row2, text="Crear", variable=self.var_subcarpeta, bg="#FFFFFF", fg="#2B3A57", activebackground="#FFFFFF", selectcolor="#FFFFFF").pack(side=tk.LEFT, padx=(0, 6))
         
         try:
             presets_data = json.loads(self.config_ini.get("Options", "presets", fallback='[]'))
         except Exception:
             presets_data = []
-        self.cb_nombre_subcarpeta = ttk.Combobox(subcarp_frame, textvariable=self.var_nombre_subcarpeta, values=presets_data, width=32)
+        self.cb_nombre_subcarpeta = ttk.Combobox(row2, textvariable=self.var_nombre_subcarpeta, values=presets_data, width=32)
         self.cb_nombre_subcarpeta.pack(side=tk.LEFT, padx=(0, 6))
         
-        btn_build = tk.Button(
-            subcarp_frame,
-            text="Configurar",
-            command=self._abrir_constructor_rutas,
-            bg="#2D9CDB",
-            fg="white",
-            activebackground="#2D9CDB",
-            activeforeground="white",
-            relief=tk.FLAT,
-            padx=8,
-            pady=2,
-            cursor="hand2",
-            font=("Segoe UI", 9, "bold"),
-        )
+        btn_build = self._btn(row2, "Configurar", self._abrir_constructor_rutas, "#2D9CDB")
         btn_build.pack(side=tk.LEFT)
 
-        # 3. Opciones Generales
-        opts_frame = tk.Frame(base, bg="#FFFFFF")
-        opts_frame.pack(fill=tk.X, padx=12, pady=(6, 12))
-        tk.Label(opts_frame, text="3. Opciones Generales:", bg="#FFFFFF", fg="#2B3A57", font=("Segoe UI", 9, "bold")).pack(side=tk.LEFT, padx=(0, 8))
-        tk.Checkbutton(opts_frame, text="Backup original", variable=self.var_backup, bg="#FFFFFF", fg="#2B3A57", activebackground="#FFFFFF", selectcolor="#FFFFFF").pack(side=tk.LEFT, padx=8)
+        # Row 3: Opciones Generales
+        row3 = tk.Frame(opts_card, bg="#FFFFFF")
+        row3.pack(fill=tk.X, padx=12, pady=(2, 6))
         
-        tk.Label(opts_frame, text="GPU:", bg="#FFFFFF", fg="#2B3A57", font=("Segoe UI", 9, "bold")).pack(side=tk.LEFT, padx=(8, 4))
-        self.cb_gpu = ttk.Combobox(opts_frame, values=["NVIDIA (NVENC)", "Intel (QSV)", "AMD (AMF)"], state="readonly", width=16)
+        tk.Label(row3, text="3. Opciones:", bg="#FFFFFF", fg="#2B3A57", font=("Segoe UI", 9, "bold")).pack(side=tk.LEFT, padx=(0, 6))
+        
+        tk.Label(row3, text="GPU:", bg="#FFFFFF", fg="#2B3A57", font=("Segoe UI", 9, "bold")).pack(side=tk.LEFT, padx=(6, 2))
+        self.cb_gpu = ttk.Combobox(row3, values=["NVIDIA (NVENC)", "Intel (QSV)", "AMD (AMF)"], state="readonly", width=32)
         self.cb_gpu.pack(side=tk.LEFT, padx=4)
         self.cb_gpu.bind("<<ComboboxSelected>>", self._on_gpu_selected)
 
-        tk.Label(opts_frame, text="Decodificación:", bg="#FFFFFF", fg="#2B3A57", font=("Segoe UI", 9, "bold")).pack(side=tk.LEFT, padx=(8, 4))
-        self.cb_decod = ttk.Combobox(opts_frame, values=["Software", "D3D11VA", "DXVA2"], state="readonly", textvariable=self.decod_hw_var, width=10)
+        tk.Label(row3, text="Decod.:", bg="#FFFFFF", fg="#2B3A57", font=("Segoe UI", 9, "bold")).pack(side=tk.LEFT, padx=(6, 2))
+        self.cb_decod = ttk.Combobox(row3, values=["Software", "D3D11VA", "DXVA2"], state="readonly", textvariable=self.decod_hw_var, width=8)
         self.cb_decod.pack(side=tk.LEFT, padx=4)
         
-        tk.Checkbutton(opts_frame, text="Añadir sufijo al nombre", variable=self.var_sufijo_idiomas, bg="#FFFFFF", fg="#2B3A57", activebackground="#FFFFFF", selectcolor="#FFFFFF").pack(side=tk.LEFT, padx=8)
-        tk.Checkbutton(opts_frame, text="Limpiar metadatos al finalizar", variable=self.var_limpiar_metadatos, bg="#FFFFFF", fg="#2B3A57", activebackground="#FFFFFF", selectcolor="#FFFFFF").pack(side=tk.LEFT, padx=8)
+        tk.Checkbutton(row3, text="Sufijo al nombre", variable=self.var_sufijo_idiomas, bg="#FFFFFF", fg="#2B3A57", activebackground="#FFFFFF", selectcolor="#FFFFFF").pack(side=tk.LEFT, padx=6)
+        tk.Checkbutton(row3, text="Eliminar metadatos al finalizar", variable=self.var_eliminar_metadatos, bg="#FFFFFF", fg="#2B3A57", activebackground="#FFFFFF", selectcolor="#FFFFFF").pack(side=tk.LEFT, padx=6)
 
-        prog = tk.Frame(base, bg="#FFFFFF")
-        prog.pack(fill=tk.X, padx=12, pady=(4, 8))
+        # Activity Card (Separate Container)
+        activity_card = ttk.Frame(main, style="Card.TFrame")
+        activity_card.pack(fill=tk.BOTH, expand=True, padx=18, pady=(0, 14))
+        
+        # Progress section
+        prog = tk.Frame(activity_card, bg="#FFFFFF")
+        prog.pack(fill=tk.X, padx=12, pady=(8, 4))
         self.progress_label = tk.Label(prog, text="Listo", bg="#FFFFFF", fg="#5C6B8A", font=("Segoe UI", 9))
         self.progress_label.pack(anchor=tk.W)
         self.progress = ttk.Progressbar(prog, style="Modern.Horizontal.TProgressbar", mode="determinate")
         self.progress.pack(fill=tk.X, pady=(4, 0))
 
-        tk.Label(base, text="Actividad", bg="#FFFFFF", fg="#2B3A57", font=("Segoe UI", 10, "bold")).pack(anchor=tk.W, padx=12)
-        log_frame = tk.Frame(base, bg="#FFFFFF")
-        log_frame.pack(fill=tk.BOTH, expand=True, padx=12, pady=(6, 10))
-        self.log = tk.Text(log_frame, bg="#F9FBFF", fg="#24324A", font=("Consolas", 9), relief=tk.FLAT, state=tk.DISABLED)
+        # Activity log section
+        tk.Label(activity_card, text="Actividad", bg="#FFFFFF", fg="#2B3A57", font=("Segoe UI", 10, "bold")).pack(anchor=tk.W, padx=12, pady=(4, 0))
+        log_frame = tk.Frame(activity_card, bg="#FFFFFF")
+        log_frame.pack(fill=tk.BOTH, expand=True, padx=12, pady=(4, 8))
+        self.log = tk.Text(log_frame, bg="#F9FBFF", fg="#24324A", font=("Consolas", 9), relief=tk.FLAT, state=tk.DISABLED, height=18)
         self.log.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scr = tk.Scrollbar(log_frame, command=self.log.yview)
         scr.pack(side=tk.RIGHT, fill=tk.Y)
         self.log.config(yscrollcommand=scr.set)
+
+        # Cargar cola persistida desde el archivo INI si existe
+        try:
+            if self.config_ini.has_section("Queue"):
+                lista_data = json.loads(self.config_ini.get("Queue", "lista", fallback="[]"))
+                for f in lista_data:
+                    if os.path.exists(f):
+                        self.lista.insert(tk.END, os.path.normpath(f))
+                
+                omitidos_data = json.loads(self.config_ini.get("Queue", "lista_omitidos", fallback="[]"))
+                for f in omitidos_data:
+                    if os.path.exists(f):
+                        self.lista_omitidos.insert(tk.END, os.path.normpath(f))
+        except Exception as e:
+            print(f"Error al cargar cola persistida: {e}")
 
     def _btn(self, parent, text, cmd, bg):
         return tk.Button(
@@ -537,58 +552,13 @@ class VPTSuite:
             activebackground=bg,
             activeforeground="white",
             relief=tk.FLAT,
-            padx=12,
-            pady=6,
+            width=16,
+            pady=4,
             cursor="hand2",
             font=("Segoe UI", 9, "bold"),
         )
 
-    def _seleccionar_pestana(self, index):
-        for i, (frm, lbl, ind) in enumerate(zip(self.tab_frames, self.tab_label_widgets, self.tab_indicators)):
-            if i == index:
-                frm.tkraise()
-                lbl.config(fg="#2D9CDB")
-                ind.config(bg="#2D9CDB")
-            else:
-                lbl.config(fg="#5C6B8A")
-                ind.config(bg="#FFFFFF")
 
-    def _crear_tab_asrt(self):
-        frm = tk.Frame(self.tab_asrt, bg="#FFFFFF")
-        frm.pack(fill=tk.BOTH, expand=True, padx=14, pady=14)
-        tk.Label(frm, text="Genera multiples versiones por combinaciones de audio/subtitulos", bg="#FFFFFF", fg="#5C6B8A", font=("Segoe UI", 10)).pack(anchor=tk.W)
-        btns = tk.Frame(frm, bg="#FFFFFF")
-        btns.pack(anchor=tk.W, pady=12)
-        self.btn_versiones = self._btn(btns, "Generar versiones", self.procesar_versiones, "#2D9CDB")
-        self.btn_versiones.pack(side=tk.LEFT, padx=(0, 8))
-        self._btn(btns, "Verificar condiciones", self.verificar_condiciones_carpeta, "#27AE60").pack(side=tk.LEFT, padx=(0, 8))
-        self.btn_cancelar_asrt = self._btn(btns, "Cancelar todo", self.cancelar, "#EB5757")
-        self.btn_cancelar_asrt.config(state=tk.DISABLED)
-        self.btn_cancelar_asrt.pack(side=tk.LEFT, padx=(0, 8))
-
-    def _crear_tab_hst(self):
-        frm = tk.Frame(self.tab_hst, bg="#FFFFFF")
-        frm.pack(fill=tk.BOTH, expand=True, padx=14, pady=14)
-        tk.Label(frm, text="Hardcode de subtitulos con NVIDIA NVENC o Intel QSV", bg="#FFFFFF", fg="#5C6B8A", font=("Segoe UI", 10)).pack(anchor=tk.W)
-        btns = tk.Frame(frm, bg="#FFFFFF")
-        btns.pack(anchor=tk.W, pady=12)
-        self.btn_hardcode = self._btn(btns, "Procesar hardcode", self.procesar_hardcode, "#56CCF2")
-        self.btn_hardcode.pack(side=tk.LEFT, padx=(0, 8))
-        self.btn_cancelar_hst = self._btn(btns, "Cancelar todo", self.cancelar, "#EB5757")
-        self.btn_cancelar_hst.config(state=tk.DISABLED)
-        self.btn_cancelar_hst.pack(side=tk.LEFT, padx=(0, 8))
-
-    def _crear_tab_tools(self):
-        frm = tk.Frame(self.tab_tools, bg="#FFFFFF")
-        frm.pack(fill=tk.BOTH, expand=True, padx=14, pady=14)
-        tk.Label(frm, text="Herramientas de mantenimiento", bg="#FFFFFF", fg="#5C6B8A", font=("Segoe UI", 10)).pack(anchor=tk.W)
-        btns = tk.Frame(frm, bg="#FFFFFF")
-        btns.pack(anchor=tk.W, pady=12)
-        self.btn_limpiar_meta = self._btn(btns, "Limpiar metadatos", self.limpiar_metadatos, "#F2C94C")
-        self.btn_limpiar_meta.pack(side=tk.LEFT, padx=(0, 8))
-        self.btn_cancelar = self._btn(btns, "Cancelar todo", self.cancelar, "#EB5757")
-        self.btn_cancelar.config(state=tk.DISABLED)
-        self.btn_cancelar.pack(side=tk.LEFT, padx=(0, 8))
 
     # -----------------------------
     # Utilidades comunes
@@ -616,10 +586,45 @@ class VPTSuite:
                         ok = msg[1]
                         fail = msg[2]
                         errores = msg[3] if len(msg) > 3 else []
+                        fue_cancelado = msg[4] if len(msg) > 4 else False
+                        archivos_exitosos = msg[5] if len(msg) > 5 else []
+                        
                         self.progress["value"] = 100
-                        self.progress_label.config(text=f"Completado | Exitos: {ok} | Fallos: {fail}")
+                        if fue_cancelado:
+                            self.progress_label.config(text=f"Cancelado | Exitos: {ok} | Fallos: {fail}")
+                        else:
+                            self.progress_label.config(text=f"Completado | Exitos: {ok} | Fallos: {fail}")
                         self._set_running_state(False)
-                        messagebox.showinfo("Completado", f"Proceso terminado.\n\nExitos: {ok}\nFallos: {fail}")
+
+                        # Actualizar la cola al finalizar: eliminar exitosos, mover fallidos a omitidos
+                        if hasattr(self, "archivos_en_proceso") and self.archivos_en_proceso:
+                            failed_files = {err[0] for err in errores if err[0] in self.archivos_en_proceso}
+                            all_items = list(self.lista.get(0, tk.END))
+                            self.lista.delete(0, tk.END)
+                            for f in all_items:
+                                if f in self.archivos_en_proceso:
+                                    if f in failed_files:
+                                        # Mover a la pestaña de omitidos
+                                        existentes = set(self.lista_omitidos.get(0, tk.END))
+                                        if f not in existentes:
+                                            self.lista_omitidos.insert(tk.END, f)
+                                    elif fue_cancelado:
+                                        # Si fue cancelado y no falló ni fue exitoso -> mantener en la cola principal
+                                        if f not in archivos_exitosos:
+                                            self.lista.insert(tk.END, f)
+                                    # Si no fue cancelado y no falló, fue exitoso y por lo tanto se elimina de la cola activa
+                                else:
+                                    # No se procesó en esta tanda -> mantener en la cola principal
+                                    self.lista.insert(tk.END, f)
+                            
+                            self.archivos_en_proceso = []
+                            # Si hubo fallos, enfocar la pestaña de omitidos para que el usuario los revise
+                            if failed_files:
+                                self.queue_notebook.select(self.tab_queue_skipped)
+
+                        title = "Proceso cancelado" if fue_cancelado else "Completado"
+                        desc = "El procesamiento fue cancelado por el usuario." if fue_cancelado else "Proceso terminado."
+                        messagebox.showinfo(title, f"{desc}\n\nExitos: {ok}\nFallos: {fail}")
                         
                         total = ok + fail
                         if total > 1 and fail > 0 and errores:
@@ -638,14 +643,64 @@ class VPTSuite:
         if self.procesando or not self.msg_queue.empty():
             self.root.after(100, self._actualizar_ui)
 
+    def _mover_a_omitidos(self, archivos):
+        archivos_set = set(archivos)
+        
+        # 1. Eliminar de la lista activa
+        all_items = list(self.lista.get(0, tk.END))
+        self.lista.delete(0, tk.END)
+        for f in all_items:
+            if f not in archivos_set:
+                self.lista.insert(tk.END, f)
+                
+        # 2. Agregar a la lista de omitidos
+        existentes = set(self.lista_omitidos.get(0, tk.END))
+        for f in archivos:
+            if f not in existentes:
+                self.lista_omitidos.insert(tk.END, f)
+                
+        # Cambiar el foco a la pestaña de omitidos para que el usuario los vea
+        self.queue_notebook.select(self.tab_queue_skipped)
+
+    def reincorporar_omitidos(self):
+        sel = self.lista_omitidos.curselection()
+        if not sel:
+            messagebox.showwarning("Sin seleccion", "Selecciona elementos en la lista de omitidos", parent=self.root)
+            return
+        
+        items_to_move = [self.lista_omitidos.get(i) for i in sel]
+        
+        for i in reversed(sel):
+            self.lista_omitidos.delete(i)
+            
+        existentes = set(self.lista.get(0, tk.END))
+        for item in items_to_move:
+            if item not in existentes:
+                self.lista.insert(tk.END, item)
+                
+        self.queue_notebook.select(self.tab_queue_active)
+
+    def eliminar_omitidos_seleccionados(self):
+        sel = self.lista_omitidos.curselection()
+        if not sel:
+            messagebox.showwarning("Sin seleccion", "Selecciona elementos en la lista de omitidos", parent=self.root)
+            return
+        for i in reversed(sel):
+            self.lista_omitidos.delete(i)
+
+    def limpiar_omitidos(self):
+        if self.lista_omitidos.size() == 0:
+            return
+        if messagebox.askyesno("Confirmar", "Deseas limpiar todos los archivos omitidos?", parent=self.root):
+            self.lista_omitidos.delete(0, tk.END)
+
     def _set_running_state(self, running):
-        self.btn_versiones.config(state=tk.DISABLED if running else tk.NORMAL)
-        self.btn_hardcode.config(state=tk.DISABLED if running else tk.NORMAL)
-        self.btn_limpiar_meta.config(state=tk.DISABLED if running else tk.NORMAL)
+        self.btn_procesar_cola.config(state=tk.DISABLED if running else tk.NORMAL)
+        self.btn_verificar.config(state=tk.DISABLED if running else tk.NORMAL)
+        self.btn_eliminar_meta.config(state=tk.DISABLED if running else tk.NORMAL)
+        self.btn_eliminar_subs.config(state=tk.DISABLED if running else tk.NORMAL)
         cancel_state = tk.NORMAL if running else tk.DISABLED
         self.btn_cancelar.config(state=cancel_state)
-        self.btn_cancelar_asrt.config(state=cancel_state)
-        self.btn_cancelar_hst.config(state=cancel_state)
 
     def _ffprobe_info(self, filepath):
         filepath = os.path.abspath(os.path.normpath(filepath))
@@ -877,6 +932,7 @@ class VPTSuite:
             )
             if ans is True:
                 self.cancelar_procesamiento = True
+                self.lista_omitidos.delete(0, tk.END)
                 resultado["ok"] = False
             elif ans is False:
                 resultado["ok"] = False
@@ -1035,6 +1091,7 @@ class VPTSuite:
             )
             if ans is True:
                 self.cancelar_procesamiento = True
+                self.lista_omitidos.delete(0, tk.END)
                 resultado["ok"] = False
             elif ans is False:
                 resultado["ok"] = False
@@ -1233,9 +1290,9 @@ class VPTSuite:
                         self._enviar_mensaje(f"     Audios: {audios_info}")
                         self._enviar_mensaje(f"     Subtítulos: {subs_info}")
 
-                        if self.var_limpiar_metadatos.get():
-                            self._enviar_mensaje(f"Limpiando metadatos de {output_path.name}...")
-                            self._limpiar_metadatos_archivo(output_path)
+                        if self.var_eliminar_metadatos.get():
+                            self._enviar_mensaje(f"Eliminando metadatos de {output_path.name}...")
+                            self._eliminar_metadatos_archivo(output_path)
                     else:
                         err_msg = f"Error de FFmpeg al codificar la versión hardsub (código de salida: {result.returncode})."
                         self._enviar_mensaje(err_msg)
@@ -1303,9 +1360,9 @@ class VPTSuite:
                     self._enviar_mensaje(f"     Audios: {audios_info}")
                     self._enviar_mensaje(f"     Subtítulos: {subs_info}")
 
-                    if self.var_limpiar_metadatos.get():
-                        self._enviar_mensaje(f"Limpiando metadatos de {output_path.name}...")
-                        self._limpiar_metadatos_archivo(output_path)
+                    if self.var_eliminar_metadatos.get():
+                        self._enviar_mensaje(f"Eliminando metadatos de {output_path.name}...")
+                        self._eliminar_metadatos_archivo(output_path)
                 else:
                     err_msg = f"Error de FFmpeg al copiar/remuxear la versión (código de salida: {result.returncode})."
                     self._enviar_mensaje(err_msg)
@@ -1314,7 +1371,7 @@ class VPTSuite:
 
         return ok, fail
 
-    def _eliminar_pistas_versiones(self, archivo, output_dir, errores):
+    def _eliminar_pistas_procesamiento(self, archivo, output_dir, errores):
         info = self._ffprobe_info(archivo)
         if info is None:
             err_msg = "No se pudo leer streams con ffprobe."
@@ -1338,7 +1395,7 @@ class VPTSuite:
 
         return self._generar_combinaciones(archivo, output_dir, info, combinaciones, errores)
 
-    def _thread_versiones(self, archivos, output_dir):
+    def _thread_procesar_cola(self, archivos, output_dir):
         self.procesando = True
         self.cancelar_procesamiento = False
         self.combinaciones_a_aplicar = {"combinaciones": [], "aplicar_a_todos": False}
@@ -1347,30 +1404,42 @@ class VPTSuite:
         fail = 0
         total = len(archivos)
         errores = []
-        self._enviar_mensaje("===== INICIO VERSIONES =====")
+        self._enviar_mensaje("===== INICIO PROCESAMIENTO =====")
 
+        fue_cancelado = False
+        archivos_exitosos = []
         for i, archivo in enumerate(archivos, 1):
             if self.cancelar_procesamiento:
                 self._enviar_mensaje("Cancelado por usuario")
+                fue_cancelado = True
                 break
             self.msg_queue.put(("PROGRESO", i, total))
             self._enviar_mensaje(f"Archivo {i}/{total}: {os.path.basename(archivo)}")
-            result = self._eliminar_pistas_versiones(archivo, output_dir, errores)
+            result = self._eliminar_pistas_procesamiento(archivo, output_dir, errores)
+            
+            if self.cancelar_procesamiento:
+                fue_cancelado = True
+                errores = [err for err in errores if err[0] != archivo]
+                break
+                
             if isinstance(result, tuple):
                 o, f = result
+                if f == 0 and o > 0:
+                    archivos_exitosos.append(archivo)
                 ok += o
                 fail += f
             elif result:
+                archivos_exitosos.append(archivo)
                 ok += 1
             else:
                 fail += 1
 
-        self._enviar_mensaje("===== FIN VERSIONES =====")
-        self.msg_queue.put(("FINALIZADO", ok, fail, errores))
+        self._enviar_mensaje("===== FIN PROCESAMIENTO =====")
+        self.msg_queue.put(("FINALIZADO", ok, fail, errores, fue_cancelado, archivos_exitosos))
         self.procesando = False
         self.cancelar_procesamiento = False
 
-    def procesar_versiones(self):
+    def procesar_cola(self):
         if self.procesando:
             messagebox.showwarning("En curso", "Ya hay un proceso activo")
             return
@@ -1384,18 +1453,19 @@ class VPTSuite:
             return
 
         def callback_iniciar(archivos_validos):
-            self._clear_log_and_progress("Preparando versiones...")
+            self.archivos_en_proceso = list(archivos_validos)
+            self._clear_log_and_progress("Preparando procesamiento de cola...")
             self._set_running_state(True)
-            threading.Thread(target=self._thread_versiones, args=(archivos_validos, output), daemon=True).start()
+            threading.Thread(target=self._thread_procesar_cola, args=(archivos_validos, output), daemon=True).start()
             self._actualizar_ui()
 
-        self.pre_verificar_cola("versiones", archivos, output, callback_iniciar)
+        self.pre_verificar_cola("procesar_cola", archivos, output, callback_iniciar)
 
     # -----------------------------
     # Pre-verificacion de la cola
     # -----------------------------
     def pre_verificar_cola(self, tipo_proceso, archivos, output_dir, callback_exito):
-        if tipo_proceso in ("versiones", "hardcode"):
+        if tipo_proceso in ("procesar_cola",):
             if not os.path.exists(output_dir):
                 try:
                     os.makedirs(output_dir, exist_ok=True)
@@ -1429,12 +1499,25 @@ class VPTSuite:
         resultados = []
 
         def worker():
+            patron_comun = None
+            if tipo_proceso == "procesar_cola" and len(archivos) > 1:
+                estadisticas = {}
+                for f in archivos:
+                    info = self._ffprobe_info(f)
+                    if info:
+                        aud = [s for s in info.get("streams", []) if s.get("codec_type") == "audio"]
+                        sub = [s for s in info.get("streams", []) if s.get("codec_type") == "subtitle"]
+                        patron = (len(aud), len(sub))
+                        estadisticas.setdefault(patron, []).append(f)
+                if estadisticas:
+                    patron_comun = max(estadisticas, key=lambda k: len(estadisticas[k]))
+
             for i, archivo in enumerate(archivos, 1):
                 status.config(text=f"{i}/{len(archivos)} - {os.path.basename(archivo)}")
                 pbar["value"] = i
                 progreso.update_idletasks()
 
-                res = self._validar_archivo_pre_verificacion(archivo, tipo_proceso, output_dir)
+                res = self._validar_archivo_pre_verificacion(archivo, tipo_proceso, output_dir, patron_comun)
                 resultados.append(res)
 
             progreso.destroy()
@@ -1442,7 +1525,7 @@ class VPTSuite:
 
         threading.Thread(target=worker, daemon=True).start()
 
-    def _validar_archivo_pre_verificacion(self, archivo, tipo_proceso, output_dir):
+    def _validar_archivo_pre_verificacion(self, archivo, tipo_proceso, output_dir, patron_comun=None):
         res = {
             "archivo": archivo,
             "basename": os.path.basename(archivo),
@@ -1457,10 +1540,10 @@ class VPTSuite:
             res["errors"].append("El archivo no existe o la ruta no es valida.")
             return res
 
-        if tipo_proceso == "metadatos":
+        if tipo_proceso in ("metadatos", "eliminar_subtitulos"):
             if not os.access(archivo, os.W_OK):
                 res["has_error"] = True
-                res["errors"].append("No se tiene permiso de escritura en el archivo original (necesario para limpiar metadatos).")
+                res["errors"].append("No se tiene permiso de escritura en el archivo original (necesario para modificar el archivo).")
 
         info = self._ffprobe_info(archivo)
         if info is None:
@@ -1477,11 +1560,6 @@ class VPTSuite:
             res["has_error"] = True
             res["errors"].append("El archivo no contiene ninguna pista de video.")
         
-        if tipo_proceso == "hardcode":
-            if not audio_streams:
-                res["has_error"] = True
-                res["errors"].append("No se encontro ninguna pista de audio (requerida para el hardcode).")
-
         if res["has_error"]:
             return res
 
@@ -1498,50 +1576,17 @@ class VPTSuite:
         if video_stream.get("color_transfer") in ("smpte2084", "arib-std-b67") or video_stream.get("color_primaries") == "bt2020":
             is_hdr = True
 
-        if tipo_proceso == "hardcode":
-            audio_idx = None
-            sub_idx = None
-            if self.pistas_config["aplicar_a_todos"]:
-                audio_idx = encontrar_pista_por_identificador(streams, self.pistas_config["audio_tag"], "audio")
-                sub_idx = encontrar_pista_por_identificador(streams, self.pistas_config["subtitle_tag"], "subtitle")
-            if audio_idx is None and audio_streams:
-                audio_idx = audio_streams[0]["index"]
-            if sub_idx is None and subtitle_streams:
-                sub_idx = subtitle_streams[0]["index"]
-
-            sufijo = ""
-            if self.var_sufijo_idiomas.get():
-                sufijo = "_hardcoded" if sub_idx is not None else "_nosub"
-
-            out_dir = Path(output_dir)
-            if self.var_subcarpeta.get():
-                patron = self._resolver_patron_subcarpeta(archivo, info, sufijo.strip("_") or "hardcode", [audio_idx] if audio_idx is not None else [], [sub_idx] if sub_idx is not None else [])
-                out_dir = out_dir / Path(patron)
-            out_file = out_dir / f"{Path(archivo).stem}{sufijo}.mp4"
-            if out_file.exists():
-                res["has_warning"] = True
-                res["warnings"].append(f"El archivo de destino ya existe y sera sobrescrito: {out_file.name}")
-
-            if is_10bit or is_hdr:
-                desc = []
-                if is_10bit:
-                    desc.append("10-bit")
-                if is_hdr:
-                    desc.append("HDR")
-                res["has_warning"] = True
-                res["warnings"].append(f"Video en formato {' y '.join(desc)} ({pix_fmt}). Al incrustar subtitulos con H.264 (8-bit) sin tone-mapping, la calidad visual y colores podrian verse lavados.")
-
-            bitmap_subs = [s for s in subtitle_streams if s.get("codec_name", "").lower() in BITMAP_SUB_CODECS]
-            if sub_idx is not None:
-                s_selected = next((st for st in subtitle_streams if st.get("index") == sub_idx), None)
-                if s_selected and s_selected.get("codec_name", "").lower() in BITMAP_SUB_CODECS:
+        if tipo_proceso == "procesar_cola":
+            if patron_comun is not None:
+                patron_actual = (len(audio_streams), len(subtitle_streams))
+                if patron_actual != patron_comun:
                     res["has_warning"] = True
-                    res["warnings"].append(f"El subtitulo seleccionado ({s_selected.get('codec_name')}) es de tipo imagen/bitmap, lo que provocara fallos en la extraccion de texto a ASS.")
-            elif subtitle_streams and len(bitmap_subs) == len(subtitle_streams):
-                res["has_warning"] = True
-                res["warnings"].append("Todos los subtitulos disponibles son bitmap (PGS/DVD/etc.). La incrustacion de subtitulos (hardsub) fallara si intentas extraerlos a ASS.")
+                    res["warnings"].append(
+                        f"El diseño de pistas ({patron_actual[0]} audios, {patron_actual[1]} subtítulos) "
+                        f"no coincide con el patrón común de la cola ({patron_comun[0]} audios, {patron_comun[1]} subtítulos). "
+                        f"Esto podría causar que falten pistas al aplicar la plantilla de combinaciones."
+                    )
 
-        elif tipo_proceso == "versiones":
             if self.combinaciones_a_aplicar["aplicar_a_todos"]:
                 combos = []
                 for c in self.combinaciones_a_aplicar["combinaciones"]:
@@ -1629,6 +1674,7 @@ class VPTSuite:
         y = self.root.winfo_y() + (self.root.winfo_height() - dialog.winfo_height()) // 2
         dialog.geometry(f"+{x}+{y}")
 
+        # 1. Header
         header = tk.Frame(dialog, bg="#1F2A44", height=70)
         header.pack(fill=tk.X)
         header.pack_propagate(False)
@@ -1643,12 +1689,107 @@ class VPTSuite:
         
         tk.Label(
             header,
-            text="Se han detectado posibles problemas antes de iniciar la cola de procesamiento.",
+            text="Se han detectado posibles problemas. Elige cómo deseas proceder con la cola de procesamiento.",
             font=("Segoe UI", 9),
             bg="#1F2A44",
             fg="#B0C4DE"
         ).pack(anchor=tk.W, padx=20)
 
+        # Pre-calculate counts to configure buttons and text correctly
+        num_errors = 0
+        num_warnings = 0
+        for r in resultados:
+            if r["has_error"]:
+                num_errors += len(r["errors"])
+            if r["has_warning"]:
+                num_warnings += len(r["warnings"])
+
+        # 2. Bottom Button Bar (Packed FIRST with side=BOTTOM to avoid expand issues)
+        btm = tk.Frame(dialog, bg="#F3F7FF")
+        btm.pack(side=tk.BOTTOM, fill=tk.X, padx=20, pady=(5, 15))
+
+        def cmd_continuar():
+            filtrados = [r["archivo"] for r in resultados if not r["has_error"]]
+            dialog.destroy()
+            
+            con_errores = [r["archivo"] for r in resultados if r["has_error"]]
+            if con_errores:
+                self.root.after(0, lambda: self._mover_a_omitidos(con_errores))
+
+            if filtrados:
+                callback_exito(filtrados)
+            else:
+                messagebox.showwarning("Cola vacia", "No quedan archivos validos para procesar tras excluir los errores.")
+
+        def cmd_omitir_problemas():
+            filtrados = [r["archivo"] for r in resultados if not r["has_error"] and not r["has_warning"]]
+            dialog.destroy()
+            
+            con_problemas = [r["archivo"] for r in resultados if r["has_error"] or r["has_warning"]]
+            if con_problemas:
+                self.root.after(0, lambda: self._mover_a_omitidos(con_problemas))
+
+            if filtrados:
+                callback_exito(filtrados)
+            else:
+                messagebox.showwarning("Cola vacia", "No quedan archivos limpios sin advertencias ni errores para procesar.")
+
+        def cmd_cancelar():
+            dialog.destroy()
+
+        # Pack buttons to the right
+        btn_cancelar = tk.Button(
+            btm,
+            text="Cancelar",
+            command=cmd_cancelar,
+            bg="#95A5A6",
+            fg="white",
+            activebackground="#7F8C8D",
+            activeforeground="white",
+            relief=tk.FLAT,
+            padx=15,
+            pady=6,
+            cursor="hand2",
+            font=("Segoe UI", 9, "bold")
+        )
+        btn_cancelar.pack(side=tk.RIGHT, padx=5)
+
+        if num_warnings > 0 or num_errors > 0:
+            btn_omitir = tk.Button(
+                btm,
+                text="Omitir archivos con problemas",
+                command=cmd_omitir_problemas,
+                bg="#F2994A",
+                fg="white",
+                activebackground="#D35400",
+                activeforeground="white",
+                relief=tk.FLAT,
+                padx=15,
+                pady=6,
+                cursor="hand2",
+                font=("Segoe UI", 9, "bold")
+            )
+            btn_omitir.pack(side=tk.RIGHT, padx=5)
+
+        archivos_sin_errores = [r for r in resultados if not r["has_error"]]
+        if archivos_sin_errores:
+            btn_continuar = tk.Button(
+                btm,
+                text="Agregar de todos modos",
+                command=cmd_continuar,
+                bg="#27AE60",
+                fg="white",
+                activebackground="#219653",
+                activeforeground="white",
+                relief=tk.FLAT,
+                padx=15,
+                pady=6,
+                cursor="hand2",
+                font=("Segoe UI", 9, "bold")
+            )
+            btn_continuar.pack(side=tk.RIGHT, padx=5)
+
+        # 3. Middle Body (Packed LAST with fill=BOTH, expand=True)
         body = tk.Frame(dialog, bg="#F3F7FF", padx=20, pady=15)
         body.pack(fill=tk.BOTH, expand=True)
 
@@ -1676,9 +1817,6 @@ class VPTSuite:
         log_text.tag_config("warn_lbl", font=("Segoe UI", 9, "bold"), foreground="#F2994A")
         log_text.tag_config("detail", font=("Segoe UI", 9), foreground="#4F4F4F", lmargin1=25, lmargin2=25, spacing3=4)
 
-        num_errors = 0
-        num_warnings = 0
-        
         for r in resultados:
             if not r["has_error"] and not r["has_warning"]:
                 continue
@@ -1686,12 +1824,10 @@ class VPTSuite:
             log_text.insert(tk.END, f"Archivo: {r['basename']}\n", "title")
             
             for err in r["errors"]:
-                num_errors += 1
                 log_text.insert(tk.END, "  [ERROR] ", "error_lbl")
                 log_text.insert(tk.END, f"{err}\n", "detail")
                 
             for warn in r["warnings"]:
-                num_warnings += 1
                 log_text.insert(tk.END, "  [ADVERTENCIA] ", "warn_lbl")
                 log_text.insert(tk.END, f"{warn}\n", "detail")
                 
@@ -1710,80 +1846,19 @@ class VPTSuite:
                 fg="#EB5757", 
                 anchor=tk.W
             )
-            lbl_err_note.pack(fill=tk.X, pady=(0, 10))
+            lbl_err_note.pack(fill=tk.X, pady=(0, 5))
 
-        btm = tk.Frame(dialog, bg="#F3F7FF")
-        btm.pack(side=tk.BOTTOM, fill=tk.X, padx=20, pady=(5, 15))
-
-        def cmd_continuar():
-            filtrados = [r["archivo"] for r in resultados if not r["has_error"]]
-            dialog.destroy()
-            if filtrados:
-                callback_exito(filtrados)
-            else:
-                messagebox.showwarning("Cola vacia", "No quedan archivos validos para procesar tras excluir los errores.")
-
-        def cmd_omitir_problemas():
-            filtrados = [r["archivo"] for r in resultados if not r["has_error"] and not r["has_warning"]]
-            dialog.destroy()
-            if filtrados:
-                callback_exito(filtrados)
-            else:
-                messagebox.showwarning("Cola vacia", "No quedan archivos limpios sin advertencias ni errores para procesar.")
-
-        def cmd_cancelar():
-            dialog.destroy()
-
-        btn_cancelar = tk.Button(
-            btm,
-            text="Cancelar",
-            command=cmd_cancelar,
-            bg="#95A5A6",
-            fg="white",
-            activebackground="#7F8C8D",
-            activeforeground="white",
-            relief=tk.FLAT,
-            padx=15,
-            pady=6,
-            cursor="hand2",
-            font=("Segoe UI", 9, "bold")
+        lbl_legend = tk.Label(
+            body,
+            text="• Agregar de todos modos: Procesa todos los archivos (incluyendo los que tienen advertencias).\n"
+                 "• Omitir archivos con problemas: Excluye los archivos con advertencias o errores y procesa el resto.",
+            font=("Segoe UI", 9, "italic"),
+            bg="#F3F7FF",
+            fg="#4F4F4F",
+            justify=tk.LEFT,
+            anchor=tk.W
         )
-        btn_cancelar.pack(side=tk.RIGHT, padx=5)
-
-        if num_warnings > 0 or num_errors > 0:
-            btn_omitir = tk.Button(
-                btm,
-                text="Omitir con advertencias/errores",
-                command=cmd_omitir_problemas,
-                bg="#F2994A",
-                fg="white",
-                activebackground="#D35400",
-                activeforeground="white",
-                relief=tk.FLAT,
-                padx=15,
-                pady=6,
-                cursor="hand2",
-                font=("Segoe UI", 9, "bold")
-            )
-            btn_omitir.pack(side=tk.RIGHT, padx=5)
-
-        archivos_sin_errores = [r for r in resultados if not r["has_error"]]
-        if archivos_sin_errores:
-            btn_continuar = tk.Button(
-                btm,
-                text="Continuar con el resto",
-                command=cmd_continuar,
-                bg="#27AE60",
-                fg="white",
-                activebackground="#219653",
-                activeforeground="white",
-                relief=tk.FLAT,
-                padx=15,
-                pady=6,
-                cursor="hand2",
-                font=("Segoe UI", 9, "bold")
-            )
-            btn_continuar.pack(side=tk.RIGHT, padx=5)
+        lbl_legend.pack(fill=tk.X, pady=(0, 10))
 
     # -----------------------------
     # Verificacion de condiciones
@@ -1892,319 +1967,12 @@ class VPTSuite:
             tx3.insert(tk.END, f"⚠️ {i['archivo']}\n   {i['razon']}\n\n")
         tx3.config(state=tk.DISABLED)
 
-    # -----------------------------
-    # Procesamiento Hardcode
-    # -----------------------------
-    def _obtener_pistas_hardcode(self, info, filename):
-        audio_streams = [s for s in info["streams"] if s.get("codec_type") == "audio"]
-        subtitle_streams = [s for s in info["streams"] if s.get("codec_type") == "subtitle"]
 
-        if self.pistas_config["aplicar_a_todos"]:
-            a_idx = encontrar_pista_por_identificador(info["streams"], self.pistas_config["audio_tag"], "audio")
-            s_idx = encontrar_pista_por_identificador(info["streams"], self.pistas_config["subtitle_tag"], "subtitle")
-            if a_idx is not None:
-                return a_idx, s_idx
-
-        if len(audio_streams) == 1 and len(subtitle_streams) == 1:
-            return audio_streams[0]["index"], subtitle_streams[0]["index"]
-
-        q = queue.Queue()
-        self.msg_queue.put(("SELECTOR_PISTAS", info, filename, q))
-
-        try:
-            r = q.get(timeout=300)
-        except queue.Empty:
-            return None, None
-
-        if not r.get("ok"):
-            return None, None
-
-        if r.get("aplicar_todos"):
-            self.pistas_config["audio_tag"] = r["audio"]
-            self.pistas_config["subtitle_tag"] = r["subtitle"]
-            self.pistas_config["aplicar_a_todos"] = True
-
-        a_idx = encontrar_pista_por_identificador(info["streams"], r["audio"], "audio")
-        s_idx = encontrar_pista_por_identificador(info["streams"], r["subtitle"], "subtitle")
-        return a_idx, s_idx
-
-    def _hardcode_subtitulo(self, input_file, output_dir, errores):
-        info = self._ffprobe_info(input_file)
-        if info is None:
-            errores.append((input_file, "No se pudo leer streams con ffprobe."))
-            return False
-
-        v = sum(1 for s in info["streams"] if s.get("codec_type") == "video")
-        if v < 1:
-            errores.append((input_file, "El archivo no contiene ninguna pista de video."))
-            return False
-        a = sum(1 for s in info["streams"] if s.get("codec_type") == "audio")
-        if a < 1:
-            errores.append((input_file, "El archivo no contiene ninguna pista de audio."))
-            return False
-
-        audio_idx, sub_idx = self._obtener_pistas_hardcode(info, input_file)
-        if audio_idx is None:
-            errores.append((input_file, "No se seleccionó o no se encontró la pista de audio."))
-            return False
-
-        audio_codec = None
-        for s in info["streams"]:
-            if s.get("codec_type") == "audio" and s.get("index") == audio_idx:
-                audio_codec = s.get("codec_name")
-                break
-
-        audio_settings = ["-c:a", "aac", "-b:a", "320k"] if audio_codec == "flac" else ["-c:a", "copy"]
-
-        out_dir = Path(output_dir)
-        sufijo = ""
-        if self.var_sufijo_idiomas.get():
-            sufijo = "_hardcoded" if sub_idx is not None else "_nosub"
-
-        if self.var_subcarpeta.get():
-            sub_indices = [sub_idx] if sub_idx is not None else []
-            patron = self._resolver_patron_subcarpeta(input_file, info, sufijo.strip("_") or "hardcode", [audio_idx], sub_indices)
-            out_dir = out_dir / Path(patron)
-
-        out_dir.mkdir(parents=True, exist_ok=True)
-        out_file = out_dir / f"{Path(input_file).stem}{sufijo}.mp4"
-
-        temp_subtitle_path = None
-
-        try:
-            try:
-                if sub_idx is not None:
-                    tf = tempfile.NamedTemporaryFile(mode="w", suffix=".ass", delete=False, encoding="utf-8")
-                    temp_subtitle_path = tf.name
-                    tf.close()
-
-                    extract = [self.ffmpeg_path, "-i", input_file, "-map", f"0:{sub_idx}", "-y", temp_subtitle_path]
-                    res = self._run_subprocess_cancellable(extract)
-                    if res.returncode != 0:
-                        errores.append((input_file, f"Fallo al extraer subtítulo {sub_idx} con FFmpeg."))
-                        return False
-
-                    esc = temp_subtitle_path.replace("\\", "/").replace(":", "\\:")
-                    video_filter = f"ass='{esc}',format=yuv420p"
-                else:
-                    video_filter = "format=yuv420p"
-
-                preset = obtener_preset_valido(self.preset_var.get(), self.gpu_acel_var.get())
-
-                decod_val = self.decod_hw_var.get().lower()
-                hwaccel_opts = []
-                if decod_val in ("d3d11va", "dxva2") and sub_idx is None:
-                    hwaccel_opts = ["-hwaccel", decod_val]
-
-                gpu = self.gpu_acel_var.get()
-
-                if gpu == "nvidia":
-                    cmd = [
-                        self.ffmpeg_path,
-                        *hwaccel_opts,
-                        "-i",
-                        input_file,
-                        "-map",
-                        "0:v:0",
-                        "-map",
-                        f"0:{audio_idx}",
-                        "-vf",
-                        video_filter,
-                        "-c:v",
-                        "h264_nvenc",
-                        "-preset",
-                        preset,
-                        "-profile:v",
-                        "high",
-                        "-rc",
-                        "vbr_hq",
-                        "-cq",
-                        "23",
-                        "-b:v",
-                        "5M",
-                        "-maxrate",
-                        "8M",
-                        "-bufsize",
-                        "10M",
-                        *audio_settings,
-                        "-movflags",
-                        "+faststart",
-                        "-y",
-                        str(out_file),
-                    ]
-                elif gpu == "intel":
-                    cmd = [
-                        self.ffmpeg_path,
-                        *hwaccel_opts,
-                        "-i",
-                        input_file,
-                        "-map",
-                        "0:v:0",
-                        "-map",
-                        f"0:{audio_idx}",
-                        "-vf",
-                        video_filter,
-                        "-c:v",
-                        "h264_qsv",
-                        "-preset",
-                        preset,
-                        "-global_quality",
-                        "23",
-                        "-b:v",
-                        "5M",
-                        "-maxrate",
-                        "8M",
-                        "-bufsize",
-                        "10M",
-                        *audio_settings,
-                        "-movflags",
-                        "+faststart",
-                        "-y",
-                        str(out_file),
-                    ]
-                else:  # amd
-                    cmd = [
-                        self.ffmpeg_path,
-                        *hwaccel_opts,
-                        "-i",
-                        input_file,
-                        "-map",
-                        "0:v:0",
-                        "-map",
-                        f"0:{audio_idx}",
-                        "-vf",
-                        video_filter,
-                        "-c:v",
-                        "h264_amf",
-                        "-quality",
-                        preset,
-                        "-rc",
-                        "vbr_peak",
-                        "-b:v",
-                        "5M",
-                        "-maxrate",
-                        "8M",
-                        "-bufsize",
-                        "10M",
-                        *audio_settings,
-                        "-movflags",
-                        "+faststart",
-                        "-y",
-                        str(out_file),
-                    ]
-
-                res = self._run_subprocess_cancellable(cmd)
-                if res.returncode == 0:
-                    s_aud = next((st for st in info["streams"] if st.get("index") == audio_idx), None)
-                    if s_aud:
-                        lang = s_aud.get("tags", {}).get("language", "und")
-                        title = s_aud.get("tags", {}).get("title", "")
-                        codec = s_aud.get("codec_name", "")
-                        audio_info = f"{lang} ({title} - {codec})" if title else f"{lang} ({codec})"
-                    else:
-                        audio_info = "Desconocido"
-
-                    if sub_idx is not None:
-                        s_sub = next((st for st in info["streams"] if st.get("index") == sub_idx), None)
-                        if s_sub:
-                            lang = s_sub.get("tags", {}).get("language", "und")
-                            title = s_sub.get("tags", {}).get("title", "")
-                            codec = s_sub.get("codec_name", "")
-                            sub_info = f"{lang} ({title} - {codec})" if title else f"{lang} ({codec})"
-                        else:
-                            sub_info = "Desconocido"
-                    else:
-                        sub_info = "Ninguno"
-
-                    ruta_completa = os.path.abspath(out_file)
-                    self._enviar_mensaje(f"  -> Archivo generado: {ruta_completa}")
-                    self._enviar_mensaje(f"     Audio: {audio_info}")
-                    self._enviar_mensaje(f"     Subtítulo (Incrustado): {sub_info}")
-
-                    if self.var_limpiar_metadatos.get():
-                        self._enviar_mensaje(f"Limpiando metadatos de {out_file.name}...")
-                        self._limpiar_metadatos_archivo(out_file)
-                    return True
-                else:
-                    errores.append((input_file, f"Fallo al codificar hardsub con ffmpeg (código de salida: {res.returncode})."))
-                    return False
-            except Exception as exc:
-                errores.append((input_file, f"Error inesperado durante hardcode: {exc}"))
-                return False
-
-        finally:
-            if temp_subtitle_path and os.path.exists(temp_subtitle_path):
-                try:
-                    os.unlink(temp_subtitle_path)
-                except Exception:
-                    pass
-
-    def _thread_hardcode(self, archivos, output_dir):
-        self.procesando = True
-        self.cancelar_procesamiento = False
-        self.nvenc_verificado = None
-        self.pistas_config = {"audio_tag": None, "subtitle_tag": None, "aplicar_a_todos": False}
-
-        ok = 0
-        fail = 0
-        total = len(archivos)
-        errores = []
-
-        gpu = self.gpu_acel_var.get()
-        is_ok = self.gpu_availability.get(gpu, True)
-        if not is_ok:
-            status = self.gpus_status.get(gpu, (False, "No disponible"))
-            err_msg = f"El codificador {gpu.upper()} no está disponible. Detalle: {status[1]}"
-            self._enviar_mensaje(f"Error: {err_msg}")
-            errores.append(("General", err_msg))
-            self.msg_queue.put(("FINALIZADO", 0, total, errores))
-            self.procesando = False
-            return
-
-        self._enviar_mensaje("===== INICIO HARDCODE =====")
-        for i, archivo in enumerate(archivos, 1):
-            if self.cancelar_procesamiento:
-                self._enviar_mensaje("Cancelado por usuario")
-                break
-            self.msg_queue.put(("PROGRESO", i, total))
-            self._enviar_mensaje(f"Archivo {i}/{total}: {os.path.basename(archivo)}")
-            if self._hardcode_subtitulo(archivo, output_dir, errores):
-                ok += 1
-            else:
-                fail += 1
-
-        self._enviar_mensaje("===== FIN HARDCODE =====")
-        self.msg_queue.put(("FINALIZADO", ok, fail, errores))
-        self.procesando = False
-        self.cancelar_procesamiento = False
-
-    def procesar_hardcode(self):
-        if self.procesando:
-            messagebox.showwarning("En curso", "Ya hay un proceso activo")
-            return
-
-        output = self.salida_var.get().strip()
-        if not output:
-            messagebox.showerror("Error", "Selecciona un directorio de salida")
-            return
-
-        archivos = list(self.lista.get(0, tk.END))
-        if not archivos:
-            messagebox.showerror("Error", "Agrega al menos un video")
-            return
-
-        def callback_iniciar(archivos_validos):
-            self._clear_log_and_progress("Preparando hardcode...")
-            self._set_running_state(True)
-            threading.Thread(target=self._thread_hardcode, args=(archivos_validos, output), daemon=True).start()
-            self._actualizar_ui()
-
-        self.pre_verificar_cola("hardcode", archivos, output, callback_iniciar)
 
     # -----------------------------
     # Mantenimiento
     # -----------------------------
-    def _limpiar_metadatos_archivo(self, video_file, errores=None):
+    def _eliminar_metadatos_archivo(self, video_file, errores=None):
         video_file = Path(video_file)
         temp_output = video_file.parent / f"temp_{video_file.name}"
         cmd = [
@@ -2234,7 +2002,7 @@ class VPTSuite:
             res = self._run_subprocess_cancellable(cmd, stdout_devnull=True)
             if res.returncode != 0:
                 if errores is not None:
-                    errores.append((str(video_file), f"Fallo al ejecutar ffmpeg para limpiar metadatos (código de salida: {res.returncode})."))
+                    errores.append((str(video_file), f"Fallo al ejecutar ffmpeg para eliminar metadatos (código de salida: {res.returncode})."))
                 return False
             if temp_output.exists():
                 video_file.unlink()
@@ -2249,7 +2017,7 @@ class VPTSuite:
             return False
         except Exception as exc:
             if errores is not None:
-                errores.append((str(video_file), f"Error inesperado al limpiar metadatos: {exc}"))
+                errores.append((str(video_file), f"Error inesperado al eliminar metadatos: {exc}"))
             return False
         finally:
             if temp_output.exists():
@@ -2258,7 +2026,7 @@ class VPTSuite:
                 except Exception:
                     pass
 
-    def _thread_limpiar_metadatos(self, archivos):
+    def _thread_eliminar_metadatos(self, archivos):
         self.procesando = True
         self.cancelar_procesamiento = False
 
@@ -2266,25 +2034,36 @@ class VPTSuite:
         fail = 0
         total = len(archivos)
         errores = []
-        self._enviar_mensaje("===== INICIO LIMPIEZA METADATOS =====")
+        self._enviar_mensaje("===== INICIO ELIMINACIÓN METADATOS =====")
 
+        fue_cancelado = False
+        archivos_exitosos = []
         for i, archivo in enumerate(archivos, 1):
             if self.cancelar_procesamiento:
                 self._enviar_mensaje("Cancelado por usuario")
+                fue_cancelado = True
                 break
             self.msg_queue.put(("PROGRESO", i, total))
-            self._enviar_mensaje(f"Limpiando {i}/{total}: {os.path.basename(archivo)}")
-            if self._limpiar_metadatos_archivo(archivo, errores):
+            self._enviar_mensaje(f"Eliminando metadatos {i}/{total}: {os.path.basename(archivo)}")
+            result = self._eliminar_metadatos_archivo(archivo, errores)
+            
+            if self.cancelar_procesamiento:
+                fue_cancelado = True
+                errores = [err for err in errores if err[0] != archivo]
+                break
+                
+            if result:
+                archivos_exitosos.append(archivo)
                 ok += 1
             else:
                 fail += 1
 
-        self._enviar_mensaje("===== FIN LIMPIEZA METADATOS =====")
-        self.msg_queue.put(("FINALIZADO", ok, fail, errores))
+        self._enviar_mensaje("===== FIN ELIMINACIÓN METADATOS =====")
+        self.msg_queue.put(("FINALIZADO", ok, fail, errores, fue_cancelado, archivos_exitosos))
         self.procesando = False
         self.cancelar_procesamiento = False
 
-    def limpiar_metadatos(self):
+    def eliminar_metadatos(self):
         if self.procesando:
             messagebox.showwarning("En curso", "Ya hay un proceso activo")
             return
@@ -2295,19 +2074,127 @@ class VPTSuite:
 
         confirm = messagebox.askyesno(
             "Confirmar",
-            f"Se limpiaran metadatos en {len(archivos)} archivo(s).\nEsta accion modifica originales.",
+            f"Se eliminarán los metadatos en {len(archivos)} archivo(s).\nEsta acción modifica los originales.",
             icon="warning",
         )
         if not confirm:
             return
 
         def callback_iniciar(archivos_validos):
-            self._clear_log_and_progress("Preparando limpieza de metadatos...")
+            self.archivos_en_proceso = list(archivos_validos)
+            self._clear_log_and_progress("Preparando eliminación de metadatos...")
             self._set_running_state(True)
-            threading.Thread(target=self._thread_limpiar_metadatos, args=(archivos_validos,), daemon=True).start()
+            threading.Thread(target=self._thread_eliminar_metadatos, args=(archivos_validos,), daemon=True).start()
             self._actualizar_ui()
 
-        self.pre_verificar_cola("metadatos", archivos, None, callback_iniciar)
+        self.pre_verificar_cola("eliminar_metadatos", archivos, None, callback_iniciar)
+
+    def _eliminar_subtitulos_archivo(self, video_file, errores=None):
+        video_file = Path(video_file)
+        temp_output = video_file.parent / f"temp_{video_file.name}"
+        cmd = [
+            self.ffmpeg_path,
+            "-i",
+            str(video_file),
+            "-map",
+            "0:v",
+            "-map",
+            "0:a?",
+            "-c",
+            "copy",
+            "-y",
+            str(temp_output),
+        ]
+        try:
+            res = self._run_subprocess_cancellable(cmd, stdout_devnull=True)
+            if res.returncode != 0:
+                if errores is not None:
+                    errores.append((str(video_file), f"Fallo al ejecutar ffmpeg para eliminar subtítulos (código de salida: {res.returncode})."))
+                return False
+            if temp_output.exists():
+                video_file.unlink()
+                ext = video_file.suffix
+                if ext != ext.lower():
+                    temp_output.rename(video_file.with_suffix(ext.lower()))
+                else:
+                    temp_output.rename(video_file)
+                return True
+            if errores is not None:
+                errores.append((str(video_file), "No se pudo crear o renombrar el archivo temporal modificado."))
+            return False
+        except Exception as exc:
+            if errores is not None:
+                errores.append((str(video_file), f"Error inesperado al eliminar subtítulos: {exc}"))
+            return False
+        finally:
+            if temp_output.exists():
+                try:
+                    temp_output.unlink()
+                except Exception:
+                    pass
+
+    def _thread_eliminar_subtitulos(self, archivos):
+        self.procesando = True
+        self.cancelar_procesamiento = False
+
+        ok = 0
+        fail = 0
+        total = len(archivos)
+        errores = []
+        self._enviar_mensaje("===== INICIO ELIMINACIÓN DE SUBTÍTULOS =====")
+
+        fue_cancelado = False
+        archivos_exitosos = []
+        for i, archivo in enumerate(archivos, 1):
+            if self.cancelar_procesamiento:
+                self._enviar_mensaje("Cancelado por usuario")
+                fue_cancelado = True
+                break
+            self.msg_queue.put(("PROGRESO", i, total))
+            self._enviar_mensaje(f"Eliminando subs {i}/{total}: {os.path.basename(archivo)}")
+            result = self._eliminar_subtitulos_archivo(archivo, errores)
+            
+            if self.cancelar_procesamiento:
+                fue_cancelado = True
+                errores = [err for err in errores if err[0] != archivo]
+                break
+                
+            if result:
+                archivos_exitosos.append(archivo)
+                ok += 1
+            else:
+                fail += 1
+
+        self._enviar_mensaje("===== FIN ELIMINACIÓN DE SUBTÍTULOS =====")
+        self.msg_queue.put(("FINALIZADO", ok, fail, errores, fue_cancelado, archivos_exitosos))
+        self.procesando = False
+        self.cancelar_procesamiento = False
+
+    def eliminar_subtitulos(self):
+        if self.procesando:
+            messagebox.showwarning("En curso", "Ya hay un proceso activo")
+            return
+        archivos = list(self.lista.get(0, tk.END))
+        if not archivos:
+            messagebox.showerror("Error", "Agrega al menos un video")
+            return
+
+        confirm = messagebox.askyesno(
+            "Confirmar",
+            f"Se eliminarán todos los subtítulos de {len(archivos)} archivo(s).\nEsta acción modifica los archivos originales.",
+            icon="warning",
+        )
+        if not confirm:
+            return
+
+        def callback_iniciar(archivos_validos):
+            self.archivos_en_proceso = list(archivos_validos)
+            self._clear_log_and_progress("Preparando eliminación de subtítulos...")
+            self._set_running_state(True)
+            threading.Thread(target=self._thread_eliminar_subtitulos, args=(archivos_validos,), daemon=True).start()
+            self._actualizar_ui()
+
+        self.pre_verificar_cola("eliminar_subtitulos", archivos, None, callback_iniciar)
 
     # -----------------------------
     # Acciones UI
@@ -2679,8 +2566,6 @@ class VPTSuite:
                 except Exception:
                     pass
             self.btn_cancelar.config(state=tk.DISABLED)
-            self.btn_cancelar_asrt.config(state=tk.DISABLED)
-            self.btn_cancelar_hst.config(state=tk.DISABLED)
             self._enviar_mensaje("Solicitud de cancelacion enviada...")
 
     def _run_subprocess_cancellable(self, cmd, stdout_devnull=False):
@@ -3048,6 +2933,27 @@ class VPTSuite:
     def salir_aplicacion(self):
         if self.procesando and not messagebox.askyesno("Proceso activo", "Hay un proceso en curso. Salir de todos modos?"):
             return
+            
+        # Preguntar si guardar la cola actual al cerrar
+        has_items = self.lista.size() > 0 or self.lista_omitidos.size() > 0
+        if has_items:
+            guardar = messagebox.askyesno(
+                "Guardar cola",
+                "¿Deseas guardar la lista actual de videos y omitidos para la próxima sesión?",
+                parent=self.root
+            )
+            if guardar:
+                if not self.config_ini.has_section("Queue"):
+                    self.config_ini.add_section("Queue")
+                self.config_ini.set("Queue", "lista", json.dumps(list(self.lista.get(0, tk.END))))
+                self.config_ini.set("Queue", "lista_omitidos", json.dumps(list(self.lista_omitidos.get(0, tk.END))))
+            else:
+                if self.config_ini.has_section("Queue"):
+                    self.config_ini.remove_section("Queue")
+        else:
+            if self.config_ini.has_section("Queue"):
+                self.config_ini.remove_section("Queue")
+
         self._actualizar_configuracion()
         self.root.destroy()
 
