@@ -2256,6 +2256,9 @@ class VPTSuite:
             },
             "Extraer Capítulo (Capitulo 261 - Nombre -> 261 Nombre.mp4)": {
                 "patron": "{name}", "buscar": r"Capitulo (\d+) - (.*)", "reemplazar": r"\1 \2", "regex": True
+            },
+            "Extraer Número de Episodio (01x03, s01e01, E09 -> 03.mp4...)": {
+                "patron": "{name}", "buscar": r".*(?:s\d+e|\d+x|\b[eE]\s*|\bEp\s*|\bCapitulo\s*)(\d+).*", "reemplazar": r"\1", "regex": True
             }
         }
 
@@ -2511,7 +2514,7 @@ class VPTSuite:
                             py_reemplazar = reemplazar
                             py_reemplazar = re.sub(r'\$(\d+)', lambda m: f'\\g<{m.group(1)}>', py_reemplazar)
                             py_reemplazar = re.sub(r'\\(\d+)', lambda m: f'\\g<{m.group(1)}>', py_reemplazar)
-                            stem = re.sub(buscar, py_reemplazar, stem)
+                            stem = re.sub(buscar, py_reemplazar, stem, flags=re.IGNORECASE)
                         except Exception:
                             # In case of invalid regex, keep stem unchanged
                             pass
