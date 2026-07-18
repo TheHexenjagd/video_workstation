@@ -613,11 +613,17 @@ class VPTSuite:
                         self.progress["value"] = pct
                         self.progress_label.config(text=f"Procesando {actual}/{total} ({pct:.1f}%)")
                     elif msg[0] == "FINALIZADO":
-                        _, ok, fail = msg
+                        ok = msg[1]
+                        fail = msg[2]
+                        errores = msg[3] if len(msg) > 3 else []
                         self.progress["value"] = 100
                         self.progress_label.config(text=f"Completado | Exitos: {ok} | Fallos: {fail}")
                         self._set_running_state(False)
                         messagebox.showinfo("Completado", f"Proceso terminado.\n\nExitos: {ok}\nFallos: {fail}")
+                        
+                        total = ok + fail
+                        if total > 1 and fail > 0 and errores:
+                            self._mostrar_resumen_errores(errores)
                     elif msg[0] == "SELECTOR_PISTAS":
                         _, info, filename, q = msg
                         q.put(self._mostrar_selector_pistas(info, filename))
@@ -811,6 +817,8 @@ class VPTSuite:
         dialog.geometry("740x620")
         dialog.transient(self.root)
         dialog.grab_set()
+        self.root.attributes('-disabled', True)
+        dialog.bind("<Destroy>", lambda e: self.root.attributes('-disabled', False) if (e.widget == dialog and self.root.winfo_exists()) else None)
 
         resultado = {"ok": False, "audio": None, "subtitle": "NINGUNO", "aplicar_todos": False}
 
@@ -888,6 +896,8 @@ class VPTSuite:
         dialog.geometry("900x620")
         dialog.transient(self.root)
         dialog.grab_set()
+        self.root.attributes('-disabled', True)
+        dialog.bind("<Destroy>", lambda e: self.root.attributes('-disabled', False) if (e.widget == dialog and self.root.winfo_exists()) else None)
 
         resultado = {"ok": False, "combinaciones": [], "aplicar_todos": False}
         combinaciones = []
@@ -1090,7 +1100,7 @@ class VPTSuite:
 
         return r["combinaciones"]
 
-    def _generar_combinaciones(self, input_file, output_dir, info, combinaciones):
+    def _generar_combinaciones(self, input_file, output_dir, info, combinaciones, errores):
         subtitle_streams = [s for s in info["streams"] if s.get("codec_type") == "subtitle"]
         video_stem = Path(input_file).stem
 
@@ -1119,7 +1129,9 @@ class VPTSuite:
                 is_ok = self.gpu_availability.get(gpu, True)
                 if not is_ok:
                     status = self.gpus_status.get(gpu, (False, "No disponible"))
-                    self._enviar_mensaje(f"Error: El codificador {gpu.upper()} no está disponible. Detalle: {status[1]}. Saltando hardsub.")
+                    err_msg = f"El codificador {gpu.upper()} no está disponible. Detalle: {status[1]}"
+                    self._enviar_mensaje(f"Error: {err_msg}. Saltando hardsub.")
+                    errores.append((input_file, f"Versión '{label}': {err_msg}"))
                     fail += 1
                     continue
 
@@ -1136,6 +1148,9 @@ class VPTSuite:
                         extract = [self.ffmpeg_path, "-i", input_file, "-map", f"0:{sub_idx}", "-y", temp_subtitle_path]
                         res = self._run_subprocess_cancellable(extract)
                         if res.returncode != 0:
+                            err_msg = f"Fallo al extraer subtítulo de la versión '{label}'."
+                            self._enviar_mensaje(err_msg)
+                            errores.append((input_file, f"Versión '{label}': {err_msg}"))
                             fail += 1
                             continue
                             
@@ -1222,8 +1237,10 @@ class VPTSuite:
                             self._enviar_mensaje(f"Limpiando metadatos de {output_path.name}...")
                             self._limpiar_metadatos_archivo(output_path)
                     else:
+                        err_msg = f"Error de FFmpeg al codificar la versión hardsub (código de salida: {result.returncode})."
+                        self._enviar_mensaje(err_msg)
+                        errores.append((input_file, f"Versión '{label}': {err_msg}"))
                         fail += 1
-                        self._enviar_mensaje("Error al generar version hardsub")
                 finally:
                     if temp_subtitle_path and os.path.exists(temp_subtitle_path):
                         try:
@@ -1290,26 +1307,36 @@ class VPTSuite:
                         self._enviar_mensaje(f"Limpiando metadatos de {output_path.name}...")
                         self._limpiar_metadatos_archivo(output_path)
                 else:
+                    err_msg = f"Error de FFmpeg al copiar/remuxear la versión (código de salida: {result.returncode})."
+                    self._enviar_mensaje(err_msg)
+                    errores.append((input_file, f"Versión '{label}': {err_msg}"))
                     fail += 1
-                    self._enviar_mensaje("Error al generar version")
 
         return ok, fail
 
-    def _eliminar_pistas_versiones(self, archivo, output_dir):
+    def _eliminar_pistas_versiones(self, archivo, output_dir, errores):
         info = self._ffprobe_info(archivo)
         if info is None:
-            self._enviar_mensaje("No se pudo leer streams")
+            err_msg = "No se pudo leer streams con ffprobe."
+            self._enviar_mensaje(err_msg)
+            errores.append((archivo, err_msg))
             return False
 
         v = sum(1 for s in info["streams"] if s.get("codec_type") == "video")
         if v < 1:
+            err_msg = "El archivo no contiene ninguna pista de video."
+            self._enviar_mensaje(err_msg)
+            errores.append((archivo, err_msg))
             return False
 
         combinaciones = self._obtener_combinaciones_a_generar(info, archivo)
         if combinaciones is None:
+            err_msg = "Se canceló la selección de combinaciones."
+            self._enviar_mensaje(err_msg)
+            errores.append((archivo, err_msg))
             return False
 
-        return self._generar_combinaciones(archivo, output_dir, info, combinaciones)
+        return self._generar_combinaciones(archivo, output_dir, info, combinaciones, errores)
 
     def _thread_versiones(self, archivos, output_dir):
         self.procesando = True
@@ -1319,6 +1346,7 @@ class VPTSuite:
         ok = 0
         fail = 0
         total = len(archivos)
+        errores = []
         self._enviar_mensaje("===== INICIO VERSIONES =====")
 
         for i, archivo in enumerate(archivos, 1):
@@ -1327,7 +1355,7 @@ class VPTSuite:
                 break
             self.msg_queue.put(("PROGRESO", i, total))
             self._enviar_mensaje(f"Archivo {i}/{total}: {os.path.basename(archivo)}")
-            result = self._eliminar_pistas_versiones(archivo, output_dir)
+            result = self._eliminar_pistas_versiones(archivo, output_dir, errores)
             if isinstance(result, tuple):
                 o, f = result
                 ok += o
@@ -1338,7 +1366,7 @@ class VPTSuite:
                 fail += 1
 
         self._enviar_mensaje("===== FIN VERSIONES =====")
-        self.msg_queue.put(("FINALIZADO", ok, fail))
+        self.msg_queue.put(("FINALIZADO", ok, fail, errores))
         self.procesando = False
         self.cancelar_procesamiento = False
 
@@ -1383,6 +1411,8 @@ class VPTSuite:
         progreso.geometry("500x140")
         progreso.transient(self.root)
         progreso.grab_set()
+        self.root.attributes('-disabled', True)
+        progreso.bind("<Destroy>", lambda e: self.root.attributes('-disabled', False) if (e.widget == progreso and self.root.winfo_exists()) else None)
 
         progreso.update_idletasks()
         x = self.root.winfo_x() + (self.root.winfo_width() - progreso.winfo_width()) // 2
@@ -1590,6 +1620,8 @@ class VPTSuite:
         dialog.geometry("820x600")
         dialog.transient(self.root)
         dialog.grab_set()
+        self.root.attributes('-disabled', True)
+        dialog.bind("<Destroy>", lambda e: self.root.attributes('-disabled', False) if (e.widget == dialog and self.root.winfo_exists()) else None)
         dialog.configure(bg="#F3F7FF")
 
         dialog.update_idletasks()
@@ -1771,6 +1803,8 @@ class VPTSuite:
         progreso.geometry("500x140")
         progreso.transient(self.root)
         progreso.grab_set()
+        self.root.attributes('-disabled', True)
+        progreso.bind("<Destroy>", lambda e: self.root.attributes('-disabled', False) if (e.widget == progreso and self.root.winfo_exists()) else None)
 
         lbl = tk.Label(progreso, text="Analizando archivos...", font=("Segoe UI", 10, "bold"))
         lbl.pack(pady=(18, 8))
@@ -1894,18 +1928,24 @@ class VPTSuite:
         s_idx = encontrar_pista_por_identificador(info["streams"], r["subtitle"], "subtitle")
         return a_idx, s_idx
 
-    def _hardcode_subtitulo(self, input_file, output_dir):
+    def _hardcode_subtitulo(self, input_file, output_dir, errores):
         info = self._ffprobe_info(input_file)
         if info is None:
+            errores.append((input_file, "No se pudo leer streams con ffprobe."))
             return False
 
         v = sum(1 for s in info["streams"] if s.get("codec_type") == "video")
+        if v < 1:
+            errores.append((input_file, "El archivo no contiene ninguna pista de video."))
+            return False
         a = sum(1 for s in info["streams"] if s.get("codec_type") == "audio")
-        if v < 1 or a < 1:
+        if a < 1:
+            errores.append((input_file, "El archivo no contiene ninguna pista de audio."))
             return False
 
         audio_idx, sub_idx = self._obtener_pistas_hardcode(info, input_file)
         if audio_idx is None:
+            errores.append((input_file, "No se seleccionó o no se encontró la pista de audio."))
             return False
 
         audio_codec = None
@@ -1932,158 +1972,165 @@ class VPTSuite:
         temp_subtitle_path = None
 
         try:
-            if sub_idx is not None:
-                tf = tempfile.NamedTemporaryFile(mode="w", suffix=".ass", delete=False, encoding="utf-8")
-                temp_subtitle_path = tf.name
-                tf.close()
-
-                extract = [self.ffmpeg_path, "-i", input_file, "-map", f"0:{sub_idx}", "-y", temp_subtitle_path]
-                res = self._run_subprocess_cancellable(extract)
-                if res.returncode != 0:
-                    return False
-
-                esc = temp_subtitle_path.replace("\\", "/").replace(":", "\\:")
-                video_filter = f"ass='{esc}',format=yuv420p"
-            else:
-                video_filter = "format=yuv420p"
-
-            preset = obtener_preset_valido(self.preset_var.get(), self.gpu_acel_var.get())
-
-            decod_val = self.decod_hw_var.get().lower()
-            hwaccel_opts = []
-            if decod_val in ("d3d11va", "dxva2") and sub_idx is None:
-                hwaccel_opts = ["-hwaccel", decod_val]
-
-            gpu = self.gpu_acel_var.get()
-
-            if gpu == "nvidia":
-                cmd = [
-                    self.ffmpeg_path,
-                    *hwaccel_opts,
-                    "-i",
-                    input_file,
-                    "-map",
-                    "0:v:0",
-                    "-map",
-                    f"0:{audio_idx}",
-                    "-vf",
-                    video_filter,
-                    "-c:v",
-                    "h264_nvenc",
-                    "-preset",
-                    preset,
-                    "-profile:v",
-                    "high",
-                    "-rc",
-                    "vbr_hq",
-                    "-cq",
-                    "23",
-                    "-b:v",
-                    "5M",
-                    "-maxrate",
-                    "8M",
-                    "-bufsize",
-                    "10M",
-                    *audio_settings,
-                    "-movflags",
-                    "+faststart",
-                    "-y",
-                    str(out_file),
-                ]
-            elif gpu == "intel":
-                cmd = [
-                    self.ffmpeg_path,
-                    *hwaccel_opts,
-                    "-i",
-                    input_file,
-                    "-map",
-                    "0:v:0",
-                    "-map",
-                    f"0:{audio_idx}",
-                    "-vf",
-                    video_filter,
-                    "-c:v",
-                    "h264_qsv",
-                    "-preset",
-                    preset,
-                    "-global_quality",
-                    "23",
-                    "-b:v",
-                    "5M",
-                    "-maxrate",
-                    "8M",
-                    "-bufsize",
-                    "10M",
-                    *audio_settings,
-                    "-movflags",
-                    "+faststart",
-                    "-y",
-                    str(out_file),
-                ]
-            else:  # amd
-                cmd = [
-                    self.ffmpeg_path,
-                    *hwaccel_opts,
-                    "-i",
-                    input_file,
-                    "-map",
-                    "0:v:0",
-                    "-map",
-                    f"0:{audio_idx}",
-                    "-vf",
-                    video_filter,
-                    "-c:v",
-                    "h264_amf",
-                    "-quality",
-                    preset,
-                    "-rc",
-                    "vbr_peak",
-                    "-b:v",
-                    "5M",
-                    "-maxrate",
-                    "8M",
-                    "-bufsize",
-                    "10M",
-                    *audio_settings,
-                    "-movflags",
-                    "+faststart",
-                    "-y",
-                    str(out_file),
-                ]
-
-            res = self._run_subprocess_cancellable(cmd)
-            if res.returncode == 0:
-                s_aud = next((st for st in info["streams"] if st.get("index") == audio_idx), None)
-                if s_aud:
-                    lang = s_aud.get("tags", {}).get("language", "und")
-                    title = s_aud.get("tags", {}).get("title", "")
-                    codec = s_aud.get("codec_name", "")
-                    audio_info = f"{lang} ({title} - {codec})" if title else f"{lang} ({codec})"
-                else:
-                    audio_info = "Desconocido"
-
+            try:
                 if sub_idx is not None:
-                    s_sub = next((st for st in info["streams"] if st.get("index") == sub_idx), None)
-                    if s_sub:
-                        lang = s_sub.get("tags", {}).get("language", "und")
-                        title = s_sub.get("tags", {}).get("title", "")
-                        codec = s_sub.get("codec_name", "")
-                        sub_info = f"{lang} ({title} - {codec})" if title else f"{lang} ({codec})"
-                    else:
-                        sub_info = "Desconocido"
+                    tf = tempfile.NamedTemporaryFile(mode="w", suffix=".ass", delete=False, encoding="utf-8")
+                    temp_subtitle_path = tf.name
+                    tf.close()
+
+                    extract = [self.ffmpeg_path, "-i", input_file, "-map", f"0:{sub_idx}", "-y", temp_subtitle_path]
+                    res = self._run_subprocess_cancellable(extract)
+                    if res.returncode != 0:
+                        errores.append((input_file, f"Fallo al extraer subtítulo {sub_idx} con FFmpeg."))
+                        return False
+
+                    esc = temp_subtitle_path.replace("\\", "/").replace(":", "\\:")
+                    video_filter = f"ass='{esc}',format=yuv420p"
                 else:
-                    sub_info = "Ninguno"
+                    video_filter = "format=yuv420p"
 
-                ruta_completa = os.path.abspath(out_file)
-                self._enviar_mensaje(f"  -> Archivo generado: {ruta_completa}")
-                self._enviar_mensaje(f"     Audio: {audio_info}")
-                self._enviar_mensaje(f"     Subtítulo (Incrustado): {sub_info}")
+                preset = obtener_preset_valido(self.preset_var.get(), self.gpu_acel_var.get())
 
-                if self.var_limpiar_metadatos.get():
-                    self._enviar_mensaje(f"Limpiando metadatos de {out_file.name}...")
-                    self._limpiar_metadatos_archivo(out_file)
-                return True
-            return False
+                decod_val = self.decod_hw_var.get().lower()
+                hwaccel_opts = []
+                if decod_val in ("d3d11va", "dxva2") and sub_idx is None:
+                    hwaccel_opts = ["-hwaccel", decod_val]
+
+                gpu = self.gpu_acel_var.get()
+
+                if gpu == "nvidia":
+                    cmd = [
+                        self.ffmpeg_path,
+                        *hwaccel_opts,
+                        "-i",
+                        input_file,
+                        "-map",
+                        "0:v:0",
+                        "-map",
+                        f"0:{audio_idx}",
+                        "-vf",
+                        video_filter,
+                        "-c:v",
+                        "h264_nvenc",
+                        "-preset",
+                        preset,
+                        "-profile:v",
+                        "high",
+                        "-rc",
+                        "vbr_hq",
+                        "-cq",
+                        "23",
+                        "-b:v",
+                        "5M",
+                        "-maxrate",
+                        "8M",
+                        "-bufsize",
+                        "10M",
+                        *audio_settings,
+                        "-movflags",
+                        "+faststart",
+                        "-y",
+                        str(out_file),
+                    ]
+                elif gpu == "intel":
+                    cmd = [
+                        self.ffmpeg_path,
+                        *hwaccel_opts,
+                        "-i",
+                        input_file,
+                        "-map",
+                        "0:v:0",
+                        "-map",
+                        f"0:{audio_idx}",
+                        "-vf",
+                        video_filter,
+                        "-c:v",
+                        "h264_qsv",
+                        "-preset",
+                        preset,
+                        "-global_quality",
+                        "23",
+                        "-b:v",
+                        "5M",
+                        "-maxrate",
+                        "8M",
+                        "-bufsize",
+                        "10M",
+                        *audio_settings,
+                        "-movflags",
+                        "+faststart",
+                        "-y",
+                        str(out_file),
+                    ]
+                else:  # amd
+                    cmd = [
+                        self.ffmpeg_path,
+                        *hwaccel_opts,
+                        "-i",
+                        input_file,
+                        "-map",
+                        "0:v:0",
+                        "-map",
+                        f"0:{audio_idx}",
+                        "-vf",
+                        video_filter,
+                        "-c:v",
+                        "h264_amf",
+                        "-quality",
+                        preset,
+                        "-rc",
+                        "vbr_peak",
+                        "-b:v",
+                        "5M",
+                        "-maxrate",
+                        "8M",
+                        "-bufsize",
+                        "10M",
+                        *audio_settings,
+                        "-movflags",
+                        "+faststart",
+                        "-y",
+                        str(out_file),
+                    ]
+
+                res = self._run_subprocess_cancellable(cmd)
+                if res.returncode == 0:
+                    s_aud = next((st for st in info["streams"] if st.get("index") == audio_idx), None)
+                    if s_aud:
+                        lang = s_aud.get("tags", {}).get("language", "und")
+                        title = s_aud.get("tags", {}).get("title", "")
+                        codec = s_aud.get("codec_name", "")
+                        audio_info = f"{lang} ({title} - {codec})" if title else f"{lang} ({codec})"
+                    else:
+                        audio_info = "Desconocido"
+
+                    if sub_idx is not None:
+                        s_sub = next((st for st in info["streams"] if st.get("index") == sub_idx), None)
+                        if s_sub:
+                            lang = s_sub.get("tags", {}).get("language", "und")
+                            title = s_sub.get("tags", {}).get("title", "")
+                            codec = s_sub.get("codec_name", "")
+                            sub_info = f"{lang} ({title} - {codec})" if title else f"{lang} ({codec})"
+                        else:
+                            sub_info = "Desconocido"
+                    else:
+                        sub_info = "Ninguno"
+
+                    ruta_completa = os.path.abspath(out_file)
+                    self._enviar_mensaje(f"  -> Archivo generado: {ruta_completa}")
+                    self._enviar_mensaje(f"     Audio: {audio_info}")
+                    self._enviar_mensaje(f"     Subtítulo (Incrustado): {sub_info}")
+
+                    if self.var_limpiar_metadatos.get():
+                        self._enviar_mensaje(f"Limpiando metadatos de {out_file.name}...")
+                        self._limpiar_metadatos_archivo(out_file)
+                    return True
+                else:
+                    errores.append((input_file, f"Fallo al codificar hardsub con ffmpeg (código de salida: {res.returncode})."))
+                    return False
+            except Exception as exc:
+                errores.append((input_file, f"Error inesperado durante hardcode: {exc}"))
+                return False
 
         finally:
             if temp_subtitle_path and os.path.exists(temp_subtitle_path):
@@ -2101,13 +2148,16 @@ class VPTSuite:
         ok = 0
         fail = 0
         total = len(archivos)
+        errores = []
 
         gpu = self.gpu_acel_var.get()
         is_ok = self.gpu_availability.get(gpu, True)
         if not is_ok:
             status = self.gpus_status.get(gpu, (False, "No disponible"))
-            self._enviar_mensaje(f"Error: El codificador {gpu.upper()} no está disponible. Detalle: {status[1]}")
-            self.msg_queue.put(("FINALIZADO", 0, total))
+            err_msg = f"El codificador {gpu.upper()} no está disponible. Detalle: {status[1]}"
+            self._enviar_mensaje(f"Error: {err_msg}")
+            errores.append(("General", err_msg))
+            self.msg_queue.put(("FINALIZADO", 0, total, errores))
             self.procesando = False
             return
 
@@ -2118,13 +2168,13 @@ class VPTSuite:
                 break
             self.msg_queue.put(("PROGRESO", i, total))
             self._enviar_mensaje(f"Archivo {i}/{total}: {os.path.basename(archivo)}")
-            if self._hardcode_subtitulo(archivo, output_dir):
+            if self._hardcode_subtitulo(archivo, output_dir, errores):
                 ok += 1
             else:
                 fail += 1
 
         self._enviar_mensaje("===== FIN HARDCODE =====")
-        self.msg_queue.put(("FINALIZADO", ok, fail))
+        self.msg_queue.put(("FINALIZADO", ok, fail, errores))
         self.procesando = False
         self.cancelar_procesamiento = False
 
@@ -2154,7 +2204,7 @@ class VPTSuite:
     # -----------------------------
     # Mantenimiento
     # -----------------------------
-    def _limpiar_metadatos_archivo(self, video_file):
+    def _limpiar_metadatos_archivo(self, video_file, errores=None):
         video_file = Path(video_file)
         temp_output = video_file.parent / f"temp_{video_file.name}"
         cmd = [
@@ -2183,6 +2233,8 @@ class VPTSuite:
         try:
             res = self._run_subprocess_cancellable(cmd, stdout_devnull=True)
             if res.returncode != 0:
+                if errores is not None:
+                    errores.append((str(video_file), f"Fallo al ejecutar ffmpeg para limpiar metadatos (código de salida: {res.returncode})."))
                 return False
             if temp_output.exists():
                 video_file.unlink()
@@ -2192,8 +2244,12 @@ class VPTSuite:
                 else:
                     temp_output.rename(video_file)
                 return True
+            if errores is not None:
+                errores.append((str(video_file), "No se pudo crear o renombrar el archivo temporal modificado."))
             return False
-        except Exception:
+        except Exception as exc:
+            if errores is not None:
+                errores.append((str(video_file), f"Error inesperado al limpiar metadatos: {exc}"))
             return False
         finally:
             if temp_output.exists():
@@ -2209,6 +2265,7 @@ class VPTSuite:
         ok = 0
         fail = 0
         total = len(archivos)
+        errores = []
         self._enviar_mensaje("===== INICIO LIMPIEZA METADATOS =====")
 
         for i, archivo in enumerate(archivos, 1):
@@ -2217,13 +2274,13 @@ class VPTSuite:
                 break
             self.msg_queue.put(("PROGRESO", i, total))
             self._enviar_mensaje(f"Limpiando {i}/{total}: {os.path.basename(archivo)}")
-            if self._limpiar_metadatos_archivo(archivo):
+            if self._limpiar_metadatos_archivo(archivo, errores):
                 ok += 1
             else:
                 fail += 1
 
         self._enviar_mensaje("===== FIN LIMPIEZA METADATOS =====")
-        self.msg_queue.put(("FINALIZADO", ok, fail))
+        self.msg_queue.put(("FINALIZADO", ok, fail, errores))
         self.procesando = False
         self.cancelar_procesamiento = False
 
@@ -2399,6 +2456,8 @@ class VPTSuite:
         dialog.geometry("680x520")
         dialog.transient(self.root)
         dialog.grab_set()
+        self.root.attributes('-disabled', True)
+        dialog.bind("<Destroy>", lambda e: self.root.attributes('-disabled', False) if (e.widget == dialog and self.root.winfo_exists()) else None)
         dialog.configure(bg="#F3F7FF")
 
         tk.Label(dialog, text="Constructor de Ruta de Salida", font=("Segoe UI", 12, "bold"), bg="#F3F7FF", fg="#1F2A44").pack(pady=(12, 6))
@@ -2706,6 +2765,8 @@ class VPTSuite:
         dialog.geometry("620x420")
         dialog.transient(self.root)
         dialog.grab_set()
+        self.root.attributes('-disabled', True)
+        dialog.bind("<Destroy>", lambda e: self.root.attributes('-disabled', False) if (e.widget == dialog and self.root.winfo_exists()) else None)
 
         tk.Label(dialog, text=f"Selecciona preset para {gpu_name}", font=("Segoe UI", 12, "bold")).pack(pady=10)
 
@@ -2760,6 +2821,8 @@ class VPTSuite:
         dialog.configure(bg="#FFFFFF")
         dialog.transient(self.root)
         dialog.grab_set()
+        self.root.attributes('-disabled', True)
+        dialog.bind("<Destroy>", lambda e: self.root.attributes('-disabled', False) if (e.widget == dialog and self.root.winfo_exists()) else None)
 
         # Center dialog relative to main window
         dialog.update_idletasks()
@@ -2893,6 +2956,94 @@ class VPTSuite:
             font=("Segoe UI", 9, "bold")
         )
         btn_close.pack(side=tk.BOTTOM, pady=12)
+
+    def _mostrar_resumen_errores(self, errores):
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Resumen de Errores - VPT Studio")
+        dialog.geometry("740x500")
+        dialog.transient(self.root)
+        dialog.grab_set()
+        self.root.attributes('-disabled', True)
+        dialog.bind("<Destroy>", lambda e: self.root.attributes('-disabled', False) if (e.widget == dialog and self.root.winfo_exists()) else None)
+        dialog.configure(bg="#F3F7FF")
+
+        dialog.update_idletasks()
+        x = self.root.winfo_x() + (self.root.winfo_width() - dialog.winfo_width()) // 2
+        y = self.root.winfo_y() + (self.root.winfo_height() - dialog.winfo_height()) // 2
+        dialog.geometry(f"+{x}+{y}")
+
+        header = tk.Frame(dialog, bg="#1F2A44", height=70)
+        header.pack(fill=tk.X)
+        header.pack_propagate(False)
+        
+        tk.Label(
+            header,
+            text="Resumen de Errores de Procesamiento",
+            font=("Segoe UI", 14, "bold"),
+            bg="#1F2A44",
+            fg="#FFFFFF"
+        ).pack(anchor=tk.W, padx=20, pady=(10, 2))
+        
+        tk.Label(
+            header,
+            text="Los siguientes problemas ocurrieron al procesar los archivos de la cola:",
+            font=("Segoe UI", 9),
+            bg="#1F2A44",
+            fg="#B0C4DE"
+        ).pack(anchor=tk.W, padx=20)
+
+        body = tk.Frame(dialog, bg="#F3F7FF", padx=20, pady=15)
+        body.pack(fill=tk.BOTH, expand=True)
+
+        text_frame = tk.Frame(body, bg="#FFFFFF", highlightthickness=1, highlightbackground="#E5ECF9")
+        text_frame.pack(fill=tk.BOTH, expand=True)
+
+        log_text = tk.Text(
+            text_frame,
+            wrap=tk.WORD,
+            bg="#FFFFFF",
+            fg="#1F2A44",
+            font=("Segoe UI", 9),
+            relief=tk.FLAT,
+            padx=10,
+            pady=10
+        )
+        log_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        scrollbar = tk.Scrollbar(text_frame, command=log_text.yview)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        log_text.config(yscrollcommand=scrollbar.set)
+
+        log_text.tag_config("file_title", font=("Segoe UI", 10, "bold"), spacing1=8, spacing3=2)
+        log_text.tag_config("error_lbl", font=("Segoe UI", 9, "bold"), foreground="#EB5757")
+        log_text.tag_config("detail", font=("Segoe UI", 9), foreground="#4F4F4F", lmargin1=25, lmargin2=25, spacing3=4)
+
+        for archivo, err_desc in errores:
+            basename = os.path.basename(archivo) if archivo != "General" else "General"
+            log_text.insert(tk.END, f"Archivo: {basename}\n", "file_title")
+            log_text.insert(tk.END, "  [ERROR] ", "error_lbl")
+            log_text.insert(tk.END, f"{err_desc}\n", "detail")
+
+        log_text.config(state=tk.DISABLED)
+
+        btm = tk.Frame(dialog, bg="#F3F7FF")
+        btm.pack(side=tk.BOTTOM, fill=tk.X, padx=20, pady=(5, 15))
+
+        btn_cerrar = tk.Button(
+            btm,
+            text="Cerrar",
+            command=dialog.destroy,
+            bg="#2D9CDB",
+            fg="white",
+            activebackground="#2185C5",
+            activeforeground="white",
+            relief=tk.FLAT,
+            padx=20,
+            pady=6,
+            cursor="hand2",
+            font=("Segoe UI", 9, "bold")
+        )
+        btn_cerrar.pack(side=tk.RIGHT)
 
     def salir_aplicacion(self):
         if self.procesando and not messagebox.askyesno("Proceso activo", "Hay un proceso en curso. Salir de todos modos?"):
