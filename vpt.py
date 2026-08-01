@@ -250,7 +250,16 @@ FFMPEG_DIR = os.path.join(os.getenv("APPDATA"), "Galleon", "bin")
 os.makedirs(FFMPEG_DIR, exist_ok=True)
 
 VIDEO_EXTENSIONS = (".mp4", ".mkv", ".mov", ".avi", ".flv", ".webm", ".ts", ".m4v")
-BITMAP_SUB_CODECS = {"hdmv_pgs_subtitle", "dvd_subtitle", "dvb_subtitle", "xsub", "dvb_teletext"}
+BITMAP_SUB_CODECS = {
+    "hdmv_pgs_subtitle", "dvd_subtitle", "dvb_subtitle", "xsub",
+    "dvb_teletext", "eia_608", "cea_708", "teletext", "arib_caption",
+    "subviewer", "pjs", "vplayer"
+}
+INCOMPATIBLE_MP4_AUDIO_CODECS = {
+    "dca", "dts", "flac", "pcm_s16le", "pcm_s24le", "pcm_s32le", "pcm_s8",
+    "pcm_u8", "pcm_bluray", "pcm_dvd", "pcm_alaw", "pcm_mulaw", "truehd",
+    "mlp", "vorbis", "opus"
+}
 
 PRESETS_NVIDIA = {
     "lossless": {"nombre": "Lossless", "descripcion": "Sin perdida", "velocidad": "⚡☆☆", "calidad": "★★★★★"},
@@ -1583,24 +1592,67 @@ class VPTSuite:
                         sub_incluir.append(idx)
 
                 if excluidos:
-                    self._enviar_mensaje(f"Advertencia: {excluidos} subtitulos bitmap excluidos")
+                    self._enviar_mensaje(f"Advertencia: {excluidos} subtítulos bitmap/no texto excluidos")
+
+                video_streams = [s for s in info["streams"] if s.get("codec_type") == "video"]
+                main_video_streams = [s for s in video_streams if not s.get("disposition", {}).get("attached_pic")]
+                if not main_video_streams:
+                    main_video_streams = video_streams
 
                 cmd = [self.ffmpeg_path, "-i", input_file]
-                for s in info["streams"]:
-                    if s.get("codec_type") not in ("audio", "subtitle"):
-                        cmd.extend(["-map", f"0:{s['index']}"])
-                for idx in audio_indices:
+                for s in main_video_streams:
+                    cmd.extend(["-map", f"0:{s['index']}"])
+                    if s.get("codec_name", "").lower() in ("hevc", "h265"):
+                        cmd.extend(["-tag:v", "hvc1"])
+
+                cmd.extend(["-c:v", "copy"])
+
+                for idx_pos, idx in enumerate(audio_indices):
                     cmd.extend(["-map", f"0:{idx}"])
+                    s = next((st for st in info["streams"] if st.get("index") == idx), None)
+                    acodec = s.get("codec_name", "").lower() if s else ""
+                    if acodec in INCOMPATIBLE_MP4_AUDIO_CODECS:
+                        cmd.extend([f"-c:a:{idx_pos}", "aac", f"-b:a:{idx_pos}", "320k"])
+                    else:
+                        cmd.extend([f"-c:a:{idx_pos}", "copy"])
+
+                if not audio_indices:
+                    cmd.extend(["-c:a", "copy"])
+
                 for idx in sub_incluir:
                     cmd.extend(["-map", f"0:{idx}"])
 
-                cmd.extend(["-c:v", "copy", "-c:a", "copy"])
                 if sub_incluir:
                     cmd.extend(["-c:s", "mov_text"])
+
                 cmd.extend(["-movflags", "+faststart", "-y", str(output_path)])
 
                 self._enviar_mensaje(f"[{i}/{len(combinaciones)}] {output_path.name}")
                 result = self._run_subprocess_cancellable(cmd)
+
+                if result.returncode != 0 and sub_incluir:
+                    self._enviar_mensaje("  -> Advertencia: Falló multiplexado de subtítulos en MP4. Reintentando remux sin subtítulos...")
+                    cmd_fallback = [self.ffmpeg_path, "-i", input_file]
+                    for s in main_video_streams:
+                        cmd_fallback.extend(["-map", f"0:{s['index']}"])
+                        if s.get("codec_name", "").lower() in ("hevc", "h265"):
+                            cmd_fallback.extend(["-tag:v", "hvc1"])
+                    cmd_fallback.extend(["-c:v", "copy"])
+                    for idx_pos, idx in enumerate(audio_indices):
+                        cmd_fallback.extend(["-map", f"0:{idx}"])
+                        s = next((st for st in info["streams"] if st.get("index") == idx), None)
+                        acodec = s.get("codec_name", "").lower() if s else ""
+                        if acodec in INCOMPATIBLE_MP4_AUDIO_CODECS:
+                            cmd_fallback.extend([f"-c:a:{idx_pos}", "aac", f"-b:a:{idx_pos}", "320k"])
+                        else:
+                            cmd_fallback.extend([f"-c:a:{idx_pos}", "copy"])
+                    if not audio_indices:
+                        cmd_fallback.extend(["-c:a", "copy"])
+                    cmd_fallback.extend(["-sn", "-movflags", "+faststart", "-y", str(output_path)])
+                    result = self._run_subprocess_cancellable(cmd_fallback)
+                    if result.returncode == 0:
+                        sub_incluir = []
+
                 if result.returncode == 0:
                     ok += 1
                     aud_langs = []
@@ -1632,7 +1684,12 @@ class VPTSuite:
                         self._enviar_mensaje(f"Eliminando metadatos de {output_path.name}...")
                         self._eliminar_metadatos_archivo(output_path)
                 else:
-                    err_msg = f"Error de FFmpeg al copiar/remuxear la versión (código de salida: {result.returncode})."
+                    err_detail = ""
+                    if hasattr(result, "stderr") and result.stderr:
+                        lines = [l.strip() for l in result.stderr.splitlines() if l.strip()]
+                        if lines:
+                            err_detail = f" Detalle: {' '.join(lines[-2:])}"
+                    err_msg = f"Error de FFmpeg al copiar/remuxear la versión (código de salida: {result.returncode}).{err_detail}"
                     self._enviar_mensaje(err_msg)
                     errores.append((input_file, f"Versión '{label}': {err_msg}"))
                     fail += 1
@@ -2186,34 +2243,67 @@ class VPTSuite:
     def _eliminar_metadatos_archivo(self, video_file, errores=None):
         video_file = Path(video_file)
         temp_output = video_file.parent / f"temp_{video_file.name}"
+        info = self._ffprobe_info(video_file)
+
+        is_mp4 = video_file.suffix.lower() in (".mp4", ".m4v")
+        audio_args = ["-c:a", "copy"]
+        sub_args = ["-c:s", "copy"]
+
+        if is_mp4 and info and "streams" in info:
+            audio_streams = [s for s in info["streams"] if s.get("codec_type") == "audio"]
+            if any(s.get("codec_name", "").lower() in INCOMPATIBLE_MP4_AUDIO_CODECS for s in audio_streams):
+                audio_args = ["-c:a", "aac", "-b:a", "320k"]
+            sub_streams = [s for s in info["streams"] if s.get("codec_type") == "subtitle"]
+            if sub_streams:
+                if any(s.get("codec_name", "").lower() in BITMAP_SUB_CODECS for s in sub_streams):
+                    sub_args = ["-sn"]
+                else:
+                    sub_args = ["-c:s", "mov_text"]
+
         cmd = [
             self.ffmpeg_path,
             "-i",
             str(video_file),
             "-map",
-            "0:v:0",
+            "0:v?",
             "-map",
             "0:a?",
-            "-map",
-            "0:s?",
-            "-c",
-            "copy",
-            "-map_metadata",
-            "-1",
-            "-write_id3v1",
-            "0",
-            "-write_id3v2",
-            "0",
-            "-id3v2_version",
-            "0",
-            "-y",
-            str(temp_output),
         ]
+        if sub_args != ["-sn"]:
+            cmd.extend(["-map", "0:s?"])
+
+        cmd.extend(["-c:v", "copy", *audio_args, *sub_args, "-map_metadata", "-1", "-y", str(temp_output)])
+
         try:
             res = self._run_subprocess_cancellable(cmd, stdout_devnull=True)
             if res.returncode != 0:
+                cmd_fb = [
+                    self.ffmpeg_path,
+                    "-i",
+                    str(video_file),
+                    "-map",
+                    "0:v?",
+                    "-map",
+                    "0:a?",
+                    "-c:v",
+                    "copy",
+                    *audio_args,
+                    "-sn",
+                    "-map_metadata",
+                    "-1",
+                    "-y",
+                    str(temp_output),
+                ]
+                res = self._run_subprocess_cancellable(cmd_fb, stdout_devnull=True)
+
+            if res.returncode != 0:
+                err_detail = ""
+                if hasattr(res, "stderr") and res.stderr:
+                    lines = [l.strip() for l in res.stderr.splitlines() if l.strip()]
+                    if lines:
+                        err_detail = f" Detalle: {' '.join(lines[-2:])}"
                 if errores is not None:
-                    errores.append((str(video_file), f"Fallo al ejecutar ffmpeg para eliminar metadatos (código de salida: {res.returncode})."))
+                    errores.append((str(video_file), f"Fallo al ejecutar ffmpeg para eliminar metadatos (código de salida: {res.returncode}).{err_detail}"))
                 return False
             if temp_output.exists():
                 video_file.unlink()
@@ -2315,24 +2405,41 @@ class VPTSuite:
             return True
 
         temp_output = video_file.parent / f"temp_{video_file.name}"
+        is_mp4 = video_file.suffix.lower() in (".mp4", ".m4v")
+        audio_args = ["-c:a", "copy"]
+
+        if is_mp4 and info and "streams" in info:
+            audio_streams = [s for s in info["streams"] if s.get("codec_type") == "audio"]
+            if any(s.get("codec_name", "").lower() in INCOMPATIBLE_MP4_AUDIO_CODECS for s in audio_streams):
+                audio_args = ["-c:a", "aac", "-b:a", "320k"]
+
         cmd = [
             self.ffmpeg_path,
             "-i",
             str(video_file),
             "-map",
-            "0:v",
+            "0:v?",
             "-map",
             "0:a?",
-            "-c",
+            "-c:v",
             "copy",
+            *audio_args,
+            "-sn",
             "-y",
             str(temp_output),
         ]
         try:
             res = self._run_subprocess_cancellable(cmd, stdout_devnull=True)
-            if res.returncode != 0:
+            rc = res.returncode
+            if rc > 2147483647: rc -= 4294967296
+            if rc != 0:
+                err_detail = ""
+                if hasattr(res, "stderr") and res.stderr:
+                    lines = [l.strip() for l in res.stderr.splitlines() if l.strip()]
+                    if lines:
+                        err_detail = f" Detalle: {' '.join(lines[-2:])}"
                 if errores is not None:
-                    errores.append((str(video_file), f"Fallo al ejecutar ffmpeg para eliminar subtítulos (código de salida: {res.returncode})."))
+                    errores.append((str(video_file), f"Fallo al ejecutar ffmpeg para eliminar subtítulos (código de salida: {rc}).{err_detail}"))
                 return False
             if temp_output.exists():
                 video_file.unlink()
@@ -3302,12 +3409,29 @@ class VPTSuite:
             startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
             startupinfo.wShowWindow = subprocess.SW_HIDE
 
+        stderr_lines = []
+        def _read_stderr(pipe):
+            try:
+                for line in iter(pipe.readline, ''):
+                    if line:
+                        stderr_lines.append(line)
+            except Exception:
+                pass
+            finally:
+                pipe.close()
+
         self.proceso_actual = subprocess.Popen(
             cmd,
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
             startupinfo=startupinfo
         )
+
+        stderr_thread = threading.Thread(target=_read_stderr, args=(self.proceso_actual.stderr,), daemon=True)
+        stderr_thread.start()
 
         import time
         while True:
@@ -3320,11 +3444,15 @@ class VPTSuite:
                         self.proceso_actual.kill()
                     except Exception:
                         pass
-                return subprocess.CompletedProcess(cmd, returncode=-1)
+                stderr_thread.join(timeout=0.5)
+                return subprocess.CompletedProcess(cmd, returncode=-1, stdout="", stderr="".join(stderr_lines))
 
             ret = self.proceso_actual.poll()
             if ret is not None:
-                return subprocess.CompletedProcess(cmd, returncode=ret)
+                stderr_thread.join(timeout=0.5)
+                if ret > 0x7FFFFFFF:
+                    ret = ret - 0x100000000
+                return subprocess.CompletedProcess(cmd, returncode=ret, stdout="", stderr="".join(stderr_lines))
 
             time.sleep(0.1)
 
