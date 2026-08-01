@@ -297,6 +297,7 @@ DEFAULT_CONFIG = {
         "preset": "medium",
         "sufijo_idiomas": "True",
         "eliminar_metadatos": "False",
+        "preservar_color": "True",
     },
 }
 
@@ -509,6 +510,7 @@ class VPTSuite:
             self.config_ini["Options"]["preset"] = self.preset_var.get()
             self.config_ini["Options"]["sufijo_idiomas"] = str(self.var_sufijo_idiomas.get())
             self.config_ini["Options"]["eliminar_metadatos"] = str(self.var_eliminar_metadatos.get())
+            self.config_ini["Options"]["preservar_color"] = str(self.var_preservar_color.get())
 
             self._guardar_configuracion()
         except Exception as exc:
@@ -561,6 +563,9 @@ class VPTSuite:
             value=self.config_ini.getboolean("Options", "eliminar_metadatos",
                   fallback=self.config_ini.getboolean("Options", "limpiar_metadatos", fallback=False))
         )
+        self.var_preservar_color = tk.BooleanVar(
+            value=self.config_ini.getboolean("Options", "preservar_color", fallback=True)
+        )
 
         for var in [
             self.var_recursivo,
@@ -572,6 +577,7 @@ class VPTSuite:
             self.salida_var,
             self.var_sufijo_idiomas,
             self.var_eliminar_metadatos,
+            self.var_preservar_color,
         ]:
             var.trace_add("write", self._actualizar_configuracion)
 
@@ -719,6 +725,7 @@ class VPTSuite:
 
         tk.Checkbutton(row3, text="Sufijo al nombre", variable=self.var_sufijo_idiomas, bg="#FFFFFF", fg="#2B3A57", activebackground="#FFFFFF", selectcolor="#FFFFFF").pack(side=tk.LEFT, padx=6)
         tk.Checkbutton(row3, text="Eliminar metadatos al finalizar", variable=self.var_eliminar_metadatos, bg="#FFFFFF", fg="#2B3A57", activebackground="#FFFFFF", selectcolor="#FFFFFF").pack(side=tk.LEFT, padx=6)
+        tk.Checkbutton(row3, text="Preservar color (BT.709)", variable=self.var_preservar_color, bg="#FFFFFF", fg="#2B3A57", activebackground="#FFFFFF", selectcolor="#FFFFFF").pack(side=tk.LEFT, padx=6)
 
         activity_card = ttk.Frame(main, style="Card.TFrame")
         activity_card.pack(fill=tk.BOTH, expand=True, padx=18, pady=(0, 14))
@@ -1484,6 +1491,10 @@ class VPTSuite:
                     if decod_val in ("d3d11va", "dxva2") and sub_idx is None:
                         hwaccel_opts = ["-hwaccel", decod_val]
 
+                    color_flags = []
+                    if self.var_preservar_color.get():
+                        color_flags = ["-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709", "-color_range", "tv"]
+
                     if gpu == "nvidia":
                         cmd = [
                             self.ffmpeg_path, *hwaccel_opts, "-i", input_file,
@@ -1492,6 +1503,7 @@ class VPTSuite:
                             "-c:v", "h264_nvenc", "-preset", preset,
                             "-profile:v", "high", "-rc", "vbr_hq", "-cq", "23",
                             "-b:v", "5M", "-maxrate", "8M", "-bufsize", "10M",
+                            *color_flags,
                             *audio_settings, "-movflags", "+faststart", "-y", str(output_path)
                         ]
                     elif gpu == "intel":
@@ -1502,6 +1514,7 @@ class VPTSuite:
                             "-c:v", "h264_qsv", "-preset", preset,
                             "-global_quality", "23",
                             "-b:v", "5M", "-maxrate", "8M", "-bufsize", "10M",
+                            *color_flags,
                             *audio_settings, "-movflags", "+faststart", "-y", str(output_path)
                         ]
                     else:
@@ -1511,6 +1524,7 @@ class VPTSuite:
                             "-vf", video_filter,
                             "-c:v", "h264_amf", "-quality", preset,
                             "-rc", "vbr_peak", "-b:v", "5M", "-maxrate", "8M", "-bufsize", "10M",
+                            *color_flags,
                             *audio_settings, "-movflags", "+faststart", "-y", str(output_path)
                         ]
 
@@ -1839,7 +1853,10 @@ class VPTSuite:
                 if is_hdr:
                     desc.append("HDR")
                 res["has_warning"] = True
-                res["warnings"].append(f"El video original es {' y '.join(desc)}. Si decides generar versiones con subtitulos incrustados (hardsub), los colores podrian verse lavados.")
+                if self.var_preservar_color.get():
+                    res["warnings"].append(f"El video original es {' y '.join(desc)}. Se aplicará preservación de color BT.709 para evitar tonos lavados al hacer hardsub.")
+                else:
+                    res["warnings"].append(f"El video original es {' y '.join(desc)}. Si decides generar versiones con subtitulos incrustados (hardsub), los colores podrian verse lavados.")
 
             if any(s.get("codec_name", "").lower() in BITMAP_SUB_CODECS for s in subtitle_streams):
                 res["has_warning"] = True

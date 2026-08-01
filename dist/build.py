@@ -118,7 +118,9 @@ VSVersionInfo(
 
     # 6. Run PyInstaller
     cmd = [
-        "pyinstaller",
+        sys.executable,
+        "-m",
+        "PyInstaller",
         "--noconfirm",
         "--onefile",
         "--windowed",
