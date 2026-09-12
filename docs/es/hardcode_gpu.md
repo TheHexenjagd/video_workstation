@@ -1,11 +1,15 @@
 # Hardcode y Aceleración por Hardware (GPU)
 
-El módulo de **Hardcode** de VPT Studio permite incrustar permanentemente pistas de subtítulos en el flujo de vídeo principal (proceso comúnmente llamado *burn-in* o *hardsub*). Para evitar que este proceso consuma excesivos recursos del procesador (CPU) y demore demasiado, la suite cuenta con soporte completo de codificación y decodificación acelerada por hardware a través de tu tarjeta gráfica (GPU).
+<p align="right">
+  <a href="../en/gpu_hardcode.md">English</a> | <b>Español</b>
+</p>
+
+El módulo de **Hardcode** de Video Workstation (VW) permite incrustar permanentemente pistas de subtítulos en el flujo de vídeo principal (proceso comúnmente llamado *burn-in* o *hardsub*). Para evitar que este proceso consuma excesivos recursos del procesador (CPU) y demore demasiado, la suite cuenta con soporte completo de codificación y decodificación acelerada por hardware a través de tu tarjeta gráfica (GPU).
 
 ---
 
 ## Codificadores Acelerados por Hardware (GPU)
-VPT Studio detecta y soporta tres tecnologías principales de codificación por hardware basadas en el fabricante de tu tarjeta gráfica:
+VW detecta y soporta tres tecnologías principales de codificación por hardware basadas en el fabricante de tu tarjeta gráfica:
 
 ### 1. NVIDIA NVENC (`h264_nvenc`)
 * **Hardware**: Tarjetas gráficas NVIDIA GeForce / Quadro / Tesla.
@@ -23,12 +27,12 @@ VPT Studio detecta y soporta tres tecnologías principales de codificación por 
 * **Códec utilizado**: `h264_amf`.
 
 > [!NOTE]
-> Al iniciar la aplicación, VPT Studio ejecuta subprocesos de prueba rápidos en segundo plano (`_iniciar_deteccion_gpus`) para comprobar la disponibilidad real de cada codificador en tu sistema. Si no dispones de hardware compatible con alguna tecnología, la opción correspondiente se mostrará como **(No disponible)** en la interfaz de usuario para evitar fallos de ejecución.
+> Al iniciar la aplicación, VW ejecuta subprocesos de prueba rápidos en segundo plano (`_iniciar_deteccion_gpus`) para comprobar la disponibilidad real de cada codificador en tu sistema. Si no dispones de hardware compatible con alguna tecnología, la opción correspondiente se mostrará como **(No disponible)** en la interfaz de usuario para evitar fallos de ejecución.
 
 ---
 
 ## Decodificación por Hardware
-Además de acelerar la escritura del nuevo vídeo (codificación), también puedes acelerar la lectura y procesamiento del vídeo original (decodificación). VPT Studio ofrece tres modos de decodificación:
+Además de acelerar la escritura del nuevo vídeo (codificación), también puedes acelerar la lectura y procesamiento del vídeo original (decodificación). VW ofrece tres modos de decodificación:
 
 * **Software**: Decodifica el vídeo utilizando la CPU. Es la opción más compatible y segura si experimentas artefactos visuales en el vídeo procesado.
 * **D3D11VA**: Decodificación acelerada por hardware a través de Direct3D 11 Video Acceleration. Recomendado para sistemas modernos con Windows 10/11.

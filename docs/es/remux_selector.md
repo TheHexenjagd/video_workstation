@@ -1,6 +1,10 @@
 # Multiplexado (Remux) y Selector de Versiones
 
-El módulo de **Multiplexado (Remux)** de VPT Studio está diseñado para procesar múltiples pistas de audio y subtítulos, permitiendo generar diferentes versiones de un archivo de vídeo de manera limpia, rápida y sin pérdida de calidad en la pista de vídeo principal.
+<p align="right">
+  <a href="../en/remux_selector.md">English</a> | <b>Español</b>
+</p>
+
+El módulo de **Multiplexado (Remux)** de Video Workstation (VW) está diseñado para procesar múltiples pistas de audio y subtítulos, permitiendo generar diferentes versiones de un archivo de vídeo de manera limpia, rápida y sin pérdida de calidad en la pista de vídeo principal.
 
 ---
 
@@ -13,7 +17,7 @@ El remuestreo o multiplexado (**remux**) es el proceso de copiar los flujos de d
 ---
 
 ## Selector Dinámico de Pistas y Versiones
-Al iniciar el procesamiento de un vídeo o un lote, VPT Studio analiza el archivo fuente a través de **FFprobe** y presenta una interfaz visual interactiva que permite construir las versiones deseadas:
+Al iniciar el procesamiento de un vídeo o un lote, VW analiza el archivo fuente a través de **FFprobe** y presenta una interfaz visual interactiva que permite construir las versiones deseadas:
 
 1. **Visualización de Pistas Disponibles**: 
    * **Pistas de Audio**: Muestra el título y el idioma de cada pista (p. ej., `Español (spa)`, `Inglés (eng)`).
@@ -37,7 +41,7 @@ Antes de procesar un lote de vídeos, puedes utilizar el botón **"Verificar col
 ---
 
 ## Hardsub Integrado Directo (Incrustado de Subtítulos)
-Normalmente, incrustar subtítulos requiere pasar por un proceso completo de codificación en el módulo de Hardcode. Sin embargo, VPT Studio incluye una función híbrida sumamente útil:
+Normalmente, incrustar subtítulos requiere pasar por un proceso completo de codificación en el módulo de Hardcode. Sin embargo, VW incluye una función híbrida sumamente útil:
 
 * **Activación Automática**: Si en el selector de pistas marcas **exactamente una (1) pista de audio** y **exactamente una (1) pista de subtítulos**, se habilitará de forma automática el botón **"Hacer hardsub (Incrustar)"** en el selector.
-* **Flujo Unificado**: Al activar esta opción, VPT Studio multiplexará el audio seleccionado e incrustará permanentemente la pista de subtítulos elegida en el vídeo en un solo paso, utilizando los parámetros de aceleración por hardware (GPU) configurados en el panel principal.
+* **Flujo Unificado**: Al activar esta opción, VW multiplexará el audio seleccionado e incrustará permanentemente la pista de subtítulos elegida en el vídeo en un solo paso, utilizando los parámetros de aceleración por hardware (GPU) configurados en el panel principal.

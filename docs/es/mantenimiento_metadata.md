@@ -1,6 +1,10 @@
 # Herramientas de Mantenimiento
 
-El módulo de **Mantenimiento** de VPT Studio agrupa utilidades rápidas diseñadas para modificar o depurar los archivos de vídeo originales de la cola. A diferencia de las funciones de multiplexado o hardcode, estas herramientas están pensadas para realizar modificaciones directamente en el contenedor del archivo de origen.
+<p align="right">
+  <a href="../en/metadata_maintenance.md">English</a> | <b>Español</b>
+</p>
+
+El módulo de **Mantenimiento** de Video Workstation (VW) agrupa utilidades rápidas diseñadas para modificar o depurar los archivos de vídeo originales de la cola. A diferencia de las funciones de multiplexado o hardcode, estas herramientas están pensadas para realizar modificaciones directamente en el contenedor del archivo de origen.
 
 ---
 
@@ -30,7 +34,7 @@ Hay ocasiones en las que las pistas de subtítulos internas de un archivo están
 ---
 
 ## Seguridad en Modificaciones Directas (In-Place)
-Dado que estas operaciones modifican los archivos originales de la lista principal, VPT Studio implementa varias medidas de seguridad automáticas:
+Dado que estas operaciones modifican los archivos originales de la lista principal, VW implementa varias medidas de seguridad automáticas:
 
 1. **Procesamiento Temporal**: La herramienta nunca escribe directamente sobre el archivo que está leyendo. En su lugar, escribe el resultado en un archivo temporal (`.tmp` o con sufijo aleatorio) dentro de la misma carpeta.
 2. **Reemplazo Seguro**: Una vez completado FFmpeg con éxito (`exit code 0`), el programa elimina el archivo original y renombra el temporal con el nombre del original.

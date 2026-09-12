@@ -1,11 +1,15 @@
 # Renombrador de Archivos por Lotes
 
-El **Renombrador Masivo** integrado en VPT Studio te permite reorganizar y homogeneizar de forma rápida los nombres de los archivos cargados en la cola principal mediante patrones estructurados y filtros avanzados de texto.
+<p align="right">
+  <a href="../en/batch_renamer.md">English</a> | <b>Español</b>
+</p>
+
+El **Renombrador Masivo** integrado en Video Workstation (VW) te permite reorganizar y homogeneizar de forma rápida los nombres de los archivos cargados en la cola principal mediante patrones estructurados y filtros avanzados de texto.
 
 ---
 
 ## Interfaz del Renombrador
-Para acceder al renombrador, debes tener al menos un archivo en la cola principal de la ventana de VPT Studio y pulsar el botón **"Renombrar"** en la sección de *Mantenimiento*. Se abrirá una ventana dedicada dividida en:
+Para acceder al renombrador, debes tener al menos un archivo en la cola principal de la ventana de VW y pulsar el botón **"Renombrar"** en la sección de *Mantenimiento*. Se abrirá una ventana dedicada dividida en:
 
 1. **Panel Izquierdo (Configuración)**: Donde defines las reglas de renombrado, numeración y reemplazo de texto.
 2. **Panel Derecho (Vista Previa)**: Una tabla interactiva de dos columnas que muestra el **Nombre Original** del archivo y el **Nuevo Nombre** calculado en tiempo real. Esto permite verificar los cambios antes de aplicarlos.
@@ -57,5 +61,5 @@ Para ahorrar tiempo, la ventana incluye una lista desplegable con **Ajustes Pred
 ### Guardar tus propios Ajustes
 Puedes guardar tus configuraciones complejas para uso futuro:
 * Configura tus patrones y Regex en el formulario.
-* Haz clic en **"Guardar preset"**, asígnale un nombre descriptivo y pulsa guardar. Se almacenará en tu configuración de VPT Studio.
+* Haz clic en **"Guardar preset"**, asígnale un nombre descriptivo y pulsa guardar. Se almacenará en tu configuración de VW.
 * Si deseas eliminar un preset guardado, selecciónalo y presiona **"Eliminar"**.

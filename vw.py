@@ -2,7 +2,9 @@ import configparser
 import json
 import os
 import queue
+import shutil
 import subprocess
+import sys
 import tempfile
 import threading
 import tkinter as tk
@@ -241,13 +243,70 @@ class RoundedButton(tk.Canvas):
 tk.Button = RoundedButton
 
 
-CONFIG_DIR = os.path.join(os.getenv("APPDATA"), "Galleon", "VPT")
+CONFIG_DIR = os.path.join(os.getenv("APPDATA"), "VideoWorkstation")
 os.makedirs(CONFIG_DIR, exist_ok=True)
-CONFIG_FILE = os.path.join(CONFIG_DIR, "vpt_config.ini")
-QUEUE_FILE = os.path.join(CONFIG_DIR, "vpt_queue.ini")
+CONFIG_FILE = os.path.join(CONFIG_DIR, "vw_config.ini")
+QUEUE_FILE = os.path.join(CONFIG_DIR, "vw_queue.ini")
 
-FFMPEG_DIR = os.path.join(os.getenv("APPDATA"), "Galleon", "bin")
-os.makedirs(FFMPEG_DIR, exist_ok=True)
+# Migracion transparente de configuraciones previas (Galleon / GVW) si existen
+_LEGACY_CONFIG_DIR = os.path.join(os.getenv("APPDATA"), "Galleon", "GVW")
+if os.path.isdir(_LEGACY_CONFIG_DIR):
+    _legacy_cfg = os.path.join(_LEGACY_CONFIG_DIR, "gvw_config.ini")
+    _legacy_queue = os.path.join(_LEGACY_CONFIG_DIR, "gvw_queue.ini")
+    if os.path.isfile(_legacy_cfg) and not os.path.isfile(CONFIG_FILE):
+        try:
+            shutil.copy2(_legacy_cfg, CONFIG_FILE)
+        except Exception:
+            pass
+    if os.path.isfile(_legacy_queue) and not os.path.isfile(QUEUE_FILE):
+        try:
+            shutil.copy2(_legacy_queue, QUEUE_FILE)
+        except Exception:
+            pass
+
+TOOLS_DIR = os.path.join(CONFIG_DIR, "tools")
+os.makedirs(TOOLS_DIR, exist_ok=True)
+
+def obtener_ruta_base_app():
+    """Retorna el directorio base donde reside el ejecutable empaquetado o el script en ejecucion."""
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(__file__))
+
+def resolver_ruta_binario(nombre_binario):
+    """
+    Resolucion inteligente de binarios (Modo Portatil e Independiente):
+    1. Directorio local ./tools/<nombre> junto a VW (Modo Portatil 100% autonomo)
+    2. Directorio dedicado de la aplicacion: %APPDATA%/VideoWorkstation/tools/<nombre>
+    3. PATH del sistema operativo (shutil.which)
+    4. Fallback predeterminado a %APPDATA%/VideoWorkstation/tools/<nombre>
+    """
+    app_base = obtener_ruta_base_app()
+
+    # 1. Modo Portatil: ./tools/ junto a VW
+    ruta_portable = os.path.join(app_base, "tools", nombre_binario)
+    if os.path.isfile(ruta_portable):
+        return os.path.abspath(ruta_portable)
+
+    # 2. Directorio dedicado en AppData de VW
+    ruta_vw_tools = os.path.join(TOOLS_DIR, nombre_binario)
+    if os.path.isfile(ruta_vw_tools):
+        return ruta_vw_tools
+
+    # 2b. Compatibilidad: Directorio legacy de herramientas si existe
+    if os.path.isdir(_LEGACY_CONFIG_DIR):
+        ruta_legacy = os.path.join(_LEGACY_CONFIG_DIR, "tools", nombre_binario)
+        if os.path.isfile(ruta_legacy):
+            return ruta_legacy
+
+    # 3. PATH del sistema operativo
+    nombre_base = os.path.splitext(nombre_binario)[0]
+    en_path = shutil.which(nombre_binario) or shutil.which(nombre_base)
+    if en_path and os.path.isfile(en_path):
+        return os.path.abspath(en_path)
+
+    # 4. Fallback por defecto
+    return ruta_vw_tools
 
 VIDEO_EXTENSIONS = (".mp4", ".mkv", ".mov", ".avi", ".flv", ".webm", ".ts", ".m4v")
 BITMAP_SUB_CODECS = {
@@ -292,8 +351,8 @@ PRESETS_AMD = {
 
 DEFAULT_CONFIG = {
     "Paths": {
-        "ffmpeg": os.path.join(FFMPEG_DIR, "ffmpeg.exe"),
-        "ffprobe": os.path.join(FFMPEG_DIR, "ffprobe.exe"),
+        "ffmpeg": resolver_ruta_binario("ffmpeg.exe"),
+        "ffprobe": resolver_ruta_binario("ffprobe.exe"),
         "output_dir": "",
     },
     "Options": {
@@ -423,10 +482,10 @@ def obtener_preset_valido(preset, gpu_acel):
 
     return preset
 
-class VPTSuite:
+class VWSuite:
     def __init__(self):
         self.root = tk.Tk()
-        self.root.title("VPT Studio - Video Processing Toolkit")
+        self.root.title("Video Workstation (VW)")
         self.root.geometry("1220x820")
         self.root.minsize(1100, 740)
 
@@ -444,6 +503,10 @@ class VPTSuite:
         self.config_ini = self._cargar_configuracion()
         self.ffmpeg_path = self.config_ini.get("Paths", "ffmpeg", fallback=DEFAULT_CONFIG["Paths"]["ffmpeg"])
         self.ffprobe_path = self.config_ini.get("Paths", "ffprobe", fallback=DEFAULT_CONFIG["Paths"]["ffprobe"])
+        if not self.ffmpeg_path or not os.path.exists(self.ffmpeg_path):
+            self.ffmpeg_path = resolver_ruta_binario("ffmpeg.exe")
+        if not self.ffprobe_path or not os.path.exists(self.ffprobe_path):
+            self.ffprobe_path = resolver_ruta_binario("ffprobe.exe")
 
         self.msg_queue = queue.Queue()
         self.procesando = False
@@ -530,7 +593,7 @@ class VPTSuite:
         style = ttk.Style()
         style.theme_use("clam")
 
-        style.configure("VPT.TFrame", background="#F3F7FF")
+        style.configure("VW.TFrame", background="#F3F7FF")
         style.configure("Card.TFrame", background="#FFFFFF")
         style.configure("Header.TLabel", background="#F3F7FF", foreground="#1F2A44", font=("Segoe UI", 19, "bold"))
         style.configure("SubHeader.TLabel", background="#F3F7FF", foreground="#5C6B8A", font=("Segoe UI", 10))
@@ -590,7 +653,7 @@ class VPTSuite:
         ]:
             var.trace_add("write", self._actualizar_configuracion)
 
-        main = ttk.Frame(self.root, style="VPT.TFrame")
+        main = ttk.Frame(self.root, style="VW.TFrame")
         main.pack(fill=tk.BOTH, expand=True)
 
         hero_card = tk.Frame(main, bg="#F4F8FF", highlightthickness=1, highlightbackground="#D1E2FF", bd=0)
@@ -604,7 +667,7 @@ class VPTSuite:
 
         tk.Label(
             text_container,
-            text="VPT Studio",
+            text="VW",
             font=("Segoe UI", 12, "bold"),
             fg="#1F2A44",
             bg="#F4F8FF"
@@ -612,13 +675,13 @@ class VPTSuite:
 
         tk.Label(
             text_container,
-            text="  |  Herramienta de procesamiento de vídeo, codificación por hardware y multiplexación",
+            text="  |  Video Workstation - Procesamiento de vídeo, multiplexación y hardsub",
             font=("Segoe UI", 9),
             fg="#5C6B8A",
             bg="#F4F8FF"
         ).pack(side=tk.LEFT, padx=(4, 0))
 
-        top = ttk.Frame(main, style="VPT.TFrame")
+        top = ttk.Frame(main, style="VW.TFrame")
         top.pack(fill=tk.BOTH, expand=False, padx=18, pady=6)
 
         left = ttk.Frame(top, style="Card.TFrame")
@@ -992,11 +1055,19 @@ class VPTSuite:
         return None
 
     def _verificar_ffmpeg_inicio(self):
+        if not (self.ffmpeg_path and os.path.exists(self.ffmpeg_path)):
+            self.ffmpeg_path = resolver_ruta_binario("ffmpeg.exe")
+        if not (self.ffprobe_path and os.path.exists(self.ffprobe_path)):
+            self.ffprobe_path = resolver_ruta_binario("ffprobe.exe")
+
         if os.path.exists(self.ffmpeg_path) and os.path.exists(self.ffprobe_path):
+            self._actualizar_configuracion()
             return
+
         messagebox.showwarning(
             "FFmpeg/FFprobe no encontrados",
-            "No se detectaron las rutas configuradas. Selecciona ffmpeg.exe y ffprobe.exe para continuar.",
+            "No se detectaron ffmpeg.exe y ffprobe.exe automáticamente.\n\n"
+            "Puedes colocarlos en la carpeta 'tools/' junto a VW para modo portátil o seleccionarlos manualmente.",
         )
         self.cambiar_ruta_ffmpeg()
         if not os.path.exists(self.ffprobe_path):
@@ -1491,7 +1562,8 @@ class VPTSuite:
                         if s.get("codec_type") == "audio" and s.get("index") == audio_idx:
                             audio_codec = s.get("codec_name")
                             break
-                    audio_settings = ["-c:a", "aac", "-b:a", "320k"] if audio_codec == "flac" else ["-c:a", "copy"]
+                    audio_codec_lower = str(audio_codec).lower() if audio_codec else ""
+                    audio_settings = ["-c:a", "aac", "-b:a", "320k"] if audio_codec_lower in INCOMPATIBLE_MP4_AUDIO_CODECS else ["-c:a", "copy"]
 
                     preset = obtener_preset_valido(self.preset_var.get(), self.gpu_acel_var.get())
 
@@ -1510,7 +1582,7 @@ class VPTSuite:
                             "-map", "0:v:0", "-map", f"0:{audio_idx}",
                             "-vf", video_filter,
                             "-c:v", "h264_nvenc", "-preset", preset,
-                            "-profile:v", "high", "-rc", "vbr_hq", "-cq", "23",
+                            "-profile:v", "high", "-rc", "vbr", "-cq", "23",
                             "-b:v", "5M", "-maxrate", "8M", "-bufsize", "10M",
                             *color_flags,
                             *audio_settings, "-movflags", "+faststart", "-y", str(output_path)
@@ -1571,7 +1643,12 @@ class VPTSuite:
                             self._enviar_mensaje(f"Eliminando metadatos de {output_path.name}...")
                             self._eliminar_metadatos_archivo(output_path)
                     else:
-                        err_msg = f"Error de FFmpeg al codificar la versión hardsub (código de salida: {result.returncode})."
+                        err_detail = ""
+                        if hasattr(result, "stderr") and result.stderr:
+                            lines_err = [l.strip() for l in result.stderr.splitlines() if l.strip()]
+                            if lines_err:
+                                err_detail = f" Detalle: {' '.join(lines_err[-2:])}"
+                        err_msg = f"Error de FFmpeg al codificar la versión hardsub (código de salida: {result.returncode}).{err_detail}"
                         self._enviar_mensaje(err_msg)
                         errores.append((input_file, f"Versión '{label}': {err_msg}"))
                         fail += 1
@@ -1933,7 +2010,7 @@ class VPTSuite:
 
     def _mostrar_reporte_pre_verificacion(self, resultados, tipo_proceso, archivos, callback_exito):
         dialog = tk.Toplevel(self.root)
-        dialog.title("Reporte de Pre-verificacion - VPT Studio")
+        dialog.title("Reporte de Pre-verificacion - VW")
         dialog.geometry("820x600")
         dialog.transient(self.root)
         dialog.grab_set()
@@ -2172,7 +2249,7 @@ class VPTSuite:
 
     def _mostrar_resultados_verificacion(self, resultados):
         win = tk.Toplevel(self.root)
-        win.title("Diagnóstico de la cola - VPT Studio")
+        win.title("Diagnóstico de la cola - VW")
         win.geometry("980x700")
         win.transient(self.root)
         win.configure(bg="#F3F7FF")
@@ -3176,7 +3253,8 @@ class VPTSuite:
     def _abrir_constructor_rutas(self):
         dialog = tk.Toplevel(self.root)
         dialog.title("Constructor de Ruta de Salida")
-        dialog.geometry("680x520")
+        dialog.geometry("750x660")
+        dialog.minsize(720, 620)
         dialog.transient(self.root)
         dialog.grab_set()
         self.root.attributes('-disabled', True)
@@ -3292,7 +3370,7 @@ class VPTSuite:
         btn_del_preset.pack(side=tk.LEFT, padx=6)
 
         flags_frame = tk.LabelFrame(dialog, text="Banderas Disponibles", font=("Segoe UI", 9, "bold"), bg="#FFFFFF", fg="#2B3A57", padx=10, pady=10)
-        flags_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+        flags_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=(4, 10))
         flags_frame.configure(relief=tk.GROOVE)
 
         flags = [
@@ -3338,10 +3416,9 @@ class VPTSuite:
 
         btm.pack(side=tk.BOTTOM, pady=(5, 12))
         preview_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=20, pady=10)
-        flags_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
 
         tk.Label(preview_frame, text="Vista previa de ruta resuelta:", font=("Segoe UI", 9, "bold"), bg="#E5ECF9", fg="#2B3A57").pack(anchor=tk.W)
-        preview_lbl = tk.Label(preview_frame, text="", font=("Consolas", 9), bg="#E5ECF9", fg="#1F2A44", wraplength=620, justify=tk.LEFT)
+        preview_lbl = tk.Label(preview_frame, text="", font=("Consolas", 9), bg="#E5ECF9", fg="#1F2A44", wraplength=680, justify=tk.LEFT)
         preview_lbl.pack(anchor=tk.W, pady=(4, 0))
 
         def actualizar_preview(*_):
@@ -3460,7 +3537,7 @@ class VPTSuite:
         archivo = filedialog.askopenfilename(
             title="Seleccionar ffmpeg.exe",
             filetypes=[("FFmpeg", "ffmpeg.exe"), ("Todos", "*.*")],
-            initialdir=os.path.dirname(self.ffmpeg_path) if self.ffmpeg_path else FFMPEG_DIR,
+            initialdir=os.path.dirname(self.ffmpeg_path) if (self.ffmpeg_path and os.path.exists(os.path.dirname(self.ffmpeg_path))) else TOOLS_DIR,
         )
         if not archivo:
             return
@@ -3479,7 +3556,7 @@ class VPTSuite:
         archivo = filedialog.askopenfilename(
             title="Seleccionar ffprobe.exe",
             filetypes=[("FFProbe", "ffprobe.exe"), ("Todos", "*.*")],
-            initialdir=os.path.dirname(self.ffprobe_path) if self.ffprobe_path else FFMPEG_DIR,
+            initialdir=os.path.dirname(self.ffprobe_path) if (self.ffprobe_path and os.path.exists(os.path.dirname(self.ffprobe_path))) else TOOLS_DIR,
         )
         if archivo:
             self.ffprobe_path = archivo
@@ -3489,7 +3566,7 @@ class VPTSuite:
     def ver_info_ffmpeg(self):
         messagebox.showinfo(
             "Rutas configuradas",
-            f"FFmpeg:\n{self.ffmpeg_path}\n\nFFProbe:\n{self.ffprobe_path}\n\nConfiguracion VPT:\n{CONFIG_DIR}",
+            f"FFmpeg:\n{self.ffmpeg_path}\n\nFFProbe:\n{self.ffprobe_path}\n\nConfiguracion VW:\n{CONFIG_DIR}\n\nCarpeta Tools (Portatil):\n{os.path.join(obtener_ruta_base_app(), 'tools')}",
         )
 
     def cambiar_preset(self):
@@ -3562,8 +3639,8 @@ class VPTSuite:
         import webbrowser
 
         dialog = tk.Toplevel(self.root)
-        dialog.title("Acerca de VPT Studio")
-        dialog.geometry("540x390")
+        dialog.title("Acerca de Video Workstation (VW)")
+        dialog.geometry("560x350")
         dialog.resizable(False, False)
         dialog.configure(bg="#F3F7FF")
         dialog.transient(self.root)
@@ -3587,7 +3664,7 @@ class VPTSuite:
 
         tk.Label(
             text_container,
-            text="VPT Studio",
+            text="VW",
             font=("Segoe UI", 12, "bold"),
             fg="#1F2A44",
             bg="#F4F8FF"
@@ -3617,14 +3694,14 @@ class VPTSuite:
 
         tk.Label(
             content,
-            text="Video Processing Toolkit",
+            text="Video Workstation",
             font=("Segoe UI", 12, "bold"),
             bg="#FFFFFF",
             fg="#1F2A44"
         ).pack(anchor=tk.W)
 
         desc = (
-            "VPT Studio es una suite integral para la optimización de flujos de trabajo de vídeo. "
+            "Video Workstation (VW) es una estación de trabajo para la optimización de flujos de trabajo de vídeo. "
             "Automatiza la multiplexación de audio/subtítulos (remux), la codificación acelerada por hardware "
             "(NVIDIA NVENC, Intel QSV, AMD AMF) con incrustado de subtítulos (hardsub), el renombrado masivo "
             "por lotes con expresiones regulares, la limpieza de metadatos in-place y la organización en rutas dinámicas."
@@ -3647,55 +3724,36 @@ class VPTSuite:
 
         tk.Label(
             info_frame,
-            text="Desarrollador:",
+            text="Desarrolladores:",
             font=("Segoe UI", 9, "bold"),
             bg="#FFFFFF",
             fg="#2B3A57"
-        ).grid(row=0, column=0, sticky=tk.W, pady=3)
+        ).grid(row=0, column=0, sticky=tk.NW, pady=3)
 
-        dev_lbl = tk.Label(
-            info_frame,
-            text="TheHexenjagd (github.com/TheHexenjagd)",
+        devs_subframe = tk.Frame(info_frame, bg="#FFFFFF")
+        devs_subframe.grid(row=0, column=1, sticky=tk.W, padx=12, pady=3)
+
+        dev1_lbl = tk.Label(
+            devs_subframe,
+            text="• Gabriel Giraldo Herrera (github.com/TheHexenjagd)",
             font=("Segoe UI", 9, "underline"),
             bg="#FFFFFF",
             fg="#2D9CDB",
             cursor="hand2"
         )
-        dev_lbl.grid(row=0, column=1, sticky=tk.W, padx=12, pady=3)
-        dev_lbl.bind("<Button-1>", lambda e: webbrowser.open_new("https://github.com/TheHexenjagd"))
+        dev1_lbl.pack(anchor=tk.W, pady=1)
+        dev1_lbl.bind("<Button-1>", lambda e: webbrowser.open_new("https://github.com/TheHexenjagd"))
 
-        tk.Label(
-            info_frame,
-            text="Proyectos base:",
-            font=("Segoe UI", 9, "bold"),
-            bg="#FFFFFF",
-            fg="#2B3A57"
-        ).grid(row=1, column=0, sticky=tk.NW, pady=4)
-
-        projects_subframe = tk.Frame(info_frame, bg="#FFFFFF")
-        projects_subframe.grid(row=1, column=1, sticky=tk.W, padx=12, pady=4)
-
-        hardcode_lbl = tk.Label(
-            projects_subframe,
-            text="• hardcodetool (github.com/TheHexenjagd/hardcodetool)",
+        dev2_lbl = tk.Label(
+            devs_subframe,
+            text="• Jorge Iván Nieto Triviño (github.com/Gatozo)",
             font=("Segoe UI", 9, "underline"),
             bg="#FFFFFF",
             fg="#2D9CDB",
             cursor="hand2"
         )
-        hardcode_lbl.pack(anchor=tk.W, pady=1)
-        hardcode_lbl.bind("<Button-1>", lambda e: webbrowser.open_new("https://github.com/TheHexenjagd/hardcodetool"))
-
-        audio_lbl = tk.Label(
-            projects_subframe,
-            text="• audioselector (github.com/TheHexenjagd/audioselector)",
-            font=("Segoe UI", 9, "underline"),
-            bg="#FFFFFF",
-            fg="#2D9CDB",
-            cursor="hand2"
-        )
-        audio_lbl.pack(anchor=tk.W, pady=1)
-        audio_lbl.bind("<Button-1>", lambda e: webbrowser.open_new("https://github.com/TheHexenjagd/audioselector"))
+        dev2_lbl.pack(anchor=tk.W, pady=1)
+        dev2_lbl.bind("<Button-1>", lambda e: webbrowser.open_new("https://github.com/Gatozo"))
 
         btn_close = tk.Button(
             dialog,
@@ -3715,7 +3773,7 @@ class VPTSuite:
 
     def _mostrar_resumen_errores(self, errores):
         dialog = tk.Toplevel(self.root)
-        dialog.title("Resumen de Errores - VPT Studio")
+        dialog.title("Resumen de Errores - VW")
         dialog.geometry("740x500")
         dialog.resizable(False, False)
         dialog.transient(self.root)
@@ -3846,5 +3904,6 @@ class VPTSuite:
         self.root.mainloop()
 
 if __name__ == "__main__":
-    app = VPTSuite()
+    GVWSuite = VWSuite
+    app = VWSuite()
     app.run()

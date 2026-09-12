@@ -1,94 +1,176 @@
-# 🎬 VPT Studio (Video Processing Toolkit) - v1.0.0
+# Video Workstation (VW)
 
-**VPT Studio** es una suite de escritorio desarrollada en Python y Tkinter orientada a la optimización de flujos de trabajo de procesamiento de vídeo. Automatiza tareas de multiplexado (remux), incrustado de subtítulos (hardcode), renombrado masivo y mantenimiento general de metadatos de archivos multimedia.
+<p align="center">
+  <b>A desktop workstation in Python for batch video multiplexing, hardware-accelerated subtitle hardcoding, and comprehensive media metadata management.</b>
+</p>
 
-Este proyecto fusiona y mejora significativamente las funcionalidades de las herramientas:
-* [hardcodetool](https://github.com/TheHexenjagd/hardcodetool) (Codificación por hardware de subtítulos)
-* [audioselector](https://github.com/TheHexenjagd/audioselector) (Multiplexación y filtrado inteligente de pistas)
+<p align="center">
+  <b>English</b> | <a href="README.es.md">Español</a>
+</p>
 
----
-
-## 🚀 Funcionalidades Principales
-
-VPT Studio cuenta con módulos dedicados y herramientas integradas para cubrir todas tus necesidades de post-procesamiento. Haz clic en los enlaces a continuación para ver guías y detalles de cada característica:
-
-### 📦 [1. Multiplexado (Remux) y Versiones](docs/remux_selector.md)
-Genera múltiples versiones de forma limpia (sin recodificar vídeo) a partir de las pistas de audio y subtítulos disponibles en tus archivos fuente.
-* **Verificación de condiciones**: Analiza estadísticamente las pistas internas del contenedor para asegurar la disponibilidad de idiomas seleccionados.
-* **Selector dinámico de pistas**: Interfaz dedicada para seleccionar múltiples combinaciones deseadas por archivo o lote.
-* **Hardsub integrado directo**: Si seleccionas exactamente **una (1) pista de audio** y **un (1) subtítulo** en la combinación de la versión, se habilitará la opción de realizar el incrustado de subtítulos (`hardsub`) directamente desde este módulo en un solo clic, sin tener que recurrir al módulo independiente de Hardcode.
-* 📖 [Leer documentación detallada sobre Remux y Selector](docs/remux_selector.md).
-
-### ⚡ [2. Hardcode acelerado por GPU](docs/hardcode_gpu.md)
-Incrusta subtítulos en el vídeo de forma permanente utilizando códecs acelerados por GPU.
-* **Aceleración NVIDIA NVENC**: Codificación ultra rápida a través del códec `h264_nvenc`.
-* **Aceleración Intel QSV**: Soporte para hardware Intel Quick Sync Video (`h264_qsv`).
-* **Aceleración AMD AMF**: Soporte para hardware AMD Advanced Media Framework (`h264_amf`).
-* **Decodificación por Hardware**: Opción de usar D3D11VA o DXVA2 para acelerar la lectura del archivo de vídeo.
-* **Perfiles de velocidad/calidad (Presets)**: Perfiles personalizables para optimizar el rendimiento y la calidad visual de salida.
-* 📖 [Leer documentación detallada sobre Hardcode y GPU](docs/hardcode_gpu.md).
-
-### 🧹 [3. Mantenimiento de Archivos In-Place](docs/mantenimiento_metadata.md)
-Herramientas rápidas para modificar directamente los contenedores de los archivos multimedia originales cargados en la cola:
-* **Limpieza de metadatos**: Remueve etiquetas globales innecesarias, títulos no deseados y tags de codificadores en todos los streams del archivo.
-* **Eliminar subtítulos**: Descarta por completo las pistas de subtítulos internos en un solo paso manteniendo intactos los flujos de audio y vídeo originales.
-* 📖 [Leer documentación detallada sobre Mantenimiento](docs/mantenimiento_metadata.md).
-
-### 🏷️ [4. Renombrador Masivo por Lotes](docs/renombrador.md)
-* **Constructor de nombres**: Renombra todos los archivos de la cola principal utilizando comodines como `{num}` y `{name}`.
-* **Búsqueda y Reemplazo por Regex**: Soporte avanzado para expresiones regulares (Regex) que permite limpiar etiquetas, corchetes, o extraer números de episodios específicos.
-* **Presets de renombrado**: Guarda tus fórmulas personalizadas de renombrado masivo y reutilízalas cuando las necesites.
-* 📖 [Leer documentación detallada sobre el Renombrador](docs/renombrador.md).
-
-### ⚙️ [5. Constructor de Rutas Dinámicas de Salida](docs/rutas_dinamicas.md)
-* **Organización automatizada**: Crea carpetas de salida inteligentes en base a metadatos extraídos de los vídeos procesados.
-* **Marcadores dinámicos**: Utiliza marcadores como `{resolution}`, `{codec_v}`, `{codec_a}`, `{audio_langs}`, `{sub_langs}`, `{folder}` y `{name}` en tus rutas de salida.
-* **Presets de constructor**: Sistema intuitivo de botones y presets interactivos para simplificar el diseño de la estructura de carpetas.
-* 📖 [Leer documentación detallada sobre Rutas Dinámicas](docs/rutas_dinamicas.md).
+<p align="center">
+  <img src="https://img.shields.io/badge/Python-3.12+-3776AB?style=flat&logo=python&logoColor=white" alt="Python 3.12+">
+  <img src="https://img.shields.io/badge/Platform-Windows-0078D6?style=flat&logo=windows&logoColor=white" alt="Windows">
+  <img src="https://img.shields.io/badge/GUI-Tkinter-blueviolet" alt="Tkinter">
+  <img src="https://img.shields.io/badge/Multimedia-FFmpeg-007808?style=flat&logo=ffmpeg&logoColor=white" alt="FFmpeg">
+  <img src="https://img.shields.io/badge/License-MIT-green?style=flat" alt="MIT License">
+</p>
 
 ---
 
-## 🛑 Cancelación Inmediata e Inteligente
+## Overview
 
-La aplicación cuenta con una rutina de detención de tareas por subprocesos no bloqueante (`subprocess.Popen` redireccionado de forma segura). Al hacer clic en **"Cancelar todo"**, se finaliza de forma **instantánea** cualquier instancia activa de FFmpeg/FFprobe corriendo en segundo plano, liberando de inmediato el procesador y la tarjeta gráfica del sistema sin demoras ni bloqueos de interfaz.
+Batch post-processing of media collections traditionally requires either complex command-line scripts or heavy, multi-layered video editors that consume excessive system resources and risk unintended transcoding passes.
 
----
+**Video Workstation (VW)** is a high-performance desktop application engineered in Python and Tkinter designed to optimize and accelerate batch video post-processing workflows. It centralizes lossless stream multiplexing (remuxing), GPU-accelerated subtitle hardcoding, batch tag and metadata sanitization, regex-driven bulk file renaming, and media property-driven dynamic directory structuring into a clean, zero-dependency control center.
 
-## 🛠️ Requisitos del Sistema
-
-1. **Python 3.12** o superior.
-2. **FFmpeg y FFprobe**: La aplicación los utiliza internamente para las operaciones de codificación y análisis de streams. Puedes configurar sus rutas en la interfaz gráfica (`Configuración -> Cambiar ruta...`).
+Built with an emphasis on performance, data integrity, and operator ergonomics, VW provides an intuitive desktop interface over FFmpeg and FFprobe without requiring third-party runtime package installations.
 
 ---
 
-## ⚙️ Parámetros de Configuración
+## Key Features
 
-Al abrir por primera vez la aplicación, se genera automáticamente un archivo de configuración en `%APPDATA%/Galleon/VPT/vpt_config.ini` con las siguientes opciones estándar:
-* **ffmpeg**: `%APPDATA%/Galleon/bin/ffmpeg.exe`
-* **ffprobe**: `%APPDATA%/Galleon/bin/ffprobe.exe`
-* **buscar_recursivo**: `True` (Carga recursiva de carpetas)
-* **crear_subcarpeta**: `False` (Exportación en la misma carpeta o ruta directa)
-* **gpu_acel**: `"nvidia"` (Elige codificador por hardware: `"nvidia"`, `"intel"` o `"amd"`)
-* **decod_hw**: `"Software"` (Elige decodificación: `"Software"`, `"d3d11va"` o `"dxva2"`)
-* **preset**: `"medium"`
-* **sufijo_idiomas**: `True` (Si está activo, añade el sufijo de idioma como `_SPA` o `_hardcoded` al archivo. Si está desactivado, conserva el nombre original).
+- **Lossless Multiplexing (Remux) & Version Selector:** Extracts and reassembles multiple audio and subtitle tracks without re-encoding the original video stream, preserving 100% of the visual fidelity at raw disk I/O speeds.
+- **Hardware-Accelerated Subtitle Hardcoding (GPU Hardcode):** Deep integration with GPU hardware encoding pipelines (NVIDIA NVENC, Intel Quick Sync, and AMD AMF) and hardware-assisted decoding (D3D11VA, DXVA2) to burn subtitles at maximum rendering speeds.
+- **In-Place Metadata Sanitization & Maintenance:** Comprehensive batch stripping of encoder tags, release group metadata, and title markers across internal streams (`-map_metadata -1`), alongside fast container-level subtitle track removal (`-sn`) with zero video or audio re-compression.
+- **Regex Batch File Renamer:** Token-based rename builder with dynamic variables (`{name}`, `{num}`), configurable numeric padding, and an advanced regex engine to sanitize complex release patterns in media libraries.
+- **Dynamic Output Path Constructor:** Automated organization into hierarchical subfolders based on technical media attributes inspected via FFprobe (`{resolution}`, `{codec_v}`, `{codec_a}`, `{audio_langs}`, `{sub_langs}`, `{folder}`, `{name}`).
+- **Smart Binary Resolver:** Cascading automatic detection of `ffmpeg.exe` and `ffprobe.exe` across local `tools/` (100% portable mode), `%APPDATA%/VideoWorkstation/tools/`, or system environment `PATH`.
+- **Zero External Runtime Dependencies:** Operates strictly on Python's Standard Library (`tkinter`, `subprocess`, `threading`, `queue`, `json`, `configparser`, `pathlib`).
 
 ---
 
-## 📦 Compilación y Generación del Ejecutable
+## Architecture & Engineering Highlights
 
-VPT Studio incluye una herramienta automatizada dentro de la carpeta `dist/` que permite compilar y empaquetar la aplicación en un único archivo ejecutable (`.exe`) independiente para Windows:
-
-1. Navega a la carpeta `dist/`.
-2. Ejecuta el archivo por lotes `build.bat` (haciendo doble clic o desde la terminal).
-3. El script constructor:
-   - Verificará e instalará automáticamente `pyinstaller` a través de `pip` si no está disponible en el sistema.
-   - Extraerá de forma dinámica el número de versión desde `vpt.py`.
-   - Generará un ejecutable autónomo llamado `VPT_Studio_v{versión}.exe` con la versión incrustada en las propiedades nativas de Windows.
-   - Limpiará todos los archivos temporales generados en el proceso (`build/`, `.spec`, etc.), dejando la carpeta `dist/` completamente limpia.
+- **Non-Blocking Multithreaded UI:** Stream container inspection and resource-intensive FFmpeg encoding tasks run on background worker threads (`threading.Thread`), communicating with the main Tkinter UI event loop through thread-safe queues (`queue.Queue`) to guarantee a fluid, responsive 60 FPS user experience.
+- **Strict Subprocess Lifecycle & Instant Abort:** Employs managed `subprocess.Popen` pipelines with instant termination routines. Canceling an ongoing batch immediately halts child FFmpeg/FFprobe processes at the operating system level, instantly releasing GPU encoder sessions and CPU cores without leaving zombie processes or memory leaks.
+- **Safe In-Place Atomic Operations:** Destructive modifications targeting source files adhere to an atomic transaction pattern: operations write to isolated temporary files, verify strict `exit code 0` completion, and only then perform an atomic replacement of the original file. Any failure aborts the pipeline and purges temporary files, leaving the source intact.
+- **Dynamic Hardware Probing:** Detects host GPU encoder capabilities on application startup (`h264_nvenc`, `h264_qsv`, `h264_amf`) and dynamically adapts GUI controls and available options according to the system's hardware.
+- **Decoupled Settings Persistence:** Centralized and atomic management of user configuration in an INI file (`vw_config.ini`) located in the user's application data directory.
+- **Automated Standalone Packaging:** Includes a dedicated `dist/build.py` script and `dist/build.bat` that validate the environment, detect virtual environments (`venv`), bundle with PyInstaller, embed Windows version metadata, and output a standalone binary `VW_v1.0.0.exe`.
 
 ---
 
-## 👤 Desarrollador
+## Documentation
 
-* **Autor**: [TheHexenjagd](https://github.com/TheHexenjagd)
+Comprehensive step-by-step guides for each module are available in both English and Spanish:
+
+- **Multiplexing & Version Selector:** [English (docs/en/remux_selector.md)](docs/en/remux_selector.md) | [Español (docs/es/remux_selector.md)](docs/es/remux_selector.md)
+- **GPU-Accelerated Hardcoding:** [English (docs/en/gpu_hardcode.md)](docs/en/gpu_hardcode.md) | [Español (docs/es/hardcode_gpu.md)](docs/es/hardcode_gpu.md)
+- **Metadata Maintenance:** [English (docs/en/metadata_maintenance.md)](docs/en/metadata_maintenance.md) | [Español (docs/es/mantenimiento_metadata.md)](docs/es/mantenimiento_metadata.md)
+- **Batch Renamer:** [English (docs/en/batch_renamer.md)](docs/en/batch_renamer.md) | [Español (docs/es/renombrador.md)](docs/es/renombrador.md)
+- **Dynamic Output Paths:** [English (docs/en/dynamic_paths.md)](docs/en/dynamic_paths.md) | [Español (docs/es/rutas_dinamicas.md)](docs/es/rutas_dinamicas.md)
+
+---
+
+## Project Structure
+
+```text
+video_workstation/
+├── dist/
+│   ├── build.bat                   # Automated Windows executable builder
+│   └── build.py                    # PyInstaller packaging and build script
+├── docs/
+│   ├── en/
+│   │   ├── batch_renamer.md        # English guide: Regex batch renamer
+│   │   ├── dynamic_paths.md        # English guide: Dynamic output paths
+│   │   ├── gpu_hardcode.md         # English guide: GPU-accelerated hardcoding
+│   │   ├── metadata_maintenance.md # English guide: In-place metadata maintenance
+│   │   └── remux_selector.md       # English guide: Multiplexing and version selector
+│   └── es/
+│       ├── hardcode_gpu.md         # Spanish guide: GPU-accelerated hardcoding
+│       ├── mantenimiento_metadata.md # Spanish guide: In-place metadata maintenance
+│       ├── remux_selector.md       # Spanish guide: Multiplexing and version selector
+│       ├── renombrador.md          # Spanish guide: Regex batch renamer
+│       └── rutas_dinamicas.md      # Spanish guide: Dynamic output paths
+├── tools/
+│   └── README.txt                  # Directory and instructions for portable binaries
+├── vw.py                           # Application entry point and desktop GUI (Tkinter)
+├── LICENSE                         # MIT License terms
+├── README.md                       # Main documentation (English)
+└── README.es.md                    # Documentation in Spanish
+```
+
+---
+
+## Installation & Setup
+
+### Prerequisites
+
+- **Operating System:** Windows 10 / 11 (64-bit).
+- **Python:** Version 3.12 or higher.
+- **FFmpeg & FFprobe:** Required for stream inspection and processing. Can be provided in three ways:
+  1. **Portable Mode (Recommended):** Download and place `ffmpeg.exe` and `ffprobe.exe` into the local `tools/` folder.
+  2. **User Directory:** Located at `%APPDATA%/VideoWorkstation/tools/`.
+  3. **System PATH:** Automatically detected if installed globally in Windows.
+
+### Quick Start (Running from Source)
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/TheHexenjagd/VW.git
+   cd VW
+   ```
+
+2. (Optional) Place `ffmpeg.exe` and `ffprobe.exe` inside the `tools/` directory.
+
+3. Launch the application:
+   ```bash
+   python vw.py
+   ```
+
+---
+
+## Standalone Windows Executable (.exe)
+
+The project includes an automated builder to compile a completely portable binary with zero external runtime dependencies (no Python installation required on the target machine):
+
+- Double-click `dist/build.bat` or run from your terminal:
+  ```bash
+  python dist/build.py
+  ```
+
+The builder will verify compilation tools, auto-detect any local `venv`, embed Windows version metadata, clean temporary build caches, and output `dist/VW_v1.0.0.exe`.
+
+---
+
+## Configuration
+
+User preferences and runtime configurations are automatically persisted at `%APPDATA%/VideoWorkstation/vw_config.ini`:
+
+- **Binary paths:** Discovery and explicit paths for `ffmpeg.exe` and `ffprobe.exe`.
+- **Hardware acceleration:** Preferred GPU encoder (`nvidia`, `intel`, `amd`) and hardware decoder framework (`Software`, `d3d11va`, `dxva2`).
+- **Processing parameters:** Dynamic output folder rules, language suffix tags, recursive scanning, and quality presets.
+
+---
+
+## Authors & Development Team
+
+Project developed and maintained by:
+
+<table align="center">
+  <tr>
+    <td align="center" width="260px">
+      <a href="https://github.com/TheHexenjagd">
+        <img src="https://github.com/TheHexenjagd.png" width="110px;" alt="Gabriel Giraldo Herrera"/><br />
+        <sub><b>Gabriel Giraldo Herrera</b></sub>
+      </a><br />
+      <a href="https://github.com/TheHexenjagd"><code>@TheHexenjagd</code></a><br />
+      <small>Co-Creator & Developer</small>
+    </td>
+    <td align="center" width="260px">
+      <a href="https://github.com/Gatozo">
+        <img src="https://github.com/Gatozo.png" width="110px;" alt="Jorge Iván Nieto Triviño"/><br />
+        <sub><b>Jorge Iván Nieto Triviño</b></sub>
+      </a><br />
+      <a href="https://github.com/Gatozo"><code>@Gatozo</code></a><br />
+      <small>Co-Creator & Developer</small>
+    </td>
+  </tr>
+</table>
+
+---
+
+## License
+
+This project is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for details.

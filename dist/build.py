@@ -3,52 +3,143 @@ import sys
 import re
 import shutil
 import subprocess
+import importlib.util
+
+def is_in_venv():
+    """Detecta si el script se esta ejecutando dentro de un entorno virtual."""
+    return (
+        hasattr(sys, 'real_prefix') or
+        (hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix)
+    )
+
+def get_missing_dependencies():
+    """Comprueba si PyInstaller esta instalado sin cargarlo en memoria."""
+    required = {
+        "PyInstaller": "pyinstaller",
+    }
+    missing = []
+    for mod_name, pkg_name in required.items():
+        if importlib.util.find_spec(mod_name) is None:
+            missing.append(pkg_name)
+    return missing
+
+def verify_and_handle_dependencies(auto_confirm=False):
+    """Verifica dependencias de compilacion aplicando buenas practicas con entornos virtuales."""
+    missing = get_missing_dependencies()
+    
+    if not missing:
+        print("[OK] Herramienta de compilacion (PyInstaller) disponible.")
+        return
+
+    in_venv = is_in_venv()
+    print("\n[!] Se detectaron herramientas faltantes para compilar el proyecto:")
+    for pkg in missing:
+        print(f"    - {pkg}")
+
+    if not in_venv:
+        print("\n" + "=" * 65)
+        print("  [AVISO DE BUENA PRACTICA]")
+        print("  Actualmente NO estas dentro de un entorno virtual (venv).")
+        print("  Instalar paquetes directamente en el Python global del sistema")
+        print("  puede generar conflictos con otros proyectos.")
+        print("\n  Recomendacion:")
+        print("    1. Crear un entorno virtual:")
+        print("       python -m venv venv")
+        print("    2. Activarlo:")
+        print("       venv\\Scripts\\activate   (en Windows)")
+        print("    3. Instalar PyInstaller:")
+        print("       pip install pyinstaller")
+        print("    4. Ejecutar de nuevo build.bat o build.py")
+        print("=" * 65 + "\n")
+
+        if auto_confirm:
+            proceed = True
+        elif not sys.stdin.isatty():
+            print("[ERROR] Ejecucion no interactiva y sin entorno virtual.")
+            print("Por favor crea/activa un venv e instala pyinstaller antes de compilar.")
+            sys.exit(1)
+        else:
+            resp = input("¿Deseas instalar pyinstaller de todos modos en el Python global? (s/N): ").strip().lower()
+            proceed = resp in ['s', 'si', 'y', 'yes']
+
+        if not proceed:
+            print("\nOperacion cancelada por el usuario.")
+            print("Crea tu entorno virtual y vuelve a intentarlo.")
+            sys.exit(0)
+
+    else:
+        print(f"\n[*] Entorno virtual detectado: {sys.prefix}")
+        if auto_confirm:
+            proceed = True
+        elif not sys.stdin.isatty():
+            proceed = True
+        else:
+            resp = input("¿Deseas instalar PyInstaller en este entorno? (S/n): ").strip().lower()
+            proceed = resp in ['', 's', 'si', 'y', 'yes']
+
+        if not proceed:
+            print("\nOperacion cancelada.")
+            print("Puedes instalarlo manualmente ejecutando: pip install pyinstaller")
+            sys.exit(0)
+
+    print("\n[*] Instalando PyInstaller...")
+    try:
+        subprocess.check_call([sys.executable, "-m", "pip", "install"] + missing)
+        print("[OK] PyInstaller instalado con exito.\n")
+    except Exception as e:
+        print(f"[ERROR] No se pudo instalar PyInstaller: {e}")
+        sys.exit(1)
 
 def main():
-    print("=== VPT Studio Executable Builder ===")
+    print("=======================================================")
+    print("   Generador de Ejecutable - Video Workstation (VW)")
+    print("   Desarrollado por Gabriel Giraldo & Jorge Nieto")
+    print("=======================================================\n")
+
+    auto_confirm = "--yes" in sys.argv or "-y" in sys.argv
     
-    # 1. Check for pyinstaller
-    try:
-        import PyInstaller
-        print("PyInstaller is already installed.")
-    except ImportError:
-        print("PyInstaller is not installed. Installing it now...")
-        try:
-            subprocess.check_call([sys.executable, "-m", "pip", "install", "pyinstaller"])
-            print("PyInstaller installed successfully.")
-        except Exception as e:
-            print(f"Error installing PyInstaller: {e}")
-            sys.exit(1)
-            
-    # 2. Get the root path (parent of dist)
+    # 1. Rutas principales
     dist_dir = os.path.dirname(os.path.abspath(__file__))
     project_root = os.path.dirname(dist_dir)
-    vpt_path = os.path.join(project_root, "vpt.py")
+    vw_path = os.path.join(project_root, "vw.py")
     
-    if not os.path.exists(vpt_path):
-        print(f"Error: Could not find vpt.py at {vpt_path}")
+    if not os.path.exists(vw_path):
+        print(f"[ERROR] No se encontro el archivo principal: {vw_path}")
         sys.exit(1)
-        
-    # 3. Read version from vpt.py
+
+    # 2. Verificar dependencias de build y buenas practicas de entorno
+    verify_and_handle_dependencies(auto_confirm=auto_confirm)
+
+    # 3. Verificar posible conflicto con paquete obsoleto 'pathlib' de PyPI
+    try:
+        import pathlib
+        pathlib_file = getattr(pathlib, '__file__', '')
+        if pathlib_file and 'site-packages' in pathlib_file.lower():
+            print("[!] Detectado paquete externo obsoleto 'pathlib' en site-packages.")
+            print("    Desinstalando para evitar conflictos con PyInstaller...")
+            subprocess.check_call([sys.executable, "-m", "pip", "uninstall", "pathlib", "-y"])
+    except Exception:
+        pass
+
+    # 4. Leer version desde vw.py
     version = "1.0.0"
     try:
-        with open(vpt_path, "r", encoding="utf-8") as f:
+        with open(vw_path, "r", encoding="utf-8") as f:
             content = f.read()
-            match = re.search(r'^VERSION\s*=\s*[\'"]([^\'"]+)[\'"]', content, re.MULTILINE)
+            match = re.search(r'^(?:APP_)?VERSION\s*=\s*[\'"]([^\'"]+)[\'"]', content, re.MULTILINE)
             if match:
                 version = match.group(1)
-                print(f"Detected version: {version}")
+                print(f"[*] Version detectada: {version}")
             else:
-                print("Warning: Could not find VERSION variable in vpt.py. Using default 1.0.0.")
+                print(f"[*] No se encontro variable VERSION en vw.py. Usando default {version}.")
     except Exception as e:
-        print(f"Error reading version from vpt.py: {e}. Using default 1.0.0.")
+        print(f"[!] Error leyendo version desde vw.py: {e}. Usando default {version}.")
 
-    # 4. Generate file_version_info.txt
-    # We parse the version (e.g. "1.0.0") into 4 tuple integers (e.g. 1, 0, 0, 0)
+    # 5. Generar file_version_info.txt para los metadatos de Windows
     version_parts = version.split('.')
     while len(version_parts) < 4:
         version_parts.append('0')
-    version_tuple = tuple(int(x) for x in version_parts[:4])
+    version_tuple = tuple(int(x) if x.isdigit() else 0 for x in version_parts[:4])
     
     version_info_content = f'''# UTF-8
 VSVersionInfo(
@@ -67,13 +158,13 @@ VSVersionInfo(
       [
       StringTable(
         '040904B0',
-        [StringStruct('CompanyName', 'TheHexenjagd'),
-         StringStruct('FileDescription', 'Video Processing Toolkit Studio'),
+        [StringStruct('CompanyName', 'Gabriel Giraldo Herrera & Jorge Iván Nieto Triviño'),
+         StringStruct('FileDescription', 'Video Workstation'),
          StringStruct('FileVersion', '{version}'),
-         StringStruct('InternalName', 'vpt'),
-         StringStruct('LegalCopyright', 'Copyright (c) 2026 TheHexenjagd'),
-         StringStruct('OriginalFilename', 'VPT_Studio_v{version}.exe'),
-         StringStruct('ProductName', 'VPT Studio'),
+         StringStruct('InternalName', 'vw'),
+         StringStruct('LegalCopyright', 'Copyright (c) 2026 Gabriel Giraldo Herrera & Jorge Iván Nieto Triviño'),
+         StringStruct('OriginalFilename', 'VW_v{version}.exe'),
+         StringStruct('ProductName', 'Video Workstation'),
          StringStruct('ProductVersion', '{version}')])
       ]), 
     VarFileInfo([VarStruct('Translation', [1033, 1200])])
@@ -84,39 +175,52 @@ VSVersionInfo(
     try:
         with open(version_info_path, "w", encoding="utf-8") as f:
             f.write(version_info_content)
-        print("Generated file_version_info.txt successfully.")
+        print("[OK] Metadatos de ejecutable de Windows generados.")
     except Exception as e:
-        print(f"Error writing version info file: {e}")
+        print(f"[ERROR] No se pudo crear el archivo de version: {e}")
         sys.exit(1)
 
-    # 5. Clean up old builds and SPEC files in dist
-    exe_name = f"VPT_Studio_v{version}"
+    # 6. Limpiar compilaciones anteriores en dist/
+    exe_name = f"VW_v{version}"
     final_exe_path = os.path.join(dist_dir, f"{exe_name}.exe")
     if os.path.exists(final_exe_path):
         try:
             os.remove(final_exe_path)
-            print(f"Removed old executable: {final_exe_path}")
+            print(f"[*] Ejecutable anterior eliminado: {final_exe_path}")
         except Exception as e:
-            print(f"Warning: Could not remove old executable: {e}")
+            print(f"[!] Advertencia: No se pudo eliminar el ejecutable anterior: {e}")
 
-    # Remove build folder and spec file if they exist
     build_dir = os.path.join(dist_dir, "build")
     if os.path.exists(build_dir):
         try:
             shutil.rmtree(build_dir)
-            print("Cleaned up old build workspace.")
+            print("[*] Carpeta temporal build/ limpiada.")
         except Exception as e:
-            print(f"Warning: Could not clean build directory: {e}")
+            print(f"[!] Advertencia al limpiar build/: {e}")
 
     spec_file_path = os.path.join(dist_dir, f"{exe_name}.spec")
     if os.path.exists(spec_file_path):
         try:
             os.remove(spec_file_path)
-            print("Removed old spec file.")
+            print("[*] Archivo .spec anterior eliminado.")
         except Exception as e:
-            print(f"Warning: Could not remove old spec file: {e}")
+            print(f"[!] Advertencia al eliminar .spec: {e}")
 
-    # 6. Run PyInstaller
+    # 7. Buscar icono si existe
+    icon_candidate_paths = [
+        os.path.join(project_root, "icon.ico"),
+        os.path.join(project_root, "assets", "icon.ico"),
+        os.path.join(dist_dir, "icon.ico")
+    ]
+    icon_arg = []
+    for icon_path in icon_candidate_paths:
+        if os.path.exists(icon_path):
+            print(f"[*] Icono encontrado: {icon_path}")
+            icon_arg = [f"--icon={icon_path}"]
+            break
+
+    # 8. Comando PyInstaller
+    # VW utiliza la biblioteca estandar pura de Python (sin librerias externas pesadas)
     cmd = [
         sys.executable,
         "-m",
@@ -129,39 +233,40 @@ VSVersionInfo(
         f"--distpath={dist_dir}",
         f"--workpath={build_dir}",
         f"--specpath={dist_dir}",
-        vpt_path
-    ]
+    ] + icon_arg + [vw_path]
     
-    print(f"Running PyInstaller command: {' '.join(cmd)}")
+    print(f"\n[*] Ejecutando PyInstaller...")
     try:
         subprocess.check_call(cmd)
-        print("\nPyInstaller build completed successfully.")
+        print("\n[OK] Compilacion de PyInstaller completada con exito.")
     except Exception as e:
-        print(f"\nError running PyInstaller: {e}")
+        print(f"\n[ERROR] Error durante la ejecucion de PyInstaller: {e}")
         sys.exit(1)
 
-    # 7. Post-build cleanup
-    print("Cleaning up temporary build files...")
+    # 9. Limpieza posterior a la compilación
+    print("[*] Limpiando archivos temporales...")
     if os.path.exists(build_dir):
         try:
             shutil.rmtree(build_dir)
         except Exception as e:
-            print(f"Warning: Could not remove build folder: {e}")
+            print(f"[!] Advertencia: No se pudo eliminar la carpeta build/: {e}")
             
     if os.path.exists(spec_file_path):
         try:
             os.remove(spec_file_path)
         except Exception as e:
-            print(f"Warning: Could not remove spec file: {e}")
+            print(f"[!] Advertencia: No se pudo eliminar el archivo spec: {e}")
 
     if os.path.exists(version_info_path):
         try:
             os.remove(version_info_path)
         except Exception as e:
-            print(f"Warning: Could not remove version info file: {e}")
+            print(f"[!] Advertencia: No se pudo eliminar el archivo de version temporal: {e}")
 
-    print(f"\nSuccess! Independent executable created at:")
-    print(final_exe_path)
+    print("\n=======================================================")
+    print("   [EXITO] Ejecutable portable creado correctamente:")
+    print(f"   -> {final_exe_path}")
+    print("=======================================================\n")
 
 if __name__ == "__main__":
     main()

@@ -1,7 +1,17 @@
 @echo off
-title VPT Studio Builder
-echo Starting VPT Studio executable generation...
-python "%~dp0build.py"
+title VW Builder - Generador de Ejecutable
+
+:: Detectar si existe un entorno virtual creado en la raiz del proyecto
+set "PYTHON_EXE=python"
+if exist "%~dp0..\venv\Scripts\python.exe" (
+    set "PYTHON_EXE=%~dp0..\venv\Scripts\python.exe"
+    echo [*] Entorno virtual detectado en venv\
+) else if exist "%~dp0..\.venv\Scripts\python.exe" (
+    set "PYTHON_EXE=%~dp0..\.venv\Scripts\python.exe"
+    echo [*] Entorno virtual detectado en .venv\
+)
+
+"%PYTHON_EXE%" "%~dp0build.py" %*
 echo.
-echo Process finished.
+echo Proceso finalizado.
 pause

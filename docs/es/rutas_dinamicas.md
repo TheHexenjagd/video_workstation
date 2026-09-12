@@ -1,6 +1,10 @@
 # Constructor de Rutas Dinámicas de Salida
 
-Cuando procesas grandes lotes de archivos de vídeo en VPT Studio, la organización manual de los archivos resultantes puede tornarse tediosa. Para solucionar esto, VPT Studio cuenta con un **Constructor de Rutas Dinámicas**, que analiza el archivo y genera carpetas de salida estructuradas basándose en las propiedades y metadatos específicos de cada vídeo.
+<p align="right">
+  <a href="../en/dynamic_paths.md">English</a> | <b>Español</b>
+</p>
+
+Cuando procesas grandes lotes de archivos de vídeo en Video Workstation (VW), la organización manual de los archivos resultantes puede tornarse tediosa. Para solucionar esto, VW cuenta con un **Constructor de Rutas Dinámicas**, que analiza el archivo y genera carpetas de salida estructuradas basándose en las propiedades y metadatos específicos de cada vídeo.
 
 ---
 
@@ -8,12 +12,12 @@ Cuando procesas grandes lotes de archivos de vídeo en VPT Studio, la organizaci
 En el panel de **Opciones de Procesamiento** de la ventana principal, debajo de la ruta de salida, encontrarás la opción **"2. Subcarpeta: Crear"**.
 
 * Si está desactivada, los vídeos procesados se guardarán directamente en la carpeta de salida seleccionada.
-* Si está activa, VPT Studio creará una subcarpeta específica para cada vídeo basada en un patrón de texto personalizable, y colocará el archivo final dentro de ella.
+* Si está activa, VW creará una subcarpeta específica para cada vídeo basada en un patrón de texto personalizable, y colocará el archivo final dentro de ella.
 
 ---
 
 ## Marcadores y Variables Disponibles (Placeholders)
-Puedes construir tu patrón de ruta utilizando las siguientes variables encerradas entre llaves `{}`. Al procesar cada archivo, VPT Studio reemplazará cada marcador con la información real extraída por FFprobe:
+Puedes construir tu patrón de ruta utilizando las siguientes variables encerradas entre llaves `{}`. Al procesar cada archivo, VW reemplazará cada marcador con la información real extraída por FFprobe:
 
 | Marcador | Propiedad a la que hace Referencia | Ejemplo de Salida |
 |---|---|---|
