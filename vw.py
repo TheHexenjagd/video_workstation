@@ -243,13 +243,20 @@ class RoundedButton(tk.Canvas):
 tk.Button = RoundedButton
 
 
-CONFIG_DIR = os.path.join(os.getenv("APPDATA"), "VideoWorkstation")
+_appdata_env = os.getenv("APPDATA")
+if _appdata_env:
+    CONFIG_DIR = os.path.join(_appdata_env, "VideoWorkstation")
+    _LEGACY_CONFIG_DIR = os.path.join(_appdata_env, "Galleon", "GVW")
+else:
+    _xdg_cfg = os.getenv("XDG_CONFIG_HOME", os.path.join(str(Path.home()), ".config"))
+    CONFIG_DIR = os.path.join(_xdg_cfg, "VideoWorkstation")
+    _LEGACY_CONFIG_DIR = os.path.join(_xdg_cfg, "Galleon", "GVW")
+
 os.makedirs(CONFIG_DIR, exist_ok=True)
 CONFIG_FILE = os.path.join(CONFIG_DIR, "vw_config.ini")
 QUEUE_FILE = os.path.join(CONFIG_DIR, "vw_queue.ini")
 
 # Migracion transparente de configuraciones previas (Galleon / GVW) si existen
-_LEGACY_CONFIG_DIR = os.path.join(os.getenv("APPDATA"), "Galleon", "GVW")
 if os.path.isdir(_LEGACY_CONFIG_DIR):
     _legacy_cfg = os.path.join(_LEGACY_CONFIG_DIR, "gvw_config.ini")
     _legacy_queue = os.path.join(_LEGACY_CONFIG_DIR, "gvw_queue.ini")
@@ -266,6 +273,71 @@ if os.path.isdir(_LEGACY_CONFIG_DIR):
 
 TOOLS_DIR = os.path.join(CONFIG_DIR, "tools")
 os.makedirs(TOOLS_DIR, exist_ok=True)
+
+def obtener_directorio_videos_defecto():
+    """
+    Retorna la ruta predeterminada de la carpeta de videos del usuario
+    de forma multiplataforma (Windows, Linux, macOS).
+    """
+    # 1. Windows: SHGetFolderPathW con CSIDL_MYVIDEO (0x000e)
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            import ctypes.wintypes
+            buf = ctypes.create_unicode_buffer(ctypes.wintypes.MAX_PATH)
+            if ctypes.windll.shell32.SHGetFolderPathW(None, 0x000e, None, 0, buf) == 0 and buf.value:
+                os.makedirs(buf.value, exist_ok=True)
+                return os.path.abspath(buf.value)
+        except Exception:
+            pass
+        path_win = os.path.join(str(Path.home()), "Videos")
+        try:
+            os.makedirs(path_win, exist_ok=True)
+        except Exception:
+            pass
+        return os.path.abspath(path_win)
+
+    # 2. macOS (Darwin): estándar ~/Movies o ~/Videos
+    elif sys.platform == "darwin":
+        movies_dir = os.path.join(str(Path.home()), "Movies")
+        if os.path.isdir(movies_dir):
+            return os.path.abspath(movies_dir)
+        videos_dir = os.path.join(str(Path.home()), "Videos")
+        if os.path.isdir(videos_dir):
+            return os.path.abspath(videos_dir)
+        try:
+            os.makedirs(movies_dir, exist_ok=True)
+        except Exception:
+            pass
+        return os.path.abspath(movies_dir)
+
+    # 3. Linux / Unix: consultar XDG User Dirs o ~/Videos
+    else:
+        xdg_videos = os.getenv("XDG_VIDEOS_DIR")
+        if xdg_videos and os.path.isdir(xdg_videos):
+            return os.path.abspath(xdg_videos)
+
+        xdg_config = os.getenv("XDG_CONFIG_HOME", os.path.join(str(Path.home()), ".config"))
+        user_dirs_file = os.path.join(xdg_config, "user-dirs.dirs")
+        if os.path.isfile(user_dirs_file):
+            try:
+                with open(user_dirs_file, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if line.startswith("XDG_VIDEOS_DIR="):
+                            val = line.split("=", 1)[1].strip('"\'')
+                            val = val.replace("$HOME", str(Path.home()))
+                            if os.path.isdir(val):
+                                return os.path.abspath(val)
+            except Exception:
+                pass
+
+        videos_dir = os.path.join(str(Path.home()), "Videos")
+        try:
+            os.makedirs(videos_dir, exist_ok=True)
+        except Exception:
+            pass
+        return os.path.abspath(videos_dir)
 
 def obtener_ruta_base_app():
     """Retorna el directorio base donde reside el ejecutable empaquetado o el script en ejecucion."""
@@ -353,7 +425,7 @@ DEFAULT_CONFIG = {
     "Paths": {
         "ffmpeg": resolver_ruta_binario("ffmpeg.exe"),
         "ffprobe": resolver_ruta_binario("ffprobe.exe"),
-        "output_dir": "",
+        "output_dir": obtener_directorio_videos_defecto(),
     },
     "Options": {
         "buscar_recursivo": "True",
@@ -629,7 +701,14 @@ class VWSuite:
         self.gpu_acel_var = tk.StringVar(value=self._obtener_gpu_inicial())
         self.decod_hw_var = tk.StringVar(value=self.config_ini.get("Options", "decod_hw", fallback="Software"))
         self.preset_var = tk.StringVar(value=self.config_ini.get("Options", "preset", fallback="medium"))
-        self.salida_var = tk.StringVar(value=self.config_ini.get("Paths", "output_dir", fallback=""))
+        salida_default = self.config_ini.get("Paths", "output_dir", fallback="").strip()
+        if not salida_default:
+            salida_default = obtener_directorio_videos_defecto()
+            if "Paths" not in self.config_ini:
+                self.config_ini["Paths"] = {}
+            self.config_ini["Paths"]["output_dir"] = salida_default
+            self._guardar_configuracion()
+        self.salida_var = tk.StringVar(value=salida_default)
         self.var_sufijo_idiomas = tk.BooleanVar(value=self.config_ini.getboolean("Options", "sufijo_idiomas", fallback=True))
         self.var_eliminar_metadatos = tk.BooleanVar(
             value=self.config_ini.getboolean("Options", "eliminar_metadatos",
@@ -3161,7 +3240,8 @@ class VWSuite:
                 self.ffprobe_cache.clear()
 
     def seleccionar_directorio(self):
-        carpeta = filedialog.askdirectory(title="Seleccionar salida")
+        dir_inicial = self.salida_var.get().strip() or obtener_directorio_videos_defecto()
+        carpeta = filedialog.askdirectory(title="Seleccionar salida", initialdir=dir_inicial)
         if carpeta:
             self.salida_var.set(carpeta)
 
@@ -3452,7 +3532,7 @@ class VWSuite:
             resolved = self._resolver_patron_subcarpeta(f"C:/ruta/de/ejemplo/{video_name}.mp4", info, "ESP_subENG", audio_indices, sub_indices)
             self.var_nombre_subcarpeta.set(old_val)
 
-            base_dir = self.salida_var.get() or "C:/Salida/Seleccionada"
+            base_dir = self.salida_var.get().strip() or obtener_directorio_videos_defecto()
             preview_lbl.config(text=f"{base_dir}/{resolved}")
 
         patron_var.trace_add("write", actualizar_preview)
