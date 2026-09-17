@@ -47,7 +47,7 @@ Construida con énfasis en el rendimiento, la integridad absoluta de datos y la 
 - **Operaciones atómicas seguras en archivos (In-Place):** Las tareas destructivas que modifican archivos fuente operan bajo un patrón transaccional atómico: procesan en archivos temporales aislados, validan la terminación exitosa (`exit code 0`) y solo entonces realizan la sustitución atómica del archivo original. Cualquier fallo interrumpe la tarea y purga los temporales, preservando la integridad del archivo original intacto.
 - **Sondeo dinámico de hardware:** Identifica en tiempo de ejecución la disponibilidad real de codificadores por hardware (`h264_nvenc`, `h264_qsv`, `h264_amf`) y adapta los controles de la interfaz gráfica a las capacidades de cómputo del equipo.
 - **Persistencia desacoplada de configuración:** Gestión centralizada y atómica de preferencias de usuario en archivo INI (`vw_config.ini`) en el directorio de datos de la aplicación.
-- **Empaquetado portable automatizado:** Incluye el script `dist/build.py` y `dist/build.bat`, los cuales verifican el entorno, detectan entornos virtuales (`venv`), empaquetan con PyInstaller, incrustan metadatos de versión de Windows y generan un ejecutable final independiente `VW_v1.0.0.exe`.
+- **Empaquetado portable automatizado:** Incluye el script orquestador `dist/build.py`, `dist/build.bat` (Windows) y `dist/build.sh` (Linux / macOS), los cuales verifican el entorno, detectan entornos virtuales (`venv`), empaquetan con PyInstaller y generan un ejecutable final independiente.
 
 ---
 
@@ -68,7 +68,8 @@ Las guías detalladas para cada uno de los módulos de la aplicación se encuent
 ```text
 video_workstation/
 ├── dist/
-│   ├── build.bat                   # Generador automatizado del ejecutable Windows
+│   ├── build.bat                   # Generador automatizado para Windows
+│   ├── build.sh                    # Generador automatizado para Linux y macOS
 │   └── build.py                    # Script de compilación y empaquetado con PyInstaller
 ├── docs/
 │   ├── en/
@@ -121,16 +122,25 @@ video_workstation/
 
 ---
 
-## Generación del Ejecutable para Windows (.exe)
+## Generación del Ejecutable Portable
 
-El proyecto incluye un generador automatizado para compilar un binario portable independiente (sin requerir instalación de Python en la máquina de destino):
+El proyecto incluye generadores automatizados para compilar un binario portable independiente (sin requerir instalación de Python en la máquina de destino):
 
-- Haz doble clic en `dist/build.bat` o ejecuta en la terminal:
+- **En Windows:** Haz doble clic en `dist/build.bat` o ejecuta:
+  ```cmd
+  dist\build.bat
+  ```
+- **En Linux / macOS:** Ejecuta:
+  ```bash
+  chmod +x dist/build.sh
+  ./dist/build.sh
+  ```
+- **O directamente mediante Python en cualquier plataforma:**
   ```bash
   python dist/build.py
   ```
 
-El script verificará las herramientas de compilación, detectará el entorno virtual (`venv`) si existe, incrustará los metadatos de versión de Windows, limpiará archivos temporales y generará `dist/VW_v1.0.0.exe`.
+El script verificará las herramientas de compilación, detectará el entorno virtual (`venv`) si existe, aplicará metadatos cuando corresponda (Windows), limpiará archivos temporales y generará el binario compilado en la carpeta `dist/`.
 
 ---
 

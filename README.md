@@ -47,7 +47,7 @@ Built with an emphasis on performance, data integrity, and operator ergonomics, 
 - **Safe In-Place Atomic Operations:** Destructive modifications targeting source files adhere to an atomic transaction pattern: operations write to isolated temporary files, verify strict `exit code 0` completion, and only then perform an atomic replacement of the original file. Any failure aborts the pipeline and purges temporary files, leaving the source intact.
 - **Dynamic Hardware Probing:** Detects host GPU encoder capabilities on application startup (`h264_nvenc`, `h264_qsv`, `h264_amf`) and dynamically adapts GUI controls and available options according to the system's hardware.
 - **Decoupled Settings Persistence:** Centralized and atomic management of user configuration in an INI file (`vw_config.ini`) located in the user's application data directory.
-- **Automated Standalone Packaging:** Includes a dedicated `dist/build.py` script and `dist/build.bat` that validate the environment, detect virtual environments (`venv`), bundle with PyInstaller, embed Windows version metadata, and output a standalone binary `VW_v1.0.0.exe`.
+- **Automated Standalone Packaging:** Includes a dedicated `dist/build.py` orchestrator, `dist/build.bat` (Windows), and `dist/build.sh` (Linux / macOS) that validate the environment, detect virtual environments (`venv`), bundle with PyInstaller, and output a standalone binary.
 
 ---
 
@@ -68,7 +68,8 @@ Comprehensive step-by-step guides for each module are available in both English 
 ```text
 video_workstation/
 ├── dist/
-│   ├── build.bat                   # Automated Windows executable builder
+│   ├── build.bat                   # Automated Windows builder
+│   ├── build.sh                    # Automated Linux and macOS builder
 │   └── build.py                    # PyInstaller packaging and build script
 ├── docs/
 │   ├── en/
@@ -121,16 +122,25 @@ video_workstation/
 
 ---
 
-## Standalone Windows Executable (.exe)
+## Standalone Portable Packaging
 
-The project includes an automated builder to compile a completely portable binary with zero external runtime dependencies (no Python installation required on the target machine):
+The project includes automated builders to compile a completely portable binary with zero external runtime dependencies (no Python installation required on the target machine):
 
-- Double-click `dist/build.bat` or run from your terminal:
+- **On Windows:** Double-click `dist/build.bat` or run:
+  ```cmd
+  dist\build.bat
+  ```
+- **On Linux / macOS:** Run:
+  ```bash
+  chmod +x dist/build.sh
+  ./dist/build.sh
+  ```
+- **Or directly using Python on any platform:**
   ```bash
   python dist/build.py
   ```
 
-The builder will verify compilation tools, auto-detect any local `venv`, embed Windows version metadata, clean temporary build caches, and output `dist/VW_v1.0.0.exe`.
+The builder will verify compilation tools, auto-detect any local virtual environment (`venv`), embed Windows version metadata when applicable, clean temporary build caches, and output the compiled standalone binary in the `dist/` directory.
 
 ---
 
