@@ -891,6 +891,18 @@ class VWSuite:
         except Exception as e:
             print(f"Error al cargar cola persistida: {e}")
 
+        self._actualizar_contadores_colas()
+
+    def _actualizar_contadores_colas(self):
+        cant_activos = len([f for f in self.lista.get(0, tk.END) if f and str(f).strip()])
+        cant_omitidos = len([f for f in self.lista_omitidos.get(0, tk.END) if f and str(f).strip()])
+        try:
+            self.queue_notebook.tab(self.tab_queue_active, text=f"Cola principal ({cant_activos})")
+            self.queue_notebook.tab(self.tab_queue_skipped, text=f"Omitidos / Errores ({cant_omitidos})")
+        except Exception:
+            pass
+        return cant_activos, cant_omitidos
+
     def _btn(self, parent, text, cmd, bg):
         return tk.Button(
             parent,
@@ -971,6 +983,8 @@ class VWSuite:
 
                             self.archivos_en_proceso = []
 
+                            self._actualizar_contadores_colas()
+
                             if failed_files_norm:
                                 self.queue_notebook.select(self.tab_queue_skipped)
 
@@ -1015,6 +1029,7 @@ class VWSuite:
             if f not in existentes:
                 self.lista_omitidos.insert(tk.END, f)
 
+        self._actualizar_contadores_colas()
         self.queue_notebook.select(self.tab_queue_skipped)
 
     def reincorporar_omitidos(self):
@@ -1033,6 +1048,7 @@ class VWSuite:
             if item not in existentes:
                 self.lista.insert(tk.END, item)
 
+        self._actualizar_contadores_colas()
         self.queue_notebook.select(self.tab_queue_active)
 
     def eliminar_omitidos_seleccionados(self):
@@ -1042,12 +1058,14 @@ class VWSuite:
             return
         for i in reversed(sel):
             self.lista_omitidos.delete(i)
+        self._actualizar_contadores_colas()
 
     def limpiar_omitidos(self):
         if self.lista_omitidos.size() == 0:
             return
         if messagebox.askyesno("Confirmar", "Deseas limpiar todos los archivos omitidos?", parent=self.root):
             self.lista_omitidos.delete(0, tk.END)
+            self._actualizar_contadores_colas()
 
     def _set_running_state(self, running):
         self.btn_procesar_cola.config(state=tk.DISABLED if running else tk.NORMAL)
@@ -3230,6 +3248,7 @@ class VWSuite:
         for path in all_items:
             new_val = mapping_renombres.get(path, path)
             self.lista.insert(tk.END, os.path.normpath(new_val))
+        self._actualizar_contadores_colas()
 
         self._enviar_mensaje("===== FIN RENOMBRADO DE ARCHIVOS =====")
         self._enviar_mensaje(f"Renombrados con éxito: {ok_count} | Errores: {fail_count}")
@@ -3248,6 +3267,7 @@ class VWSuite:
         files = filedialog.askopenfilenames(title="Seleccionar videos", filetypes=[("Videos", "*.mp4 *.mkv *.mov *.avi *.flv *.webm *.ts *.m4v")])
         for f in files:
             self.lista.insert(tk.END, os.path.normpath(f))
+        self._actualizar_contadores_colas()
 
     def cargar_carpeta(self):
         carpeta = filedialog.askdirectory(title="Seleccionar carpeta")
@@ -3268,6 +3288,7 @@ class VWSuite:
 
         for f in encontrados:
             self.lista.insert(tk.END, os.path.normpath(f))
+        self._actualizar_contadores_colas()
 
         messagebox.showinfo("Carga finalizada", f"Se agregaron {len(encontrados)} archivo(s)")
 
@@ -3278,12 +3299,14 @@ class VWSuite:
             return
         for i in reversed(sel):
             self.lista.delete(i)
+        self._actualizar_contadores_colas()
 
     def limpiar_lista(self):
         if self.lista.size() == 0:
             return
         if messagebox.askyesno("Confirmar", "Deseas limpiar toda la lista?"):
             self.lista.delete(0, tk.END)
+            self._actualizar_contadores_colas()
             if hasattr(self, "ffprobe_cache"):
                 self.ffprobe_cache.clear()
 
@@ -3992,18 +4015,20 @@ class VWSuite:
         if self.procesando and not messagebox.askyesno("Proceso activo", "Hay un proceso en curso. Salir de todos modos?"):
             return
 
-        has_items = self.lista.size() > 0 or self.lista_omitidos.size() > 0
-        if has_items:
+        cant_activos, cant_omitidos = self._actualizar_contadores_colas()
+        if cant_activos > 0 or cant_omitidos > 0:
             guardar = messagebox.askyesno(
                 "Guardar cola",
                 "¿Deseas guardar la lista actual de videos y omitidos para la próxima sesión?",
                 parent=self.root
             )
             if guardar:
+                validos_activos = [f for f in self.lista.get(0, tk.END) if f and str(f).strip()]
+                validos_omitidos = [f for f in self.lista_omitidos.get(0, tk.END) if f and str(f).strip()]
                 queue_ini = configparser.ConfigParser()
                 queue_ini.add_section("Queue")
-                queue_ini.set("Queue", "lista", json.dumps(list(self.lista.get(0, tk.END))))
-                queue_ini.set("Queue", "lista_omitidos", json.dumps(list(self.lista_omitidos.get(0, tk.END))))
+                queue_ini.set("Queue", "lista", json.dumps(validos_activos))
+                queue_ini.set("Queue", "lista_omitidos", json.dumps(validos_omitidos))
                 try:
                     with open(QUEUE_FILE, "w", encoding="utf-8") as f:
                         queue_ini.write(f)
