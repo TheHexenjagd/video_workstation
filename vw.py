@@ -246,30 +246,13 @@ tk.Button = RoundedButton
 _appdata_env = os.getenv("APPDATA")
 if _appdata_env:
     CONFIG_DIR = os.path.join(_appdata_env, "VideoWorkstation")
-    _LEGACY_CONFIG_DIR = os.path.join(_appdata_env, "Galleon", "GVW")
 else:
     _xdg_cfg = os.getenv("XDG_CONFIG_HOME", os.path.join(str(Path.home()), ".config"))
     CONFIG_DIR = os.path.join(_xdg_cfg, "VideoWorkstation")
-    _LEGACY_CONFIG_DIR = os.path.join(_xdg_cfg, "Galleon", "GVW")
 
 os.makedirs(CONFIG_DIR, exist_ok=True)
 CONFIG_FILE = os.path.join(CONFIG_DIR, "vw_config.ini")
 QUEUE_FILE = os.path.join(CONFIG_DIR, "vw_queue.ini")
-
-# Migracion transparente de configuraciones previas (Galleon / GVW) si existen
-if os.path.isdir(_LEGACY_CONFIG_DIR):
-    _legacy_cfg = os.path.join(_LEGACY_CONFIG_DIR, "gvw_config.ini")
-    _legacy_queue = os.path.join(_LEGACY_CONFIG_DIR, "gvw_queue.ini")
-    if os.path.isfile(_legacy_cfg) and not os.path.isfile(CONFIG_FILE):
-        try:
-            shutil.copy2(_legacy_cfg, CONFIG_FILE)
-        except Exception:
-            pass
-    if os.path.isfile(_legacy_queue) and not os.path.isfile(QUEUE_FILE):
-        try:
-            shutil.copy2(_legacy_queue, QUEUE_FILE)
-        except Exception:
-            pass
 
 TOOLS_DIR = os.path.join(CONFIG_DIR, "tools")
 os.makedirs(TOOLS_DIR, exist_ok=True)
@@ -364,12 +347,6 @@ def resolver_ruta_binario(nombre_binario):
     ruta_vw_tools = os.path.join(TOOLS_DIR, nombre_binario)
     if os.path.isfile(ruta_vw_tools):
         return ruta_vw_tools
-
-    # 2b. Compatibilidad: Directorio legacy de herramientas si existe
-    if os.path.isdir(_LEGACY_CONFIG_DIR):
-        ruta_legacy = os.path.join(_LEGACY_CONFIG_DIR, "tools", nombre_binario)
-        if os.path.isfile(ruta_legacy):
-            return ruta_legacy
 
     # 3. PATH del sistema operativo
     nombre_base = os.path.splitext(nombre_binario)[0]
@@ -3984,6 +3961,5 @@ class VWSuite:
         self.root.mainloop()
 
 if __name__ == "__main__":
-    GVWSuite = VWSuite
     app = VWSuite()
     app.run()

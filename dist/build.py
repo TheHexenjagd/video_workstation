@@ -37,6 +37,8 @@ def verify_and_handle_dependencies(auto_confirm=False):
         print(f"    - {pkg}")
 
     if not in_venv:
+        activate_example = r"venv\Scripts\activate   (en Windows)" if sys.platform == "win32" else "source venv/bin/activate (en Linux/macOS)"
+        builder_example = "build.bat o build.py" if sys.platform == "win32" else "build.sh o build.py"
         print("\n" + "=" * 65)
         print("  [AVISO DE BUENA PRACTICA]")
         print("  Actualmente NO estas dentro de un entorno virtual (venv).")
@@ -46,10 +48,10 @@ def verify_and_handle_dependencies(auto_confirm=False):
         print("    1. Crear un entorno virtual:")
         print("       python -m venv venv")
         print("    2. Activarlo:")
-        print("       venv\\Scripts\\activate   (en Windows)")
+        print(f"       {activate_example}")
         print("    3. Instalar PyInstaller:")
         print("       pip install pyinstaller")
-        print("    4. Ejecutar de nuevo build.bat o build.py")
+        print(f"    4. Ejecutar de nuevo {builder_example}")
         print("=" * 65 + "\n")
 
         if auto_confirm:
@@ -135,13 +137,18 @@ def main():
     except Exception as e:
         print(f"[!] Error leyendo version desde vw.py: {e}. Usando default {version}.")
 
-    # 5. Generar file_version_info.txt para los metadatos de Windows
-    version_parts = version.split('.')
-    while len(version_parts) < 4:
-        version_parts.append('0')
-    version_tuple = tuple(int(x) if x.isdigit() else 0 for x in version_parts[:4])
-    
-    version_info_content = f'''# UTF-8
+    # 5. Generar file_version_info.txt para los metadatos de Windows (solo en Windows)
+    is_windows = (sys.platform == "win32")
+    version_arg = []
+    version_info_path = None
+
+    if is_windows:
+        version_parts = version.split('.')
+        while len(version_parts) < 4:
+            version_parts.append('0')
+        version_tuple = tuple(int(x) if x.isdigit() else 0 for x in version_parts[:4])
+        
+        version_info_content = f'''# UTF-8
 VSVersionInfo(
   ffi=FixedFileInfo(
     filevers={version_tuple},
@@ -171,18 +178,22 @@ VSVersionInfo(
   ]
 )
 '''
-    version_info_path = os.path.join(dist_dir, "file_version_info.txt")
-    try:
-        with open(version_info_path, "w", encoding="utf-8") as f:
-            f.write(version_info_content)
-        print("[OK] Metadatos de ejecutable de Windows generados.")
-    except Exception as e:
-        print(f"[ERROR] No se pudo crear el archivo de version: {e}")
-        sys.exit(1)
+        version_info_path = os.path.join(dist_dir, "file_version_info.txt")
+        try:
+            with open(version_info_path, "w", encoding="utf-8") as f:
+                f.write(version_info_content)
+            print("[OK] Metadatos de ejecutable de Windows generados.")
+            version_arg = [f"--version-file={version_info_path}"]
+        except Exception as e:
+            print(f"[ERROR] No se pudo crear el archivo de version: {e}")
+            sys.exit(1)
+    else:
+        print("[*] Plataforma no-Windows detectada (Linux/macOS). Omitiendo metadatos PE de Windows.")
 
     # 6. Limpiar compilaciones anteriores en dist/
     exe_name = f"VW_v{version}"
-    final_exe_path = os.path.join(dist_dir, f"{exe_name}.exe")
+    binary_name = f"{exe_name}.exe" if is_windows else exe_name
+    final_exe_path = os.path.join(dist_dir, binary_name)
     if os.path.exists(final_exe_path):
         try:
             os.remove(final_exe_path)
@@ -208,9 +219,12 @@ VSVersionInfo(
 
     # 7. Buscar icono si existe
     icon_candidate_paths = [
+        os.path.join(project_root, "icon.icns"),
         os.path.join(project_root, "icon.ico"),
+        os.path.join(project_root, "assets", "icon.icns"),
         os.path.join(project_root, "assets", "icon.ico"),
-        os.path.join(dist_dir, "icon.ico")
+        os.path.join(project_root, "assets", "icon.png"),
+        os.path.join(dist_dir, "icon.ico"),
     ]
     icon_arg = []
     for icon_path in icon_candidate_paths:
@@ -229,11 +243,10 @@ VSVersionInfo(
         "--onefile",
         "--windowed",
         f"--name={exe_name}",
-        f"--version-file={version_info_path}",
         f"--distpath={dist_dir}",
         f"--workpath={build_dir}",
         f"--specpath={dist_dir}",
-    ] + icon_arg + [vw_path]
+    ] + version_arg + icon_arg + [vw_path]
     
     print(f"\n[*] Ejecutando PyInstaller...")
     try:
@@ -257,7 +270,7 @@ VSVersionInfo(
         except Exception as e:
             print(f"[!] Advertencia: No se pudo eliminar el archivo spec: {e}")
 
-    if os.path.exists(version_info_path):
+    if version_info_path and os.path.exists(version_info_path):
         try:
             os.remove(version_info_path)
         except Exception as e:
