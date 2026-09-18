@@ -419,7 +419,7 @@ DEFAULT_CONFIG = {
 }
 
 def obtener_identificador_pista(stream):
-    tags = stream.get("tags", {})
+    tags = stream.get("tags") or {}
     return f"{tags.get('language', 'und')}|{tags.get('title', '')}|{stream.get('codec_name', 'unknown')}"
 
 def encontrar_pista_por_identificador(streams, identificador, codec_type):
@@ -442,7 +442,7 @@ def encontrar_pista_por_identificador(streams, identificador, codec_type):
     for stream in streams:
         if stream.get("codec_type") != codec_type:
             continue
-        tags = stream.get("tags", {})
+        tags = stream.get("tags") or {}
         if (
             tags.get("language", "und") == lang_buscado
             and tags.get("title", "") == title_buscado
@@ -453,14 +453,14 @@ def encontrar_pista_por_identificador(streams, identificador, codec_type):
     for stream in streams:
         if stream.get("codec_type") != codec_type:
             continue
-        tags = stream.get("tags", {})
+        tags = stream.get("tags") or {}
         if tags.get("language", "und") == lang_buscado and tags.get("title", "") == title_buscado:
             return stream["index"]
 
     for stream in streams:
         if stream.get("codec_type") != codec_type:
             continue
-        tags = stream.get("tags", {})
+        tags = stream.get("tags") or {}
         if tags.get("language", "und") == lang_buscado:
             return stream["index"]
 
@@ -983,10 +983,16 @@ class VWSuite:
                             self._mostrar_resumen_errores(errores)
                     elif msg[0] == "SELECTOR_PISTAS":
                         _, info, filename, q = msg
-                        q.put(self._mostrar_selector_pistas(info, filename))
+                        if self.cancelar_procesamiento:
+                            q.put({"ok": False, "audio": None, "subtitle": None, "aplicar_todos": False})
+                        else:
+                            q.put(self._mostrar_selector_pistas(info, filename))
                     elif msg[0] == "SELECTOR_COMBINACIONES":
                         _, info, filename, subgrupo_label, q = msg
-                        q.put(self._mostrar_selector_combinaciones(info, filename, subgrupo_label))
+                        if self.cancelar_procesamiento:
+                            q.put({"ok": False, "combinaciones": [], "aplicar_todos": False})
+                        else:
+                            q.put(self._mostrar_selector_combinaciones(info, filename, subgrupo_label))
                 else:
                     self._append_log(msg)
         except queue.Empty:
@@ -1101,8 +1107,8 @@ class VWSuite:
             return ((), ())
         audio_streams = [s for s in info["streams"] if s.get("codec_type") == "audio"]
         subtitle_streams = [s for s in info["streams"] if s.get("codec_type") == "subtitle"]
-        audio_langs = tuple(s.get("tags", {}).get("language", "und").lower() for s in audio_streams)
-        sub_langs = tuple(s.get("tags", {}).get("language", "und").lower() for s in subtitle_streams)
+        audio_langs = tuple((s.get("tags") or {}).get("language", "und").lower() for s in audio_streams)
+        sub_langs = tuple((s.get("tags") or {}).get("language", "und").lower() for s in subtitle_streams)
         return (audio_langs, sub_langs)
 
     def _encontrar_firma_compatible(self, firma):
@@ -1348,14 +1354,22 @@ class VWSuite:
         self.root.attributes('-disabled', True)
         dialog.bind("<Destroy>", lambda e: self.root.attributes('-disabled', False) if (e.widget == dialog and self.root.winfo_exists()) else None)
 
+        dialog.update_idletasks()
+        try:
+            x = self.root.winfo_x() + max(0, (self.root.winfo_width() - 900) // 2)
+            y = self.root.winfo_y() + max(0, (self.root.winfo_height() - 620) // 2)
+            dialog.geometry(f"900x620+{x}+{y}")
+        except Exception:
+            pass
+
         resultado = {"ok": False, "combinaciones": [], "aplicar_todos": False}
         combinaciones = []
 
         if subgrupo_label:
             tk.Label(dialog, text=subgrupo_label, font=("Segoe UI", 11, "bold"), fg="#2D9CDB").pack(pady=(8, 2))
-            tk.Label(dialog, text="Marca las pistas para cada versión y agrégala", font=("Segoe UI", 9)).pack(pady=(0, 6))
+            tk.Label(dialog, text="Marca las pistas deseadas y pulsa Aceptar (o agrégalas como versiones múltiples).", font=("Segoe UI", 9)).pack(pady=(0, 6))
         else:
-            tk.Label(dialog, text="Marca pistas para cada version y agrega", font=("Segoe UI", 10, "bold")).pack(pady=8)
+            tk.Label(dialog, text="Marca las pistas deseadas y pulsa Aceptar", font=("Segoe UI", 10, "bold")).pack(pady=8)
 
         body = tk.Frame(dialog)
         body.pack(fill=tk.BOTH, expand=True, padx=10)
@@ -1366,7 +1380,7 @@ class VWSuite:
         audio_vars = []
         tk.Label(left, text="Audio", fg="#1E8449", font=("Segoe UI", 9, "bold")).pack(anchor=tk.W, padx=6, pady=(6, 2))
         for i, s in enumerate(audio_streams):
-            tags = s.get("tags", {})
+            tags = s.get("tags") or {}
             title = tags.get("title") or f"Audio {i + 1}"
             lang = tags.get("language", "und")
             var = tk.BooleanVar(value=False)
@@ -1377,7 +1391,7 @@ class VWSuite:
         tk.Label(left, text="Subtitulos", fg="#2980B9", font=("Segoe UI", 9, "bold")).pack(anchor=tk.W, padx=6, pady=(8, 2))
         sub_vars = []
         for i, s in enumerate(subtitle_streams):
-            tags = s.get("tags", {})
+            tags = s.get("tags") or {}
             title = tags.get("title") or f"Sub {i + 1}"
             lang = tags.get("language", "und")
             var = tk.BooleanVar(value=False)
@@ -1398,7 +1412,7 @@ class VWSuite:
                 var_hardsub.set(False)
                 cb_hardsub.config(state=tk.DISABLED)
 
-        right = tk.LabelFrame(body, text="Versiones")
+        right = tk.LabelFrame(body, text="Versiones a generar")
         right.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(6, 0))
 
         lst = tk.Listbox(right, font=("Consolas", 9))
@@ -1410,20 +1424,21 @@ class VWSuite:
                 suffix = " (Hardsub)" if combo.get("hardsub") else ""
                 lst.insert(tk.END, f"{i + 1}. {combo['label']}{suffix}")
 
-        def agregar():
+        def agregar(mostrar_alerta=True):
             aud_sel = [s for var, s in audio_vars if var.get()]
             sub_sel = [s for var, s in sub_vars if var.get()]
             if not aud_sel and not sub_sel:
-                messagebox.showwarning("Sin seleccion", "Selecciona al menos una pista", parent=dialog)
-                return
+                if mostrar_alerta:
+                    messagebox.showwarning("Sin seleccion", "Selecciona al menos una pista", parent=dialog)
+                return False
 
             audio_indices = [s["index"] for s in aud_sel]
             sub_indices = [s["index"] for s in sub_sel]
             audio_ids = [obtener_identificador_pista(s) for s in aud_sel]
             sub_ids = [obtener_identificador_pista(s) for s in sub_sel]
 
-            audio_langs = [s.get("tags", {}).get("language", "und").upper() for s in aud_sel]
-            sub_langs = [s.get("tags", {}).get("language", "und").upper() for s in sub_sel]
+            audio_langs = [(s.get("tags") or {}).get("language", "und").upper() for s in aud_sel]
+            sub_langs = [(s.get("tags") or {}).get("language", "und").upper() for s in sub_sel]
 
             parts = ["_".join(audio_langs)] if audio_langs else []
             if sub_langs:
@@ -1446,6 +1461,7 @@ class VWSuite:
             for var, _ in sub_vars:
                 var.set(False)
             var_hardsub.set(False)
+            return True
 
         def quitar():
             sel = lst.curselection()
@@ -1455,7 +1471,7 @@ class VWSuite:
 
         bt = tk.Frame(right)
         bt.pack(fill=tk.X, padx=8, pady=6)
-        tk.Button(bt, text="Agregar version", command=agregar, bg="#27AE60", fg="white").pack(side=tk.LEFT, padx=4)
+        tk.Button(bt, text="Agregar versión adicional", command=agregar, bg="#27AE60", fg="white").pack(side=tk.LEFT, padx=4)
         tk.Button(bt, text="Quitar", command=quitar, bg="#EB5757", fg="white").pack(side=tk.LEFT, padx=4)
 
         apply_all = tk.BooleanVar(value=False)
@@ -1465,14 +1481,46 @@ class VWSuite:
         bottom.pack(pady=10)
 
         def aceptar():
+            aud_sel = [s for var, s in audio_vars if var.get()]
+            sub_sel = [s for var, s in sub_vars if var.get()]
+            if aud_sel or sub_sel:
+                agregar(mostrar_alerta=False)
+
             if not combinaciones:
-                messagebox.showwarning("Sin versiones", "Agrega al menos una version", parent=dialog)
+                messagebox.showwarning("Sin pistas seleccionadas", "Selecciona al menos una pista de audio o subtítulo antes de aceptar.", parent=dialog)
                 return
 
             resultado["ok"] = True
             resultado["combinaciones"] = list(combinaciones)
             resultado["aplicar_todos"] = apply_all.get()
             dialog.destroy()
+
+        def on_close():
+            aud_sel = [s for var, s in audio_vars if var.get()]
+            sub_sel = [s for var, s in sub_vars if var.get()]
+            if not combinaciones and (aud_sel or sub_sel):
+                if messagebox.askyesno(
+                    "Aplicar selección",
+                    "Has marcado pistas para este video.\n\n¿Deseas aplicar esta selección y procesarlo?",
+                    parent=dialog
+                ):
+                    aceptar()
+                    return
+            elif combinaciones:
+                if messagebox.askyesno(
+                    "Procesar versiones",
+                    f"Tienes {len(combinaciones)} versión(es) configurada(s).\n\n¿Deseas procesar estas versiones?",
+                    parent=dialog
+                ):
+                    resultado["ok"] = True
+                    resultado["combinaciones"] = list(combinaciones)
+                    resultado["aplicar_todos"] = apply_all.get()
+                    dialog.destroy()
+                    return
+            dialog.destroy()
+
+        dialog.protocol("WM_DELETE_WINDOW", on_close)
+        dialog.bind("<Return>", lambda e: aceptar() if (e.widget == dialog or not isinstance(e.widget, tk.Button)) else None)
 
         tk.Button(bottom, text="Aceptar", command=aceptar, bg="#2D9CDB", fg="white", width=14).pack(side=tk.LEFT, padx=6)
         tk.Button(bottom, text="Cancelar", command=dialog.destroy, bg="#95A5A6", fg="white", width=14).pack(side=tk.LEFT, padx=6)
@@ -1521,7 +1569,8 @@ class VWSuite:
                     "label": c["label"],
                     "hardsub": c["hardsub"]
                 })
-            return combos
+            if combos:
+                return combos
 
         subgrupo_num = self.subgrupos.get(firma, 1)
         audio_langs_str = ", ".join(firma[0]).upper() if firma[0] else "NINGUNO"
@@ -1537,7 +1586,7 @@ class VWSuite:
         except queue.Empty:
             return None
 
-        if not r.get("ok"):
+        if not r.get("ok") or not r.get("combinaciones"):
             return None
 
         if r.get("aplicar_todos"):
