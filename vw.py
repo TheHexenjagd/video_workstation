@@ -1320,6 +1320,9 @@ class VWSuite:
 
         dialog.wait_window()
         if not resultado["ok"]:
+            if self.cancelar_procesamiento:
+                return resultado
+
             ans = messagebox.askyesnocancel(
                 "Cancelar proceso",
                 "¿Deseas cancelar todo el procesamiento?\n\n"
@@ -1330,11 +1333,12 @@ class VWSuite:
             )
             if ans is True:
                 self.cancelar_procesamiento = True
-                self.lista_omitidos.delete(0, tk.END)
                 resultado["ok"] = False
             elif ans is False:
                 resultado["ok"] = False
             else:
+                if self.cancelar_procesamiento:
+                    return resultado
                 return self._mostrar_selector_pistas(info, filename)
         return resultado
 
@@ -1527,6 +1531,9 @@ class VWSuite:
 
         dialog.wait_window()
         if not resultado["ok"]:
+            if self.cancelar_procesamiento:
+                return resultado
+
             ans = messagebox.askyesnocancel(
                 "Cancelar proceso",
                 "¿Deseas cancelar todo el procesamiento?\n\n"
@@ -1537,15 +1544,18 @@ class VWSuite:
             )
             if ans is True:
                 self.cancelar_procesamiento = True
-                self.lista_omitidos.delete(0, tk.END)
                 resultado["ok"] = False
             elif ans is False:
                 resultado["ok"] = False
             else:
+                if self.cancelar_procesamiento:
+                    return resultado
                 return self._mostrar_selector_combinaciones(info, filename, subgrupo_label)
         return resultado
 
     def _obtener_combinaciones_a_generar(self, info, filename):
+        if self.cancelar_procesamiento:
+            return None
 
         firma = self._obtener_firma_idiomas(info)
 
@@ -1555,6 +1565,8 @@ class VWSuite:
             config_grupo = self.combinaciones_por_grupo[signature_match]
             combos = []
             for c in config_grupo:
+                if self.cancelar_procesamiento:
+                    return None
                 audio_indices = [encontrar_pista_por_identificador(info["streams"], ident, "audio") for ident in c["audio_identifiers"]]
                 sub_indices = [encontrar_pista_por_identificador(info["streams"], ident, "subtitle") for ident in c["sub_identifiers"] if ident != "NINGUNO"]
 
@@ -1572,6 +1584,9 @@ class VWSuite:
             if combos:
                 return combos
 
+        if self.cancelar_procesamiento:
+            return None
+
         subgrupo_num = self.subgrupos.get(firma, 1)
         audio_langs_str = ", ".join(firma[0]).upper() if firma[0] else "NINGUNO"
         sub_langs_str = ", ".join(firma[1]).upper() if firma[1] else "NINGUNO"
@@ -1586,7 +1601,7 @@ class VWSuite:
         except queue.Empty:
             return None
 
-        if not r.get("ok") or not r.get("combinaciones"):
+        if self.cancelar_procesamiento or not r.get("ok") or not r.get("combinaciones"):
             return None
 
         if r.get("aplicar_todos"):
@@ -1879,11 +1894,17 @@ class VWSuite:
         return ok, fail
 
     def _eliminar_pistas_procesamiento(self, archivo, output_dir, errores):
+        if self.cancelar_procesamiento:
+            return False
+
         info = self._ffprobe_info(archivo)
         if info is None:
             err_msg = "No se pudo leer streams con ffprobe."
             self._enviar_mensaje(err_msg)
             errores.append((archivo, err_msg))
+            return False
+
+        if self.cancelar_procesamiento:
             return False
 
         v = sum(1 for s in info["streams"] if s.get("codec_type") == "video")
@@ -1894,10 +1915,11 @@ class VWSuite:
             return False
 
         combinaciones = self._obtener_combinaciones_a_generar(info, archivo)
-        if combinaciones is None:
-            err_msg = "Se canceló la selección de combinaciones."
-            self._enviar_mensaje(err_msg)
-            errores.append((archivo, err_msg))
+        if self.cancelar_procesamiento or combinaciones is None:
+            if not self.cancelar_procesamiento:
+                err_msg = "Se canceló la selección de combinaciones."
+                self._enviar_mensaje(err_msg)
+                errores.append((archivo, err_msg))
             return False
 
         return self._generar_combinaciones(archivo, output_dir, info, combinaciones, errores)
