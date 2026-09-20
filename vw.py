@@ -794,6 +794,8 @@ class VWSuite:
         self.btn_procesar_cola.pack(side=tk.LEFT, padx=(0, 8))
         self.btn_verificar = self._btn(m1_btns, "Verificar cola", self.verificar_condiciones_carpeta, "#27AE60")
         self.btn_verificar.pack(side=tk.LEFT)
+        self.btn_config_subgrupos = self._btn(m1_btns, "Configurar subgrupos", self.configurar_subgrupos_manual, "#9B51E0")
+        self.btn_config_subgrupos.pack(side=tk.LEFT, padx=(8, 0))
 
         m3_frame = tk.LabelFrame(modules_container, text="Mantenimiento", font=("Segoe UI", 9, "bold"), bg="#FFFFFF", fg="#2B3A57", padx=12, pady=10)
         m3_frame.pack(fill=tk.X, pady=(0, 12))
@@ -1070,6 +1072,8 @@ class VWSuite:
     def _set_running_state(self, running):
         self.btn_procesar_cola.config(state=tk.DISABLED if running else tk.NORMAL)
         self.btn_verificar.config(state=tk.DISABLED if running else tk.NORMAL)
+        if hasattr(self, "btn_config_subgrupos"):
+            self.btn_config_subgrupos.config(state=tk.DISABLED if running else tk.NORMAL)
         self.btn_eliminar_meta.config(state=tk.DISABLED if running else tk.NORMAL)
         self.btn_eliminar_subs.config(state=tk.DISABLED if running else tk.NORMAL)
         self.btn_renombrar.config(state=tk.DISABLED if running else tk.NORMAL)
@@ -1360,12 +1364,12 @@ class VWSuite:
                 return self._mostrar_selector_pistas(info, filename)
         return resultado
 
-    def _mostrar_selector_combinaciones(self, info, filename, subgrupo_label=None):
+    def _mostrar_selector_combinaciones(self, info, filename, subgrupo_label=None, modo_previo=False):
         audio_streams = [s for s in info["streams"] if s.get("codec_type") == "audio"]
         subtitle_streams = [s for s in info["streams"] if s.get("codec_type") == "subtitle"]
 
         if not audio_streams and not subtitle_streams:
-            return {"ok": True, "combinaciones": [], "aplicar_todos": False}
+            return {"ok": True, "combinaciones": [], "aplicar_todos": True if modo_previo else False}
 
         dialog = tk.Toplevel(self.root)
         title_prefix = f" - {subgrupo_label}" if subgrupo_label else ""
@@ -1496,8 +1500,9 @@ class VWSuite:
         tk.Button(bt, text="Agregar versión adicional", command=agregar, bg="#27AE60", fg="white").pack(side=tk.LEFT, padx=4)
         tk.Button(bt, text="Quitar", command=quitar, bg="#EB5757", fg="white").pack(side=tk.LEFT, padx=4)
 
-        apply_all = tk.BooleanVar(value=False)
-        tk.Checkbutton(dialog, text="Aplicar esta configuración a todos los similares (mismo subgrupo)", variable=apply_all).pack(pady=4)
+        apply_all = tk.BooleanVar(value=True if modo_previo else False)
+        chk_text = "Aplicar esta configuración a todos los archivos de este subgrupo" if modo_previo else "Aplicar esta configuración a todos los similares (mismo subgrupo)"
+        tk.Checkbutton(dialog, text=chk_text, variable=apply_all).pack(pady=4)
 
         bottom = tk.Frame(dialog)
         bottom.pack(pady=10)
@@ -1549,7 +1554,7 @@ class VWSuite:
 
         dialog.wait_window()
         if not resultado["ok"]:
-            if self.cancelar_procesamiento:
+            if self.cancelar_procesamiento or modo_previo:
                 return resultado
 
             ans = messagebox.askyesnocancel(
@@ -1942,21 +1947,150 @@ class VWSuite:
 
         return self._generar_combinaciones(archivo, output_dir, info, combinaciones, errores)
 
+    def _obtener_mapa_subgrupos(self, archivos):
+        subgrupos_dict = {}
+        subgrupo_counter = 1
+        for archivo in archivos:
+            info = self._ffprobe_info(archivo)
+            if not info:
+                continue
+            firma = self._obtener_firma_idiomas(info)
+            if firma not in subgrupos_dict:
+                subgrupos_dict[firma] = {
+                    "firma": firma,
+                    "num": subgrupo_counter,
+                    "archivos": [archivo],
+                    "sample_archivo": archivo,
+                    "sample_info": info,
+                }
+                subgrupo_counter += 1
+            else:
+                subgrupos_dict[firma]["archivos"].append(archivo)
+        return list(subgrupos_dict.values())
+
+    def _preconfigurar_subgrupos_cola(self, archivos, output_dir=None, forzar_reconfiguracion=False):
+        subgrupos_list = self._obtener_mapa_subgrupos(archivos)
+        if not subgrupos_list:
+            return True
+
+        if not hasattr(self, "combinaciones_por_grupo") or forzar_reconfiguracion:
+            self.combinaciones_por_grupo = {}
+
+        if not hasattr(self, "subgrupos") or forzar_reconfiguracion:
+            self.subgrupos = {}
+        for sg in subgrupos_list:
+            self.subgrupos[sg["firma"]] = sg["num"]
+
+        pendientes = [sg for sg in subgrupos_list if sg["firma"] not in self.combinaciones_por_grupo]
+        if not pendientes:
+            return True
+
+        total_sg = len(subgrupos_list)
+
+        for sg in pendientes:
+            firma = sg["firma"]
+            sample_info = sg["sample_info"]
+            sample_archivo = sg["sample_archivo"]
+
+            audio_streams = [s for s in sample_info.get("streams", []) if s.get("codec_type") == "audio"]
+            subtitle_streams = [s for s in sample_info.get("streams", []) if s.get("codec_type") == "subtitle"]
+
+            if not audio_streams and not subtitle_streams:
+                self.combinaciones_por_grupo[firma] = []
+                continue
+
+            cant_archivos = len(sg["archivos"])
+            txt_archivos = f"{cant_archivos} archivo" if cant_archivos == 1 else f"{cant_archivos} archivos"
+            audio_langs_str = ", ".join(firma[0]).upper() if firma[0] else "NINGUNO"
+            sub_langs_str = ", ".join(firma[1]).upper() if firma[1] else "NINGUNO"
+            subgrupo_label = f"Subgrupo {sg['num']} de {total_sg} ({txt_archivos}) | Audio: {audio_langs_str} | Subs: {sub_langs_str}"
+
+            while True:
+                r = self._mostrar_selector_combinaciones(
+                    sample_info,
+                    sample_archivo,
+                    subgrupo_label=subgrupo_label,
+                    modo_previo=True
+                )
+                if r.get("ok") and r.get("combinaciones"):
+                    self.combinaciones_por_grupo[firma] = [
+                        {
+                            "audio_identifiers": c.get("audio_identifiers", []),
+                            "sub_identifiers": c.get("sub_identifiers", []),
+                            "label": c["label"],
+                            "hardsub": c.get("hardsub", False),
+                        }
+                        for c in r["combinaciones"]
+                    ]
+                    break
+                else:
+                    if output_dir is not None:
+                        ans = messagebox.askyesno(
+                            "Cancelar procesamiento",
+                            f"Has cancelado la configuración del {subgrupo_label}.\n\n¿Deseas cancelar el inicio del procesamiento de toda la cola?",
+                            parent=self.root
+                        )
+                        if ans:
+                            return False
+                        else:
+                            ans_omitir = messagebox.askyesno(
+                                "Omitir subgrupo",
+                                f"¿Deseas omitir los {txt_archivos} correspondientes a este subgrupo y continuar con los demás?\n\n(Si eliges 'No', volverás a abrir la configuración de este subgrupo)",
+                                parent=self.root
+                            )
+                            if ans_omitir:
+                                self._mover_a_omitidos(sg["archivos"])
+                                break
+                            else:
+                                continue
+                    else:
+                        return False
+
+        return True
+
+    def configurar_subgrupos_manual(self):
+        if self.procesando:
+            messagebox.showwarning("En curso", "Ya hay un proceso activo")
+            return
+        archivos = list(self.lista.get(0, tk.END))
+        if not archivos:
+            messagebox.showwarning("Sin archivos", "Agrega al menos un video a la cola para configurar sus subgrupos.")
+            return
+
+        if hasattr(self, "combinaciones_por_grupo") and self.combinaciones_por_grupo:
+            if not messagebox.askyesno(
+                "Reconfigurar subgrupos",
+                "Ya existen configuraciones de subgrupos guardadas para la cola actual.\n\n¿Deseas volver a configurarlas?",
+                parent=self.root
+            ):
+                return
+            self.combinaciones_por_grupo.clear()
+
+        ok = self._preconfigurar_subgrupos_cola(archivos, output_dir=None, forzar_reconfiguracion=True)
+        if ok and hasattr(self, "combinaciones_por_grupo") and self.combinaciones_por_grupo:
+            messagebox.showinfo(
+                "Configuración completada",
+                "Se han guardado las configuraciones para todos los subgrupos de la cola.\n\nAl presionar 'Procesar cola', los videos se procesarán de manera continua y desatendida.",
+                parent=self.root
+            )
+
     def _thread_procesar_cola(self, archivos, output_dir):
         self.procesando = True
         self.cancelar_procesamiento = False
         self.combinaciones_a_aplicar = {"combinaciones": [], "aplicar_a_todos": False}
-        self.combinaciones_por_grupo = {}
+        if not hasattr(self, "combinaciones_por_grupo") or not self.combinaciones_por_grupo:
+            self.combinaciones_por_grupo = {}
 
-        self.subgrupos = {}
-        subgrupo_counter = 1
-        for archivo in archivos:
-            info = self._ffprobe_info(archivo)
-            if info:
-                firma = self._obtener_firma_idiomas(info)
-                if firma not in self.subgrupos:
-                    self.subgrupos[firma] = subgrupo_counter
-                    subgrupo_counter += 1
+        if not hasattr(self, "subgrupos") or not self.subgrupos:
+            self.subgrupos = {}
+            subgrupo_counter = 1
+            for archivo in archivos:
+                info = self._ffprobe_info(archivo)
+                if info:
+                    firma = self._obtener_firma_idiomas(info)
+                    if firma not in self.subgrupos:
+                        self.subgrupos[firma] = subgrupo_counter
+                        subgrupo_counter += 1
 
         ok = 0
         fail = 0
@@ -2011,10 +2145,19 @@ class VWSuite:
             return
 
         def callback_iniciar(archivos_validos):
-            self.archivos_en_proceso = list(archivos_validos)
+            ok = self._preconfigurar_subgrupos_cola(archivos_validos, output_dir=output)
+            if not ok:
+                return
+
+            archivos_a_procesar = [f for f in archivos_validos if f in set(self.lista.get(0, tk.END))]
+            if not archivos_a_procesar:
+                messagebox.showwarning("Cola vacía", "No quedan archivos para procesar.")
+                return
+
+            self.archivos_en_proceso = list(archivos_a_procesar)
             self._clear_log_and_progress("Preparando procesamiento de cola...")
             self._set_running_state(True)
-            threading.Thread(target=self._thread_procesar_cola, args=(archivos_validos, output), daemon=True).start()
+            threading.Thread(target=self._thread_procesar_cola, args=(archivos_a_procesar, output), daemon=True).start()
             self._actualizar_ui()
 
         self.pre_verificar_cola("procesar_cola", archivos, output, callback_iniciar)
@@ -3309,6 +3452,10 @@ class VWSuite:
             self._actualizar_contadores_colas()
             if hasattr(self, "ffprobe_cache"):
                 self.ffprobe_cache.clear()
+            if hasattr(self, "combinaciones_por_grupo"):
+                self.combinaciones_por_grupo.clear()
+            if hasattr(self, "subgrupos"):
+                self.subgrupos.clear()
 
     def seleccionar_directorio(self):
         dir_inicial = self.salida_var.get().strip() or obtener_directorio_videos_defecto()

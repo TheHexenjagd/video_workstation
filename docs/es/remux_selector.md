@@ -16,16 +16,17 @@ El remuestreo o multiplexado (**remux**) es el proceso de copiar los flujos de d
 
 ---
 
-## Selector Dinámico de Pistas y Versiones
-Al iniciar el procesamiento de un vídeo o un lote, VW analiza el archivo fuente a través de **FFprobe** y presenta una interfaz visual interactiva que permite construir las versiones deseadas:
+## Selector Dinámico de Pistas y Versiones por Subgrupos
+Al iniciar el procesamiento o al usar el botón **"Configurar subgrupos"**, VW analiza todos los archivos de la cola a través de **FFprobe** y agrupa los videos según su firma de pistas e idiomas (Subgrupo 1, Subgrupo 2, etc.):
 
-1. **Visualización de Pistas Disponibles**: 
-   * **Pistas de Audio**: Muestra el título y el idioma de cada pista (p. ej., `Español (spa)`, `Inglés (eng)`).
-   * **Pistas de Subtítulos**: Muestra las pistas de subtítulos internos detectados.
+1. **Configuración Previa 100% Desatendida**:
+   * **Antes de iniciar la cola**: Todas las versiones y pistas para cada subgrupo presente en la cola se configuran de antemano. De esta forma, FFmpeg corre de principio a fin de manera continua, sin detenerse a mitad de la noche ni bloquear la cola esperando confirmación.
+   * **Visualización de Pistas Disponibles**: Muestra el título, idioma y códec de cada pista de audio y subtítulo.
 2. **Generación de Versiones**:
    * Selecciona las combinaciones de pistas de audio y subtítulos deseadas.
-   * Haz clic en **"Agregar versión"** para registrar una nueva combinación en la lista de salida. Puedes añadir múltiples combinaciones para generar varias versiones a partir del mismo archivo de origen.
-   * **Aplicar a todos**: Si procesas un lote de archivos con la misma estructura, puedes marcar la opción "Aplicar a todos" para usar las mismas combinaciones de idiomas en el resto del lote de forma automatizada.
+   * Haz clic en **"Agregar versión adicional"** para registrar una nueva combinación en la lista de salida. Puedes añadir múltiples combinaciones para generar varias versiones a partir del mismo archivo de origen.
+   * **Aplicar a todos del subgrupo**: Cada configuración se asigna a todos los archivos que comparten la misma estructura de pistas. Si hay archivos con estructuras distintas, el asistente solicitará la configuración para cada subgrupo antes de arrancar.
+   * **Botón "Configurar subgrupos"**: Puedes definir o revisar las versiones en cualquier momento desde el panel principal antes de hacer clic en "Procesar cola".
 
 ---
 

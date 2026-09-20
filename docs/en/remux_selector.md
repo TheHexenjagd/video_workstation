@@ -16,16 +16,17 @@ Remultiplexing or **remuxing** is the process of extracting existing data bitstr
 
 ---
 
-## Dynamic Stream & Version Selector
-When initiating batch processing, VW inspects the source file via **FFprobe** and presents an interactive visual selector to construct desired output versions:
+## Dynamic Stream & Version Selector by Subgroups
+When initiating batch processing or clicking **"Configurar subgrupos"** ("Configure subgroups"), VW inspects all queued files via **FFprobe** and clusters them by their stream and language signature (Subgroup 1, Subgroup 2, etc.):
 
-1. **Available Stream Inspection:**
-   * **Audio Streams:** Displays stream indices, codec, channel layouts, titles, and language metadata (e.g., `Spanish (spa)`, `English (eng)`).
-   * **Subtitle Streams:** Shows internal subtitle tracks with format labels.
+1. **100% Unattended Upfront Configuration:**
+   * **Before launching FFmpeg:** All target tracks and versions for each unique subgroup in the queue are defined upfront. This allows FFmpeg to run seamlessly from first to last file without halting or stalling unattended execution.
+   * **Available Stream Inspection:** Displays stream indices, codecs, titles, and language metadata (e.g., `Spanish (spa)`, `English (eng)`).
 2. **Multi-Version Pipeline:**
    * Select the target audio and subtitle combinations.
-   * Click **"Add version"** to queue a new combination. You can define multiple version targets per source file (e.g., Dual Audio + Subtitles, LatAm Spanish only, English Only).
-   * **Apply to All:** When processing homogeneous series or episodes with matching stream layouts, check "Apply to all" to propagate stream formulas across the entire batch automatically.
+   * Click **"Add additional version"** to queue a new combination. You can define multiple version targets per source file (e.g., Dual Audio + Subtitles, LatAm Spanish only, English Only).
+   * **Apply to Subgroup:** Each configured combination applies to all files sharing the same stream structure. If files with different stream layouts exist in the queue, the wizard configures each subgroup before processing starts.
+   * **"Configurar subgrupos" Button:** Allows you to configure or inspect versions at any time directly from the main panel before starting the queue.
 
 ---
 
