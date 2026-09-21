@@ -794,8 +794,6 @@ class VWSuite:
         self.btn_procesar_cola.pack(side=tk.LEFT, padx=(0, 8))
         self.btn_verificar = self._btn(m1_btns, "Verificar cola", self.verificar_condiciones_carpeta, "#27AE60")
         self.btn_verificar.pack(side=tk.LEFT)
-        self.btn_config_subgrupos = self._btn(m1_btns, "Configurar subgrupos", self.configurar_subgrupos_manual, "#9B51E0")
-        self.btn_config_subgrupos.pack(side=tk.LEFT, padx=(8, 0))
 
         m3_frame = tk.LabelFrame(modules_container, text="Mantenimiento", font=("Segoe UI", 9, "bold"), bg="#FFFFFF", fg="#2B3A57", padx=12, pady=10)
         m3_frame.pack(fill=tk.X, pady=(0, 12))
@@ -1072,8 +1070,6 @@ class VWSuite:
     def _set_running_state(self, running):
         self.btn_procesar_cola.config(state=tk.DISABLED if running else tk.NORMAL)
         self.btn_verificar.config(state=tk.DISABLED if running else tk.NORMAL)
-        if hasattr(self, "btn_config_subgrupos"):
-            self.btn_config_subgrupos.config(state=tk.DISABLED if running else tk.NORMAL)
         self.btn_eliminar_meta.config(state=tk.DISABLED if running else tk.NORMAL)
         self.btn_eliminar_subs.config(state=tk.DISABLED if running else tk.NORMAL)
         self.btn_renombrar.config(state=tk.DISABLED if running else tk.NORMAL)
@@ -2047,32 +2043,6 @@ class VWSuite:
                         return False
 
         return True
-
-    def configurar_subgrupos_manual(self):
-        if self.procesando:
-            messagebox.showwarning("En curso", "Ya hay un proceso activo")
-            return
-        archivos = list(self.lista.get(0, tk.END))
-        if not archivos:
-            messagebox.showwarning("Sin archivos", "Agrega al menos un video a la cola para configurar sus subgrupos.")
-            return
-
-        if hasattr(self, "combinaciones_por_grupo") and self.combinaciones_por_grupo:
-            if not messagebox.askyesno(
-                "Reconfigurar subgrupos",
-                "Ya existen configuraciones de subgrupos guardadas para la cola actual.\n\n¿Deseas volver a configurarlas?",
-                parent=self.root
-            ):
-                return
-            self.combinaciones_por_grupo.clear()
-
-        ok = self._preconfigurar_subgrupos_cola(archivos, output_dir=None, forzar_reconfiguracion=True)
-        if ok and hasattr(self, "combinaciones_por_grupo") and self.combinaciones_por_grupo:
-            messagebox.showinfo(
-                "Configuración completada",
-                "Se han guardado las configuraciones para todos los subgrupos de la cola.\n\nAl presionar 'Procesar cola', los videos se procesarán de manera continua y desatendida.",
-                parent=self.root
-            )
 
     def _thread_procesar_cola(self, archivos, output_dir):
         self.procesando = True

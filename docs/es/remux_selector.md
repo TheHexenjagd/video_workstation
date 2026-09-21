@@ -17,7 +17,7 @@ El remuestreo o multiplexado (**remux**) es el proceso de copiar los flujos de d
 ---
 
 ## Selector Dinámico de Pistas y Versiones por Subgrupos
-Al iniciar el procesamiento o al usar el botón **"Configurar subgrupos"**, VW analiza todos los archivos de la cola a través de **FFprobe** y agrupa los videos según su firma de pistas e idiomas (Subgrupo 1, Subgrupo 2, etc.):
+Al presionar **"Procesar cola"**, VW analiza todos los archivos de la cola a través de **FFprobe** y agrupa los videos según su firma de pistas e idiomas (Subgrupo 1, Subgrupo 2, etc.):
 
 1. **Configuración Previa 100% Desatendida**:
    * **Antes de iniciar la cola**: Todas las versiones y pistas para cada subgrupo presente en la cola se configuran de antemano. De esta forma, FFmpeg corre de principio a fin de manera continua, sin detenerse a mitad de la noche ni bloquear la cola esperando confirmación.
@@ -26,7 +26,6 @@ Al iniciar el procesamiento o al usar el botón **"Configurar subgrupos"**, VW a
    * Selecciona las combinaciones de pistas de audio y subtítulos deseadas.
    * Haz clic en **"Agregar versión adicional"** para registrar una nueva combinación en la lista de salida. Puedes añadir múltiples combinaciones para generar varias versiones a partir del mismo archivo de origen.
    * **Aplicar a todos del subgrupo**: Cada configuración se asigna a todos los archivos que comparten la misma estructura de pistas. Si hay archivos con estructuras distintas, el asistente solicitará la configuración para cada subgrupo antes de arrancar.
-   * **Botón "Configurar subgrupos"**: Puedes definir o revisar las versiones en cualquier momento desde el panel principal antes de hacer clic en "Procesar cola".
 
 ---
 
