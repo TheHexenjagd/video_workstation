@@ -565,6 +565,8 @@ class VWSuite:
 
         self.pistas_config = {"audio_tag": None, "subtitle_tag": None, "aplicar_a_todos": False}
         self.combinaciones_a_aplicar = {"combinaciones": [], "aplicar_a_todos": False}
+        self.subgrupos = {}
+        self.combinaciones_por_grupo = {}
 
         self.ffprobe_cache = {}
 
@@ -988,6 +990,8 @@ class VWSuite:
                             if failed_files_norm:
                                 self.queue_notebook.select(self.tab_queue_skipped)
 
+                        self._limpiar_subgrupos()
+
                         title = "Proceso cancelado" if fue_cancelado else "Completado"
                         desc = "El procesamiento fue cancelado por el usuario." if fue_cancelado else "Proceso terminado."
                         messagebox.showinfo(title, f"{desc}\n\nExitos: {ok}\nFallos: {fail}")
@@ -1049,6 +1053,7 @@ class VWSuite:
                 self.lista.insert(tk.END, item)
 
         self._actualizar_contadores_colas()
+        self._limpiar_subgrupos()
         self.queue_notebook.select(self.tab_queue_active)
 
     def eliminar_omitidos_seleccionados(self):
@@ -1563,6 +1568,7 @@ class VWSuite:
             )
             if ans is True:
                 self.cancelar_procesamiento = True
+                self._limpiar_subgrupos()
                 resultado["ok"] = False
             elif ans is False:
                 resultado["ok"] = False
@@ -1943,6 +1949,18 @@ class VWSuite:
 
         return self._generar_combinaciones(archivo, output_dir, info, combinaciones, errores)
 
+    def _limpiar_subgrupos(self):
+        if hasattr(self, "subgrupos"):
+            self.subgrupos.clear()
+        else:
+            self.subgrupos = {}
+        if hasattr(self, "combinaciones_por_grupo"):
+            self.combinaciones_por_grupo.clear()
+        else:
+            self.combinaciones_por_grupo = {}
+        self.combinaciones_a_aplicar = {"combinaciones": [], "aplicar_a_todos": False}
+        self.pistas_config = {"audio_tag": None, "subtitle_tag": None, "aplicar_a_todos": False}
+
     def _obtener_mapa_subgrupos(self, archivos):
         subgrupos_dict = {}
         subgrupo_counter = 1
@@ -1967,6 +1985,7 @@ class VWSuite:
     def _preconfigurar_subgrupos_cola(self, archivos, output_dir=None, forzar_reconfiguracion=False):
         subgrupos_list = self._obtener_mapa_subgrupos(archivos)
         if not subgrupos_list:
+            self._limpiar_subgrupos()
             return True
 
         if not hasattr(self, "combinaciones_por_grupo") or forzar_reconfiguracion:
@@ -2027,6 +2046,7 @@ class VWSuite:
                             parent=self.root
                         )
                         if ans:
+                            self._limpiar_subgrupos()
                             return False
                         else:
                             ans_omitir = messagebox.askyesno(
@@ -2040,6 +2060,7 @@ class VWSuite:
                             else:
                                 continue
                     else:
+                        self._limpiar_subgrupos()
                         return False
 
         return True
@@ -2100,11 +2121,13 @@ class VWSuite:
         self.msg_queue.put(("FINALIZADO", ok, fail, errores, fue_cancelado, archivos_exitosos))
         self.procesando = False
         self.cancelar_procesamiento = False
+        self._limpiar_subgrupos()
 
     def procesar_cola(self):
         if self.procesando:
             messagebox.showwarning("En curso", "Ya hay un proceso activo")
             return
+        self._limpiar_subgrupos()
         output = self.salida_var.get().strip()
         if not output:
             messagebox.showerror("Error", "Selecciona un directorio de salida")
@@ -2115,13 +2138,15 @@ class VWSuite:
             return
 
         def callback_iniciar(archivos_validos):
-            ok = self._preconfigurar_subgrupos_cola(archivos_validos, output_dir=output)
+            ok = self._preconfigurar_subgrupos_cola(archivos_validos, output_dir=output, forzar_reconfiguracion=True)
             if not ok:
+                self._limpiar_subgrupos()
                 return
 
             archivos_a_procesar = [f for f in archivos_validos if f in set(self.lista.get(0, tk.END))]
             if not archivos_a_procesar:
                 messagebox.showwarning("Cola vacía", "No quedan archivos para procesar.")
+                self._limpiar_subgrupos()
                 return
 
             self.archivos_en_proceso = list(archivos_a_procesar)
@@ -2339,6 +2364,7 @@ class VWSuite:
                 messagebox.showwarning("Cola vacia", "No quedan archivos limpios sin advertencias ni errores para procesar.")
 
         def cmd_cancelar():
+            self._limpiar_subgrupos()
             dialog.destroy()
 
         btn_cancelar = tk.Button(
@@ -3413,6 +3439,7 @@ class VWSuite:
         for i in reversed(sel):
             self.lista.delete(i)
         self._actualizar_contadores_colas()
+        self._limpiar_subgrupos()
 
     def limpiar_lista(self):
         if self.lista.size() == 0:
@@ -3422,10 +3449,7 @@ class VWSuite:
             self._actualizar_contadores_colas()
             if hasattr(self, "ffprobe_cache"):
                 self.ffprobe_cache.clear()
-            if hasattr(self, "combinaciones_por_grupo"):
-                self.combinaciones_por_grupo.clear()
-            if hasattr(self, "subgrupos"):
-                self.subgrupos.clear()
+            self._limpiar_subgrupos()
 
     def seleccionar_directorio(self):
         dir_inicial = self.salida_var.get().strip() or obtener_directorio_videos_defecto()
@@ -3739,6 +3763,7 @@ class VWSuite:
             return
         if messagebox.askyesno("Cancelar todo", "Deseas cancelar el procesamiento actual y detener toda la cola de videos?"):
             self.cancelar_procesamiento = True
+            self._limpiar_subgrupos()
             if self.proceso_actual:
                 try:
                     self.proceso_actual.terminate()
