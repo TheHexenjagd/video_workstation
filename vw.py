@@ -1134,6 +1134,18 @@ class VWSuite:
         sub_langs = tuple((s.get("tags") or {}).get("language", "und").lower() for s in subtitle_streams)
         return (audio_langs, sub_langs)
 
+    def _formatear_resumen_idiomas(self, langs, max_items=5):
+        if not langs:
+            return "NINGUNO"
+        unicos = list(dict.fromkeys(l.upper() for l in langs if l))
+        if not unicos:
+            return "NINGUNO"
+        if len(unicos) <= max_items:
+            return ", ".join(unicos)
+        visibles = ", ".join(unicos[:max_items])
+        restantes = len(unicos) - max_items
+        return f"{visibles} (+{restantes} más)"
+
     def _encontrar_firma_compatible(self, firma):
         if hasattr(self, "combinaciones_por_grupo") and firma in self.combinaciones_por_grupo:
             return firma
@@ -1300,8 +1312,61 @@ class VWSuite:
 
         tk.Label(dialog, text=f"Archivo: {os.path.basename(filename)}", font=("Segoe UI", 10, "bold")).pack(pady=(10, 6))
 
-        body = tk.Frame(dialog)
-        body.pack(fill=tk.BOTH, expand=True, padx=10)
+        btns = tk.Frame(dialog)
+        btns.pack(side=tk.BOTTOM, pady=10)
+
+        apply_all = tk.BooleanVar(value=False)
+        tk.Checkbutton(dialog, text="Aplicar seleccion a todos los archivos", variable=apply_all).pack(side=tk.BOTTOM, pady=6)
+
+        body_container = tk.Frame(dialog)
+        body_container.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=10)
+
+        canvas = tk.Canvas(body_container, highlightthickness=0)
+        scrollbar = ttk.Scrollbar(body_container, orient="vertical", command=canvas.yview)
+        canvas.configure(yscrollcommand=scrollbar.set)
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        body = tk.Frame(canvas)
+        canvas_window = canvas.create_window((0, 0), window=body, anchor="nw")
+
+        def _actualizar_scroll_pistas(event=None):
+            canvas.update_idletasks()
+            bbox = canvas.bbox("all")
+            if not bbox:
+                return
+            content_height = bbox[3] - bbox[1]
+            canvas_height = canvas.winfo_height()
+            canvas.configure(scrollregion=(0, 0, bbox[2], content_height))
+            if content_height > canvas_height and canvas_height > 1:
+                if not scrollbar.winfo_ismapped():
+                    scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+            else:
+                if scrollbar.winfo_ismapped():
+                    scrollbar.pack_forget()
+                canvas.yview_moveto(0)
+
+        body.bind("<Configure>", _actualizar_scroll_pistas)
+
+        def _on_canvas_configure(e):
+            canvas.itemconfig(canvas_window, width=e.width)
+            _actualizar_scroll_pistas()
+
+        canvas.bind("<Configure>", _on_canvas_configure)
+
+        def _on_mousewheel(event):
+            bbox = canvas.bbox("all")
+            if not bbox:
+                return
+            content_height = bbox[3] - bbox[1]
+            canvas_height = canvas.winfo_height()
+            if content_height <= canvas_height:
+                return
+            delta = int(-1 * (event.delta / 120))
+            canvas.yview_scroll(delta, "units")
+
+        canvas.bind("<Enter>", lambda e: canvas.bind_all("<MouseWheel>", _on_mousewheel))
+        canvas.bind("<Leave>", lambda e: canvas.unbind_all("<MouseWheel>"))
+        dialog.bind("<Destroy>", lambda e: canvas.unbind_all("<MouseWheel>") if e.widget == dialog else None, add="+")
 
         audio_var = tk.StringVar(value=obtener_identificador_pista(audio_streams[0]) if audio_streams else "")
         sub_var = tk.StringVar(value="NINGUNO")
@@ -1325,11 +1390,7 @@ class VWSuite:
             codec = s.get("codec_name", "unknown")
             tk.Radiobutton(lf_sub, text=f"{title} ({lang}) - {codec}", variable=sub_var, value=obtener_identificador_pista(s), anchor=tk.W).pack(fill=tk.X, padx=6, pady=2)
 
-        apply_all = tk.BooleanVar(value=False)
-        tk.Checkbutton(dialog, text="Aplicar seleccion a todos los archivos", variable=apply_all).pack(pady=6)
-
-        btns = tk.Frame(dialog)
-        btns.pack(pady=10)
+        dialog.after(50, _actualizar_scroll_pistas)
 
         def aceptar():
             resultado["ok"] = True
@@ -1373,8 +1434,11 @@ class VWSuite:
             return {"ok": True, "combinaciones": [], "aplicar_todos": True if modo_previo else False}
 
         dialog = tk.Toplevel(self.root)
-        title_prefix = f" - {subgrupo_label}" if subgrupo_label else ""
-        dialog.title(f"Versiones a generar{title_prefix} - {os.path.basename(filename)}")
+        sg_title = ""
+        if subgrupo_label:
+            # Mantener el título conciso para no desplazar el nombre del archivo
+            sg_title = f" - {subgrupo_label.split(' | ')[0]}"
+        dialog.title(f"Versiones a generar{sg_title} - {os.path.basename(filename)}")
         dialog.geometry("900x620")
         dialog.transient(self.root)
         dialog.grab_set()
@@ -1393,42 +1457,81 @@ class VWSuite:
         combinaciones = []
 
         if subgrupo_label:
-            tk.Label(dialog, text=subgrupo_label, font=("Segoe UI", 11, "bold"), fg="#2D9CDB").pack(pady=(8, 2))
+            tk.Label(dialog, text=subgrupo_label, font=("Segoe UI", 11, "bold"), fg="#2D9CDB", wraplength=860, justify=tk.CENTER).pack(pady=(8, 2))
             tk.Label(dialog, text="Marca las pistas deseadas y pulsa Aceptar (o agrégalas como versiones múltiples).", font=("Segoe UI", 9)).pack(pady=(0, 6))
         else:
             tk.Label(dialog, text="Marca las pistas deseadas y pulsa Aceptar", font=("Segoe UI", 10, "bold")).pack(pady=8)
 
+        # Empaquetar la barra inferior primero para garantizar que los botones Aceptar/Cancelar nunca queden fuera de pantalla
+        bottom = tk.Frame(dialog)
+        bottom.pack(side=tk.BOTTOM, pady=10)
+
+        apply_all = tk.BooleanVar(value=True if modo_previo else False)
+        chk_text = "Aplicar esta configuración a todos los archivos de este subgrupo" if modo_previo else "Aplicar esta configuración a todos los similares (mismo subgrupo)"
+        tk.Checkbutton(dialog, text=chk_text, variable=apply_all).pack(side=tk.BOTTOM, pady=(0, 4))
+
         body = tk.Frame(dialog)
-        body.pack(fill=tk.BOTH, expand=True, padx=10)
+        body.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=10, pady=(2, 0))
 
         left = tk.LabelFrame(body, text="Pistas disponibles")
         left.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 6))
 
-        audio_vars = []
-        tk.Label(left, text="Audio", fg="#1E8449", font=("Segoe UI", 9, "bold")).pack(anchor=tk.W, padx=6, pady=(6, 2))
-        for i, s in enumerate(audio_streams):
-            tags = s.get("tags") or {}
-            title = tags.get("title") or f"Audio {i + 1}"
-            lang = tags.get("language", "und")
-            var = tk.BooleanVar(value=False)
-            var.trace_add("write", lambda *_: actualizar_estado_hardsub())
-            audio_vars.append((var, s))
-            tk.Checkbutton(left, text=f"{title} ({lang})", variable=var, anchor=tk.W).pack(fill=tk.X, padx=8, pady=2)
-
-        tk.Label(left, text="Subtitulos", fg="#2980B9", font=("Segoe UI", 9, "bold")).pack(anchor=tk.W, padx=6, pady=(8, 2))
-        sub_vars = []
-        for i, s in enumerate(subtitle_streams):
-            tags = s.get("tags") or {}
-            title = tags.get("title") or f"Sub {i + 1}"
-            lang = tags.get("language", "und")
-            var = tk.BooleanVar(value=False)
-            var.trace_add("write", lambda *_: actualizar_estado_hardsub())
-            sub_vars.append((var, s))
-            tk.Checkbutton(left, text=f"{title} ({lang})", variable=var, anchor=tk.W).pack(fill=tk.X, padx=8, pady=2)
-
         var_hardsub = tk.BooleanVar(value=False)
         cb_hardsub = tk.Checkbutton(left, text="Hacer hardsub (Incrustar)", variable=var_hardsub, font=("Segoe UI", 9, "bold"), fg="#E74C3C", activeforeground="#E74C3C", state=tk.DISABLED)
-        cb_hardsub.pack(anchor=tk.W, padx=8, pady=12)
+        cb_hardsub.pack(side=tk.BOTTOM, anchor=tk.W, padx=8, pady=(4, 6))
+
+        tracks_container = tk.Frame(left)
+        tracks_container.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+
+        canvas = tk.Canvas(tracks_container, highlightthickness=0)
+        scrollbar = ttk.Scrollbar(tracks_container, orient="vertical", command=canvas.yview)
+        canvas.configure(yscrollcommand=scrollbar.set)
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        scrollable_frame = tk.Frame(canvas)
+        canvas_window = canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+
+        def _actualizar_scroll_combos(event=None):
+            canvas.update_idletasks()
+            bbox = canvas.bbox("all")
+            if not bbox:
+                return
+            content_height = bbox[3] - bbox[1]
+            canvas_height = canvas.winfo_height()
+            canvas.configure(scrollregion=(0, 0, bbox[2], content_height))
+            if content_height > canvas_height and canvas_height > 1:
+                if not scrollbar.winfo_ismapped():
+                    scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+            else:
+                if scrollbar.winfo_ismapped():
+                    scrollbar.pack_forget()
+                canvas.yview_moveto(0)
+
+        scrollable_frame.bind("<Configure>", _actualizar_scroll_combos)
+
+        def _on_canvas_configure(event):
+            canvas.itemconfig(canvas_window, width=event.width)
+            _actualizar_scroll_combos()
+
+        canvas.bind("<Configure>", _on_canvas_configure)
+
+        def _on_mousewheel(event):
+            bbox = canvas.bbox("all")
+            if not bbox:
+                return
+            content_height = bbox[3] - bbox[1]
+            canvas_height = canvas.winfo_height()
+            if content_height <= canvas_height:
+                return
+            delta = int(-1 * (event.delta / 120))
+            canvas.yview_scroll(delta, "units")
+
+        canvas.bind("<Enter>", lambda e: canvas.bind_all("<MouseWheel>", _on_mousewheel))
+        canvas.bind("<Leave>", lambda e: canvas.unbind_all("<MouseWheel>"))
+        dialog.bind("<Destroy>", lambda e: canvas.unbind_all("<MouseWheel>") if e.widget == dialog else None, add="+")
+
+        audio_vars = []
+        sub_vars = []
 
         def actualizar_estado_hardsub():
             aud_sel = [s for v, s in audio_vars if v.get()]
@@ -1439,11 +1542,30 @@ class VWSuite:
                 var_hardsub.set(False)
                 cb_hardsub.config(state=tk.DISABLED)
 
+        tk.Label(scrollable_frame, text="Audio", fg="#1E8449", font=("Segoe UI", 9, "bold")).pack(anchor=tk.W, padx=6, pady=(6, 2))
+        for i, s in enumerate(audio_streams):
+            tags = s.get("tags") or {}
+            title = tags.get("title") or f"Audio {i + 1}"
+            lang = tags.get("language", "und")
+            var = tk.BooleanVar(value=False)
+            var.trace_add("write", lambda *_: actualizar_estado_hardsub())
+            audio_vars.append((var, s))
+            tk.Checkbutton(scrollable_frame, text=f"{title} ({lang})", variable=var, anchor=tk.W).pack(fill=tk.X, padx=8, pady=2)
+
+        tk.Label(scrollable_frame, text="Subtitulos", fg="#2980B9", font=("Segoe UI", 9, "bold")).pack(anchor=tk.W, padx=6, pady=(8, 2))
+        for i, s in enumerate(subtitle_streams):
+            tags = s.get("tags") or {}
+            title = tags.get("title") or f"Sub {i + 1}"
+            lang = tags.get("language", "und")
+            var = tk.BooleanVar(value=False)
+            var.trace_add("write", lambda *_: actualizar_estado_hardsub())
+            sub_vars.append((var, s))
+            tk.Checkbutton(scrollable_frame, text=f"{title} ({lang})", variable=var, anchor=tk.W).pack(fill=tk.X, padx=8, pady=2)
+
+        dialog.after(50, _actualizar_scroll_combos)
+
         right = tk.LabelFrame(body, text="Versiones a generar")
         right.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(6, 0))
-
-        lst = tk.Listbox(right, font=("Consolas", 9))
-        lst.pack(fill=tk.BOTH, expand=True, padx=8, pady=(8, 4))
 
         def refresh():
             lst.delete(0, tk.END)
@@ -1497,16 +1619,12 @@ class VWSuite:
                 refresh()
 
         bt = tk.Frame(right)
-        bt.pack(fill=tk.X, padx=8, pady=6)
+        bt.pack(side=tk.BOTTOM, fill=tk.X, padx=8, pady=6)
         tk.Button(bt, text="Agregar versión adicional", command=agregar, bg="#27AE60", fg="white").pack(side=tk.LEFT, padx=4)
         tk.Button(bt, text="Quitar", command=quitar, bg="#EB5757", fg="white").pack(side=tk.LEFT, padx=4)
 
-        apply_all = tk.BooleanVar(value=True if modo_previo else False)
-        chk_text = "Aplicar esta configuración a todos los archivos de este subgrupo" if modo_previo else "Aplicar esta configuración a todos los similares (mismo subgrupo)"
-        tk.Checkbutton(dialog, text=chk_text, variable=apply_all).pack(pady=4)
-
-        bottom = tk.Frame(dialog)
-        bottom.pack(pady=10)
+        lst = tk.Listbox(right, font=("Consolas", 9))
+        lst.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=8, pady=(8, 4))
 
         def aceptar():
             aud_sel = [s for var, s in audio_vars if var.get()]
@@ -1522,6 +1640,9 @@ class VWSuite:
             resultado["combinaciones"] = list(combinaciones)
             resultado["aplicar_todos"] = apply_all.get()
             dialog.destroy()
+
+        tk.Button(bottom, text="Aceptar", command=aceptar, bg="#2D9CDB", fg="white", width=14).pack(side=tk.LEFT, padx=6)
+        tk.Button(bottom, text="Cancelar", command=dialog.destroy, bg="#95A5A6", fg="white", width=14).pack(side=tk.LEFT, padx=6)
 
         def on_close():
             aud_sel = [s for var, s in audio_vars if var.get()]
@@ -1549,9 +1670,6 @@ class VWSuite:
 
         dialog.protocol("WM_DELETE_WINDOW", on_close)
         dialog.bind("<Return>", lambda e: aceptar() if (e.widget == dialog or not isinstance(e.widget, tk.Button)) else None)
-
-        tk.Button(bottom, text="Aceptar", command=aceptar, bg="#2D9CDB", fg="white", width=14).pack(side=tk.LEFT, padx=6)
-        tk.Button(bottom, text="Cancelar", command=dialog.destroy, bg="#95A5A6", fg="white", width=14).pack(side=tk.LEFT, padx=6)
 
         dialog.wait_window()
         if not resultado["ok"]:
@@ -1613,8 +1731,8 @@ class VWSuite:
             return None
 
         subgrupo_num = self.subgrupos.get(firma, 1)
-        audio_langs_str = ", ".join(firma[0]).upper() if firma[0] else "NINGUNO"
-        sub_langs_str = ", ".join(firma[1]).upper() if firma[1] else "NINGUNO"
+        audio_langs_str = self._formatear_resumen_idiomas(firma[0])
+        sub_langs_str = self._formatear_resumen_idiomas(firma[1])
         subgrupo_label = f"Subgrupo {subgrupo_num} (Audio: {audio_langs_str} | Subs: {sub_langs_str})"
 
         self._enviar_mensaje(f"  -> Abriendo selección de versiones para el {subgrupo_label}...")
@@ -2016,8 +2134,8 @@ class VWSuite:
 
             cant_archivos = len(sg["archivos"])
             txt_archivos = f"{cant_archivos} archivo" if cant_archivos == 1 else f"{cant_archivos} archivos"
-            audio_langs_str = ", ".join(firma[0]).upper() if firma[0] else "NINGUNO"
-            sub_langs_str = ", ".join(firma[1]).upper() if firma[1] else "NINGUNO"
+            audio_langs_str = self._formatear_resumen_idiomas(firma[0])
+            sub_langs_str = self._formatear_resumen_idiomas(firma[1])
             subgrupo_label = f"Subgrupo {sg['num']} de {total_sg} ({txt_archivos}) | Audio: {audio_langs_str} | Subs: {sub_langs_str}"
 
             while True:
