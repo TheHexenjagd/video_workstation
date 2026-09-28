@@ -45,3 +45,17 @@ Normalmente, incrustar subtítulos requiere pasar por un proceso completo de cod
 
 * **Activación Automática**: Si en el selector de pistas marcas **exactamente una (1) pista de audio** y **exactamente una (1) pista de subtítulos**, se habilitará de forma automática el botón **"Hacer hardsub (Incrustar)"** en el selector.
 * **Flujo Unificado**: Al activar esta opción, VW multiplexará el audio seleccionado e incrustará permanentemente la pista de subtítulos elegida en el vídeo en un solo paso, utilizando los parámetros de aceleración por hardware (GPU) configurados en el panel principal.
+
+---
+
+## Detección Automática de Subtítulos Externos (.srt)
+VW detecta automáticamente los archivos de subtítulos `.srt` ubicados en la misma carpeta que el archivo de vídeo:
+
+* **Formatos soportados**:
+  * `{Nombre_del_video}.srt` (subtítulo externo general).
+  * `{Nombre_del_video}.{idioma}.srt` (por ejemplo, `.es.srt`, `.spa.srt`, `.en.srt`, etc.).
+  * Variantes con guión o sufijos forzados (ej. `.forced.srt`, `.es.forced.srt`).
+* **Visualización en el Selector**: Aparecen identificados claramente como `[EXT] Idioma (p.ej. [EXT] Español)` junto a las pistas internas.
+* **Flexibilidad de Uso**: Puedes seleccionarlos tanto para **Hardsub** (incrustado con GPU) como para **Remux** (incorporados como pista suave de subtítulo en el contenedor final).
+* **Control en Opciones**: La casilla *"Incluir subs externos (.srt)"* en el panel principal permite activar o desactivar esta búsqueda según tus necesidades.
+
