@@ -415,11 +415,115 @@ DEFAULT_CONFIG = {
         "sufijo_idiomas": "True",
         "eliminar_metadatos": "False",
         "preservar_color": "True",
+        "buscar_subtitulos_externos": "True",
     },
 }
 
+MAPA_IDIOMAS_SRT = {
+    "es": ("spa", "Español"),
+    "spa": ("spa", "Español"),
+    "esp": ("spa", "Español"),
+    "spanish": ("spa", "Español"),
+    "castellano": ("spa", "Español (Castellano)"),
+    "lat": ("spa", "Español (Latino)"),
+    "latino": ("spa", "Español (Latino)"),
+    "en": ("eng", "Inglés"),
+    "eng": ("eng", "Inglés"),
+    "english": ("eng", "Inglés"),
+    "ingles": ("eng", "Inglés"),
+    "fr": ("fra", "Francés"),
+    "fra": ("fra", "Francés"),
+    "fre": ("fra", "Francés"),
+    "french": ("fra", "Francés"),
+    "frances": ("fra", "Francés"),
+    "de": ("deu", "Alemán"),
+    "deu": ("deu", "Alemán"),
+    "ger": ("deu", "Alemán"),
+    "german": ("deu", "Alemán"),
+    "aleman": ("deu", "Alemán"),
+    "it": ("ita", "Italiano"),
+    "ita": ("ita", "Italiano"),
+    "italian": ("ita", "Italiano"),
+    "italiano": ("ita", "Italiano"),
+    "pt": ("por", "Portugués"),
+    "por": ("por", "Portugués"),
+    "portuguese": ("por", "Portugués"),
+    "portugues": ("por", "Portugués"),
+    "ja": ("jpn", "Japonés"),
+    "jpn": ("jpn", "Japonés"),
+    "japanese": ("jpn", "Japonés"),
+    "japones": ("jpn", "Japonés"),
+    "ru": ("rus", "Ruso"),
+    "rus": ("rus", "Ruso"),
+    "zh": ("chi", "Chino"),
+    "chi": ("chi", "Chino"),
+    "zho": ("chi", "Chino"),
+    "ko": ("kor", "Coreano"),
+    "kor": ("kor", "Coreano"),
+}
+
+def buscar_subtitulos_externos(video_path):
+    """
+    Busca subtítulos .srt en el mismo directorio del video que coincidan con su nombre.
+    Soporta {video}.srt, {video}.es.srt, {video}.spa.srt, {video} - {idioma}.srt, etc.
+    """
+    try:
+        raw_path = str(video_path)
+        if raw_path.startswith("\\\\?\\"):
+            raw_path = raw_path[4:]
+        p = Path(raw_path)
+        parent = p.parent
+        if not parent.exists() or not parent.is_dir():
+            return []
+
+        stem = p.stem
+        subtitulos = []
+        for item in sorted(parent.iterdir(), key=lambda x: x.name):
+            if not item.is_file() or item.suffix.lower() != ".srt":
+                continue
+            item_stem = item.stem
+            matched = False
+            lang_code = "und"
+            lang_label = "Externo"
+
+            if item_stem.lower() == stem.lower():
+                matched = True
+            elif item_stem.lower().startswith(stem.lower()):
+                next_char = item_stem[len(stem)]
+                if next_char in ('.', '_', '-', ' ', '['):
+                    matched = True
+                    resto = item_stem[len(stem):].strip(" ._-")
+                    clean_parts = resto.lower().split(".")
+                    lang_part = clean_parts[0].strip(" ._-")
+                    is_forced = "forced" in resto.lower() or "forzado" in resto.lower()
+
+                    if lang_part in MAPA_IDIOMAS_SRT:
+                        lang_code, lang_label = MAPA_IDIOMAS_SRT[lang_part]
+                    elif len(lang_part) in (2, 3) and lang_part.isalpha():
+                        lang_code = lang_part.lower()
+                        lang_label = lang_part.upper()
+                    else:
+                        lang_code = "und"
+                        lang_label = lang_part.capitalize() if lang_part else "Externo"
+
+                    if is_forced:
+                        lang_label += " (Forzados)"
+
+            if matched:
+                subtitulos.append({
+                    "path": str(item.resolve()),
+                    "filename": item.name,
+                    "lang_code": lang_code,
+                    "lang_label": lang_label,
+                })
+        return subtitulos
+    except Exception:
+        return []
+
 def obtener_identificador_pista(stream):
     tags = stream.get("tags") or {}
+    if stream.get("is_external"):
+        return f"{tags.get('language', 'und')}|{tags.get('title', '')}|external_subrip"
     return f"{tags.get('language', 'und')}|{tags.get('title', '')}|{stream.get('codec_name', 'unknown')}"
 
 def encontrar_pista_por_identificador(streams, identificador, codec_type):
@@ -439,8 +543,25 @@ def encontrar_pista_por_identificador(streams, identificador, codec_type):
         title_buscado = ""
         codec_buscado = ""
 
+    if codec_buscado == "external_subrip" or "[EXT]" in title_buscado:
+        for stream in streams:
+            if stream.get("codec_type") != codec_type or not stream.get("is_external"):
+                continue
+            tags = stream.get("tags") or {}
+            if tags.get("language", "und") == lang_buscado and tags.get("title", "") == title_buscado:
+                return stream["index"]
+        for stream in streams:
+            if stream.get("codec_type") != codec_type or not stream.get("is_external"):
+                continue
+            tags = stream.get("tags") or {}
+            if tags.get("language", "und") == lang_buscado:
+                return stream["index"]
+        for stream in streams:
+            if stream.get("codec_type") == codec_type and stream.get("is_external"):
+                return stream["index"]
+
     for stream in streams:
-        if stream.get("codec_type") != codec_type:
+        if stream.get("codec_type") != codec_type or stream.get("is_external"):
             continue
         tags = stream.get("tags") or {}
         if (
@@ -451,21 +572,21 @@ def encontrar_pista_por_identificador(streams, identificador, codec_type):
             return stream["index"]
 
     for stream in streams:
-        if stream.get("codec_type") != codec_type:
+        if stream.get("codec_type") != codec_type or stream.get("is_external"):
             continue
         tags = stream.get("tags") or {}
         if tags.get("language", "und") == lang_buscado and tags.get("title", "") == title_buscado:
             return stream["index"]
 
     for stream in streams:
-        if stream.get("codec_type") != codec_type:
+        if stream.get("codec_type") != codec_type or stream.get("is_external"):
             continue
         tags = stream.get("tags") or {}
         if tags.get("language", "und") == lang_buscado:
             return stream["index"]
 
     for stream in streams:
-        if stream.get("codec_type") == codec_type:
+        if stream.get("codec_type") == codec_type and not stream.get("is_external"):
             return stream["index"]
 
     return None
@@ -634,10 +755,18 @@ class VWSuite:
             self.config_ini["Options"]["sufijo_idiomas"] = str(self.var_sufijo_idiomas.get())
             self.config_ini["Options"]["eliminar_metadatos"] = str(self.var_eliminar_metadatos.get())
             self.config_ini["Options"]["preservar_color"] = str(self.var_preservar_color.get())
+            if hasattr(self, "var_buscar_subtitulos_externos"):
+                self.config_ini["Options"]["buscar_subtitulos_externos"] = str(self.var_buscar_subtitulos_externos.get())
 
             self._guardar_configuracion()
         except Exception as exc:
             print(f"Error actualizando configuracion: {exc}")
+
+    def _on_buscar_subtitulos_toggle(self, *_):
+        self._actualizar_configuracion()
+        if hasattr(self, "ffprobe_cache"):
+            self.ffprobe_cache.clear()
+        self._limpiar_subgrupos()
 
     def _crear_estilos(self):
         self.root.configure(bg="#F3F7FF")
@@ -696,6 +825,10 @@ class VWSuite:
         self.var_preservar_color = tk.BooleanVar(
             value=self.config_ini.getboolean("Options", "preservar_color", fallback=True)
         )
+        self.var_buscar_subtitulos_externos = tk.BooleanVar(
+            value=self.config_ini.getboolean("Options", "buscar_subtitulos_externos", fallback=True)
+        )
+        self.var_buscar_subtitulos_externos.trace_add("write", self._on_buscar_subtitulos_toggle)
 
         for var in [
             self.var_recursivo,
@@ -856,6 +989,7 @@ class VWSuite:
         tk.Checkbutton(row3, text="Sufijo al nombre", variable=self.var_sufijo_idiomas, bg="#FFFFFF", fg="#2B3A57", activebackground="#FFFFFF", selectcolor="#FFFFFF").pack(side=tk.LEFT, padx=6)
         tk.Checkbutton(row3, text="Eliminar metadatos al finalizar", variable=self.var_eliminar_metadatos, bg="#FFFFFF", fg="#2B3A57", activebackground="#FFFFFF", selectcolor="#FFFFFF").pack(side=tk.LEFT, padx=6)
         tk.Checkbutton(row3, text="Preservar color (BT.709)", variable=self.var_preservar_color, bg="#FFFFFF", fg="#2B3A57", activebackground="#FFFFFF", selectcolor="#FFFFFF").pack(side=tk.LEFT, padx=6)
+        tk.Checkbutton(row3, text="Incluir subs externos (.srt)", variable=self.var_buscar_subtitulos_externos, bg="#FFFFFF", fg="#2B3A57", activebackground="#FFFFFF", selectcolor="#FFFFFF").pack(side=tk.LEFT, padx=6)
 
         activity_card = ttk.Frame(main, style="Card.TFrame")
         activity_card.pack(fill=tk.BOTH, expand=True, padx=18, pady=(0, 14))
@@ -1105,11 +1239,40 @@ class VWSuite:
             data = json.loads(result.stdout)
             if "streams" not in data:
                 return None
+            if getattr(self, "var_buscar_subtitulos_externos", None) is None or self.var_buscar_subtitulos_externos.get():
+                self._adjuntar_subtitulos_externos(filepath, data)
             if hasattr(self, "ffprobe_cache"):
                 self.ffprobe_cache[filepath] = data
             return data
         except json.JSONDecodeError:
             return None
+
+    def _adjuntar_subtitulos_externos(self, filepath, data):
+        if not data or "streams" not in data:
+            return
+        data["streams"] = [s for s in data["streams"] if not s.get("is_external")]
+        ext_subs = buscar_subtitulos_externos(filepath)
+        if not ext_subs:
+            return
+        max_idx = max([s.get("index", 0) for s in data["streams"]], default=0)
+        for i, sub in enumerate(ext_subs, start=1):
+            stream_idx = max_idx + 100 + i
+            ext_stream = {
+                "index": stream_idx,
+                "codec_type": "subtitle",
+                "codec_name": "subrip",
+                "is_external": True,
+                "external_path": sub["path"],
+                "tags": {
+                    "language": sub["lang_code"],
+                    "title": f"[EXT] {sub['lang_label']}",
+                },
+                "disposition": {
+                    "default": 0,
+                    "forced": 1 if "forzado" in sub["lang_label"].lower() else 0,
+                }
+            }
+            data["streams"].append(ext_stream)
 
     def _invalidar_cache_archivo(self, filepath):
         if not hasattr(self, "ffprobe_cache"):
@@ -1538,6 +1701,7 @@ class VWSuite:
             sub_sel = [s for v, s in sub_vars if v.get()]
             if len(aud_sel) == 1 and len(sub_sel) == 1:
                 cb_hardsub.config(state=tk.NORMAL)
+                var_hardsub.set(True)
             else:
                 var_hardsub.set(False)
                 cb_hardsub.config(state=tk.DISABLED)
@@ -1806,10 +1970,16 @@ class VWSuite:
                         temp_subtitle_path = tf.name
                         tf.close()
 
-                        extract = [self.ffmpeg_path, "-i", input_file, "-map", f"0:{sub_idx}", "-y", temp_subtitle_path]
+                        sub_stream_obj = next((st for st in info["streams"] if st.get("index") == sub_idx), None)
+                        if sub_stream_obj and sub_stream_obj.get("is_external"):
+                            ext_file = sub_stream_obj.get("external_path")
+                            extract = [self.ffmpeg_path, "-i", ext_file, "-y", temp_subtitle_path]
+                        else:
+                            extract = [self.ffmpeg_path, "-i", input_file, "-map", f"0:{sub_idx}", "-y", temp_subtitle_path]
+
                         res = self._run_subprocess_cancellable(extract)
                         if res.returncode != 0:
-                            err_msg = f"Fallo al extraer subtítulo de la versión '{label}'."
+                            err_msg = f"Fallo al extraer/procesar subtítulo de la versión '{label}'."
                             self._enviar_mensaje(err_msg)
                             errores.append((input_file, f"Versión '{label}': {err_msg}"))
                             fail += 1
@@ -1939,7 +2109,20 @@ class VWSuite:
                 if not main_video_streams:
                     main_video_streams = video_streams
 
+                ext_inputs = {}
+                next_in_idx = 1
+                for idx in sub_incluir:
+                    s = next((st for st in subtitle_streams if st["index"] == idx), None)
+                    if s and s.get("is_external"):
+                        ext_path = s["external_path"]
+                        if ext_path not in ext_inputs:
+                            ext_inputs[ext_path] = next_in_idx
+                            next_in_idx += 1
+
                 cmd = [self.ffmpeg_path, "-i", input_file]
+                for ext_path, in_idx in sorted(ext_inputs.items(), key=lambda x: x[1]):
+                    cmd.extend(["-i", ext_path])
+
                 for s in main_video_streams:
                     cmd.extend(["-map", f"0:{s['index']}"])
                     if s.get("codec_name", "").lower() in ("hevc", "h265"):
@@ -1959,8 +2142,18 @@ class VWSuite:
                 if not audio_indices:
                     cmd.extend(["-c:a", "copy"])
 
-                for idx in sub_incluir:
-                    cmd.extend(["-map", f"0:{idx}"])
+                for out_sub_pos, idx in enumerate(sub_incluir):
+                    s = next((st for st in subtitle_streams if st["index"] == idx), None)
+                    if s and s.get("is_external"):
+                        in_idx = ext_inputs[s["external_path"]]
+                        cmd.extend(["-map", f"{in_idx}:0"])
+                    else:
+                        cmd.extend(["-map", f"0:{idx}"])
+                    if s:
+                        tags_s = s.get("tags") or {}
+                        lang_s = tags_s.get("language")
+                        if lang_s:
+                            cmd.extend([f"-metadata:s:s:{out_sub_pos}", f"language={lang_s}"])
 
                 if sub_incluir:
                     cmd.extend(["-c:s", "mov_text"])
@@ -2878,9 +3071,9 @@ class VWSuite:
                 errores.append((str(video_file), "No se pudo leer streams con ffprobe."))
             return False
 
-        subtitle_streams = [s for s in info.get("streams", []) if s.get("codec_type") == "subtitle"]
+        subtitle_streams = [s for s in info.get("streams", []) if s.get("codec_type") == "subtitle" and not s.get("is_external")]
         if not subtitle_streams:
-            self._enviar_mensaje("  -> El archivo no contiene subtítulos. Saltando.")
+            self._enviar_mensaje("  -> El archivo no contiene subtítulos internos. Saltando.")
             return True
 
         temp_output = video_file.parent / f"temp_{video_file.name}"

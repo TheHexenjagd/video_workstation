@@ -45,3 +45,17 @@ Standard workflows require switching to a dedicated re-encoding panel to hardcod
 
 * **Automatic Detection:** Selecting **exactly one (1) audio stream** and **exactly one (1) subtitle stream** in the version selector automatically enables the **"Hardsub (Burn-in)"** button.
 * **Unified Pipeline:** Clicking this option invokes the hardware-accelerated GPU encoder directly from the remux module, muxing the selected audio track and burning in subtitles in a single execution pass.
+
+---
+
+## Automatic External Subtitle Detection (.srt)
+VW automatically locates and recognizes `.srt` subtitle files present in the same folder as the video file:
+
+* **Supported Naming Patterns**:
+  * `{video_filename}.srt` (generic external subtitle).
+  * `{video_filename}.{lang}.srt` (e.g., `.es.srt`, `.spa.srt`, `.en.srt`).
+  * Hyphen and forced subtitle variants (e.g., `.forced.srt`, `.es.forced.srt`).
+* **Version Selector Display**: They appear prominently tagged as `[EXT] Language (e.g., [EXT] Spanish)` alongside internal streams.
+* **Operational Flexibility**: Choose external subtitles for **Hardsub** (GPU-accelerated burn-in) or **Remux** (muxed into the container as soft subtitle streams).
+* **Toggle in Options**: The *"Incluir subs externos (.srt)"* checkbox in the options bar lets you enable or disable this detection as needed.
+
