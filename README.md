@@ -1,179 +1,110 @@
-# 🎬 HardCode Subtitle Tool
+# HardCode Subtitle Tool (HST)
 
-![Python Version](https://img.shields.io/badge/python-3.x-blue.svg)
-![License](https://img.shields.io/badge/license-MIT-green.svg)
-![Platform](https://img.shields.io/badge/platform-Windows-lightgrey.svg)
+<p align="center">
+  <b>A desktop utility in Python for GPU-accelerated and CPU video subtitle burning, batch processing, and media metadata management.</b>
+</p>
 
-**HardCode Subtitle Tool** es una aplicación de escritorio con interfaz gráfica para incrustar subtítulos permanentemente en archivos de video utilizando aceleración por hardware (GPU).
-
-## 📋 Tabla de Contenidos
-
-- [Características](#-características)
-- [Requisitos](#-requisitos)
-- [Instalación](#-instalación)
-- [Configuración](#-configuración)
-- [Presets de Codificación](#-presets-de-codificación)
-- [Solución de Problemas](#-solución-de-problemas)
-- [Contribuciones](#-contribuciones)
-- [Licencia](#-licencia)
-
-## ✨ Características
-
-### Principales
-- ✅ **Aceleración por GPU**: Soporte para NVIDIA NVENC y Intel Quick Sync (QSV)
-- 🎯 **Procesamiento por lotes**: Procesa múltiples archivos de video simultáneamente
-- 🎵 **Selección de pistas**: Interfaz para elegir pistas de audio y subtítulos específicas
-- 🔄 **Conversión automática**: Convierte FLAC a AAC cuando es necesario
-- 📁 **Búsqueda recursiva**: Opción para buscar videos en subcarpetas
-- 🚫 **Modo sin subtítulos**: Permite procesar solo video + audio sin incrustar subtítulos
-- 📊 **Barra de progreso**: Visualización en tiempo real del procesamiento
-- 💾 **Configuración persistente**: Guarda preferencias en `%APPDATA%\Galleon\HST`
-
-### Funcionalidades Avanzadas
-- Soporte para rutas largas (>260 caracteres) con formato UNC
-- Sistema de logs detallado con información del procesamiento
-- Cancelación de procesamiento en curso
-- Presets de codificación optimizados para diferentes escenarios
-- Detección automática de múltiples streams de audio/subtítulos
-- Configuración de calidad y velocidad de codificación personalizable
-
-## 🔧 Requisitos
-
-### Software
-- **Python 3.x** con Tkinter
-- **FFmpeg** con soporte para:
-  - `h264_nvenc` (para GPUs NVIDIA)
-  - `h264_qsv` (para Intel Quick Sync)
-- **FFProbe** (incluido con FFmpeg)
-
-### Hardware
-- **GPU NVIDIA** (serie GTX/RTX) con soporte NVENC, **O**
-- **Procesador Intel** con Quick Sync Video (generaciones 2+)
-
-### Formatos Soportados
-**Entrada**: `.mp4`, `.mkv`, `.mov`, `.avi`, `.flv`, `.webm`, `.ts`, `.m4v`  
-**Salida**: `.mp4` (H.264 + AAC)
-
-## 📥 Instalación
-
-### 1. Instalar Python
-Descarga e instala Python 3.x desde [python.org](https://www.python.org/downloads/)
-
-### 2. Instalar FFmpeg
-Descarga FFmpeg desde [ffmpeg.org](https://ffmpeg.org/download.html) o utiliza una distribución como:
-- [gyan.dev](https://www.gyan.dev/ffmpeg/builds/)
-- [BtbN Builds](https://github.com/BtbN/FFmpeg-Builds/releases)
-
-### 3. Clonar el Repositorio
-```bash
-git clone https://github.com/TheHexenjagd/galleon_mc_hardcodetool.git
-cd galleon_mc_hardcodetool
-```
-
-### 4. Ejecutar la Aplicación
-```bash
-python hardcode.py
-```
-
-## ⚙️ Configuración
-
-### Archivo de Configuración
-La configuración se guarda automáticamente en:
-```
-%APPDATA%\Galleon\HST\hardcode_config.ini
-```
-
-### Estructura del Archivo
-```ini
-[Paths]
-ffmpeg = C:\ruta\a\ffmpeg.exe
-ffprobe = C:\ruta\a\ffprobe.exe
-output_dir = C:\Videos\Salida
-
-[Options]
-usar_nvidia = True
-buscar_recursivo = True
-preset = medium
-```
-
-## 🎛️ Presets de Codificación
-
-### NVIDIA NVENC
-
-| Preset | Velocidad | Calidad | Descripción |
-|--------|-----------|---------|-------------|
-| `lossless` | ⚡☆☆ | ★★★★★ | Sin pérdida (archivos muy grandes) |
-| `slow` | ⚡☆☆ | ★★★★ | Mejor calidad (~x264 slow) |
-| `hq` | ⚡☆☆ | ★★★★☆ | Alta calidad (~x264 medium-slow) |
-| `bd` | ⚡☆☆ | ★★★★ | Optimizado para Blu-ray |
-| `default` | ⚡⚡☆ | ★★★☆ | Balance (~x264 medium) **[Recomendado]** |
-| `medium` | ⚡⚡☆ | ★★★☆ | Calidad intermedia |
-| `llhq` | ⚡⚡☆ | ★★★☆ | Baja latencia + HQ |
-| `fast` | ⚡⚡⚡ | ★★☆☆ | Rápido (~x264 faster) |
-| `ll` | ⚡⚡⚡ | ★★☆☆ | Baja latencia |
-| `llhp` | ⚡⚡⚡ | ★★☆☆ | Baja latencia + HP |
-| `hp` | ⚡⚡⚡⚡ | ★★☆☆ | Alto rendimiento (~x264 veryfast) |
-
-### Intel Quick Sync (QSV)
-
-| Preset | Velocidad | Calidad | Descripción |
-|--------|-----------|---------|-------------|
-| `veryslow` | ⚡☆☆ | ★★★★★ | Máxima calidad (~x264 veryslow) |
-| `slow` | ⚡☆☆ | ★★★★ | Mejor calidad (~x264 slow) |
-| `medium` | ⚡⚡☆ | ★★★☆ | Calidad intermedia **[Recomendado]** |
-| `fast` | ⚡⚡⚡ | ★★★☆ | Buen balance |
-| `faster` | ⚡⚡⚡ | ★★☆☆ | Rápido (~x264 faster) |
-| `veryfast` | ⚡⚡⚡⚡ | ★★☆☆ | Máxima velocidad |
-
-> **Nota**: Los presets se ajustan automáticamente al cambiar de GPU.
-
-##  Solución de Problemas
-
-### Error: "No se encontró FFmpeg"
-- Verifica la ruta en **Configuración → Cambiar ruta de FFmpeg**
-- Asegúrate de que `ffmpeg.exe` y `ffprobe.exe` existan
-
-### Error: "No se pudo codificar con NVENC"
-- Verifica que tu GPU NVIDIA soporte NVENC
-- Actualiza los drivers de NVIDIA
-- Intenta cambiar a Intel Quick Sync si tienes procesador Intel
-
-### Error: "Unknown encoder 'h264_nvenc'"
-- Tu versión de FFmpeg no tiene soporte para NVENC
-- Descarga una versión con soporte para hardware encoding
-
-### Los subtítulos no se ven correctamente
-- Algunos formatos de subtítulos complejos pueden tener problemas
-- Prueba extrayendo y convirtiendo los subtítulos a `.ass` primero
-
-### Procesamiento muy lento
-- Selecciona un preset más rápido (`fast`, `hp`, `veryfast`)
-- Verifica que estés usando aceleración por GPU
-- Comprueba el uso de GPU en el Administrador de tareas
-
-## 🤝 Contribuciones
-
-Las contribuciones son bienvenidas. Por favor:
-
-1. Haz fork del proyecto
-2. Crea una rama para tu feature (`git checkout -b feature/nueva-funcionalidad`)
-3. Commit tus cambios (`git commit -m 'Añadir nueva funcionalidad'`)
-4. Push a la rama (`git push origin feature/nueva-funcionalidad`)
-5. Abre un Pull Request
-
-## 📄 Licencia
-
-Este proyecto está bajo la Licencia MIT. Ver el archivo `LICENSE` para más detalles.
-
-## 🙏 Agradecimientos
-
-- **FFmpeg** - Por la herramienta de procesamiento de video
-- **NVIDIA** - Por la tecnología NVENC
-- **Intel** - Por Quick Sync Video
-- Comunidad de código abierto
+<p align="center">
+  <img src="https://img.shields.io/badge/Python-3.x-3776AB?style=flat&logo=python&logoColor=white" alt="Python 3.x">
+  <img src="https://img.shields.io/badge/Platform-Windows-0078D6?style=flat&logo=windows&logoColor=white" alt="Windows">
+  <img src="https://img.shields.io/badge/GUI-Tkinter-blueviolet" alt="Tkinter">
+  <img src="https://img.shields.io/badge/Multimedia-FFmpeg-007808?style=flat&logo=ffmpeg&logoColor=white" alt="FFmpeg">
+  <img src="https://img.shields.io/badge/License-MIT-green?style=flat" alt="MIT License">
+</p>
 
 ---
 
-**Desarrollado por Gabriel** | [GitHub](https://github.com/TheHexenjagd/galleon_mc_hardcodetool)
+## Overview
 
-> 💡 **Tip**: Para mejores resultados, usa el preset `medium` con NVIDIA o `fast` con Intel QSV.
+Embedding subtitles permanently into video streams (hardsubbing) is essential when targeting playback devices, hardware players, or web platforms lacking support for soft subtitle tracks or complex typography styling (ASS/SSA).
+
+**HardCode Subtitle Tool (HST)** is a high-performance desktop application engineered in Python and Tkinter designed to automate and accelerate batch subtitle hardcoding. It provides a specialized control panel over FFmpeg with native hardware acceleration support for NVIDIA NVENC (`h264_nvenc`) and Intel QuickSync Video (`h264_qsv`), automated extraction of embedded subtitle streams, and batch container metadata stripping.
+
+HST served as one of the two foundational predecessor projects that were later unified into **Video Processing Tool (VPT)** and ultimately evolved into **Video Workstation (VW)**.
+
+---
+
+## Key Features
+
+- **Hardware-Accelerated Subtitle Burning:** High-efficiency video encoding powered by NVIDIA NVENC (`h264_nvenc`) and Intel Quick Sync (`h264_qsv`), with seamless automatic fallback to CPU (`libx264`).
+- **Batch Processing Queue:** Queue multiple media files with recursive subfolder scanning and concurrent status monitoring.
+- **Embedded Track Extraction:** Automatically extracts embedded subtitle streams (SRT, ASS) to temporary workspaces before executing the burning pipeline.
+- **Quality & Performance Presets:** Dynamic preset configuration tailored to detected GPU vendor capabilities (performance, balanced, quality).
+- **Metadata Sanitization:** In-place stripping of personal tags, track titles, and global container metadata without re-encoding video streams.
+- **Persistent Preferences:** Automatically saves user configurations and FFmpeg paths in `%APPDATA%/Galleon/HST`.
+
+---
+
+## Architecture & Engineering Highlights
+
+- **Multithreaded Processing Pipeline:** Dedicated background worker threads handle video probing and FFmpeg subprocess execution without freezing the Tkinter GUI.
+- **Long Path Support:** Formatted for Windows UNC extended path handling (`\\?\`) to reliably support deeply nested directory hierarchies (>260 characters).
+- **Dynamic GPU Probing:** Automatic discovery and validation of host GPU encoding capabilities at startup.
+
+---
+
+## Project Structure
+
+```text
+hardcodetool/
+├── hardcode.py                     # Standalone application entry point and GUI (Tkinter)
+├── README.md                       # Project documentation
+└── .git/                           # Git repository
+```
+
+---
+
+## Installation & Setup
+
+### Prerequisites
+
+- **Operating System:** Windows 10 / 11 (64-bit).
+- **Python:** Version 3.x with Tkinter.
+- **FFmpeg & FFprobe:** Required for media analysis and encoding. Automatically detected in `%APPDATA%/Galleon/bin` or system `PATH`.
+
+### Quick Start
+
+1. Clone or open the repository:
+   ```bash
+   cd hardcodetool
+   ```
+
+2. Launch the application:
+   ```bash
+   python hardcode.py
+   ```
+
+---
+
+## Configuration
+
+User preferences and runtime configurations are automatically persisted at `%APPDATA%/Galleon/HST`:
+
+- **Binary paths:** Discovery and configuration for `ffmpeg.exe` and `ffprobe.exe`.
+- **Hardware acceleration:** Preferred GPU encoder (`nvidia`, `intel`) and encoding quality presets.
+- **Queue options:** Recursive folder scanning and output destination directory.
+
+---
+
+## Author
+
+Project designed and developed by:
+
+<table align="center">
+  <tr>
+    <td align="center" width="260px">
+      <a href="https://github.com/TheHexenjagd">
+        <img src="https://github.com/TheHexenjagd.png" width="110px;" alt="Gabriel Giraldo Herrera"/><br />
+        <sub><b>Gabriel Giraldo Herrera</b></sub>
+      </a><br />
+      <a href="https://github.com/TheHexenjagd"><code>@TheHexenjagd</code></a><br />
+      <small>Creator & Lead Developer</small>
+    </td>
+  </tr>
+</table>
+
+---
+
+## License
+
+This project is licensed under the **MIT License**.
