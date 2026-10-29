@@ -520,6 +520,60 @@ def buscar_subtitulos_externos(video_path):
     except Exception:
         return []
 
+def asegurar_subtitulo_externo_utf8(filepath):
+    """
+    Verifica si un archivo de subtítulo externo está en UTF-8 válido.
+    Si ya es UTF-8 (con o sin BOM), no crea archivos temporales y retorna (filepath, None).
+    Si tiene otra codificación (ANSI/CP1252/Latin1/UTF-16/etc.), lo decodifica correctamente
+    y genera un archivo temporal .srt codificado en UTF-8 limpio, retornando (temp_path, temp_path).
+    """
+    if not filepath or not os.path.isfile(filepath):
+        return filepath, None
+
+    try:
+        with open(filepath, 'rb') as f:
+            raw = f.read()
+
+        if not raw:
+            return filepath, None
+
+        if raw.startswith(b'\xef\xbb\xbf'):
+            return filepath, None
+
+        try:
+            raw.decode('utf-8')
+            return filepath, None
+        except UnicodeDecodeError:
+            pass
+
+        texto = None
+        if raw.startswith(b'\xff\xfe') or raw.startswith(b'\xfe\xff'):
+            try:
+                texto = raw.decode('utf-16', errors='replace')
+            except Exception:
+                pass
+
+        if texto is None:
+            codificaciones = ['cp1252', 'latin1', 'iso-8859-1', 'iso-8859-15', 'cp1250', 'cp1251']
+            for enc in codificaciones:
+                try:
+                    texto = raw.decode(enc)
+                    break
+                except UnicodeDecodeError:
+                    continue
+
+        if texto is None:
+            texto = raw.decode('cp1252', errors='replace')
+
+        with tempfile.NamedTemporaryFile('w', suffix='.srt', delete=False, encoding='utf-8') as tf:
+            tf.write(texto)
+            temp_path = tf.name
+
+        return temp_path, temp_path
+
+    except Exception:
+        return filepath, None
+
 def obtener_identificador_pista(stream):
     tags = stream.get("tags") or {}
     if stream.get("is_external"):
@@ -1963,6 +2017,7 @@ class VWSuite:
                 audio_idx = audio_indices[0] if audio_indices else None
                 sub_idx = sub_indices[0] if sub_indices else None
                 temp_subtitle_path = None
+                temp_utf8_sub_path = None
 
                 try:
                     if sub_idx is not None:
@@ -1973,13 +2028,19 @@ class VWSuite:
                         sub_stream_obj = next((st for st in info["streams"] if st.get("index") == sub_idx), None)
                         if sub_stream_obj and sub_stream_obj.get("is_external"):
                             ext_file = sub_stream_obj.get("external_path")
-                            extract = [self.ffmpeg_path, "-i", ext_file, "-y", temp_subtitle_path]
+                            actual_sub_path, temp_utf8_sub_path = asegurar_subtitulo_externo_utf8(ext_file)
+                            extract = [self.ffmpeg_path, "-i", actual_sub_path, "-y", temp_subtitle_path]
                         else:
                             extract = [self.ffmpeg_path, "-i", input_file, "-map", f"0:{sub_idx}", "-y", temp_subtitle_path]
 
                         res = self._run_subprocess_cancellable(extract)
                         if res.returncode != 0:
-                            err_msg = f"Fallo al extraer/procesar subtítulo de la versión '{label}'."
+                            err_detail = ""
+                            if hasattr(res, "stderr") and res.stderr:
+                                lines_err = [l.strip() for l in res.stderr.splitlines() if l.strip()]
+                                if lines_err:
+                                    err_detail = f" Detalle: {' '.join(lines_err[-2:])}"
+                            err_msg = f"Fallo al extraer/procesar subtítulo de la versión '{label}'.{err_detail}"
                             self._enviar_mensaje(err_msg)
                             errores.append((input_file, f"Versión '{label}': {err_msg}"))
                             fail += 1
@@ -2091,6 +2152,11 @@ class VWSuite:
                             os.unlink(temp_subtitle_path)
                         except Exception:
                             pass
+                    if temp_utf8_sub_path and os.path.exists(temp_utf8_sub_path):
+                        try:
+                            os.unlink(temp_utf8_sub_path)
+                        except Exception:
+                            pass
             else:
                 sub_incluir = []
                 excluidos = 0
@@ -2110,81 +2176,93 @@ class VWSuite:
                     main_video_streams = video_streams
 
                 ext_inputs = {}
+                temp_utf8_files = []
                 next_in_idx = 1
                 for idx in sub_incluir:
                     s = next((st for st in subtitle_streams if st["index"] == idx), None)
                     if s and s.get("is_external"):
                         ext_path = s["external_path"]
                         if ext_path not in ext_inputs:
-                            ext_inputs[ext_path] = next_in_idx
+                            actual_path, temp_path = asegurar_subtitulo_externo_utf8(ext_path)
+                            if temp_path:
+                                temp_utf8_files.append(temp_path)
+                            ext_inputs[ext_path] = (next_in_idx, actual_path)
                             next_in_idx += 1
 
-                cmd = [self.ffmpeg_path, "-i", input_file]
-                for ext_path, in_idx in sorted(ext_inputs.items(), key=lambda x: x[1]):
-                    cmd.extend(["-i", ext_path])
+                try:
+                    cmd = [self.ffmpeg_path, "-i", input_file]
+                    for ext_path, (in_idx, actual_path) in sorted(ext_inputs.items(), key=lambda x: x[1][0]):
+                        cmd.extend(["-i", actual_path])
 
-                for s in main_video_streams:
-                    cmd.extend(["-map", f"0:{s['index']}"])
-                    if s.get("codec_name", "").lower() in ("hevc", "h265"):
-                        cmd.extend(["-tag:v", "hvc1"])
-
-                cmd.extend(["-c:v", "copy"])
-
-                for idx_pos, idx in enumerate(audio_indices):
-                    cmd.extend(["-map", f"0:{idx}"])
-                    s = next((st for st in info["streams"] if st.get("index") == idx), None)
-                    acodec = s.get("codec_name", "").lower() if s else ""
-                    if acodec in INCOMPATIBLE_MP4_AUDIO_CODECS:
-                        cmd.extend([f"-c:a:{idx_pos}", "aac", f"-b:a:{idx_pos}", "320k"])
-                    else:
-                        cmd.extend([f"-c:a:{idx_pos}", "copy"])
-
-                if not audio_indices:
-                    cmd.extend(["-c:a", "copy"])
-
-                for out_sub_pos, idx in enumerate(sub_incluir):
-                    s = next((st for st in subtitle_streams if st["index"] == idx), None)
-                    if s and s.get("is_external"):
-                        in_idx = ext_inputs[s["external_path"]]
-                        cmd.extend(["-map", f"{in_idx}:0"])
-                    else:
-                        cmd.extend(["-map", f"0:{idx}"])
-                    if s:
-                        tags_s = s.get("tags") or {}
-                        lang_s = tags_s.get("language")
-                        if lang_s:
-                            cmd.extend([f"-metadata:s:s:{out_sub_pos}", f"language={lang_s}"])
-
-                if sub_incluir:
-                    cmd.extend(["-c:s", "mov_text"])
-
-                cmd.extend(["-movflags", "+faststart", "-y", str(output_path)])
-
-                self._enviar_mensaje(f"[{i}/{len(combinaciones)}] {output_path.name}")
-                result = self._run_subprocess_cancellable(cmd)
-
-                if result.returncode != 0 and sub_incluir:
-                    self._enviar_mensaje("  -> Advertencia: Falló multiplexado de subtítulos en MP4. Reintentando remux sin subtítulos...")
-                    cmd_fallback = [self.ffmpeg_path, "-i", input_file]
                     for s in main_video_streams:
-                        cmd_fallback.extend(["-map", f"0:{s['index']}"])
+                        cmd.extend(["-map", f"0:{s['index']}"])
                         if s.get("codec_name", "").lower() in ("hevc", "h265"):
-                            cmd_fallback.extend(["-tag:v", "hvc1"])
-                    cmd_fallback.extend(["-c:v", "copy"])
+                            cmd.extend(["-tag:v", "hvc1"])
+
+                    cmd.extend(["-c:v", "copy"])
+
                     for idx_pos, idx in enumerate(audio_indices):
-                        cmd_fallback.extend(["-map", f"0:{idx}"])
+                        cmd.extend(["-map", f"0:{idx}"])
                         s = next((st for st in info["streams"] if st.get("index") == idx), None)
                         acodec = s.get("codec_name", "").lower() if s else ""
                         if acodec in INCOMPATIBLE_MP4_AUDIO_CODECS:
-                            cmd_fallback.extend([f"-c:a:{idx_pos}", "aac", f"-b:a:{idx_pos}", "320k"])
+                            cmd.extend([f"-c:a:{idx_pos}", "aac", f"-b:a:{idx_pos}", "320k"])
                         else:
-                            cmd_fallback.extend([f"-c:a:{idx_pos}", "copy"])
+                            cmd.extend([f"-c:a:{idx_pos}", "copy"])
+
                     if not audio_indices:
-                        cmd_fallback.extend(["-c:a", "copy"])
-                    cmd_fallback.extend(["-sn", "-movflags", "+faststart", "-y", str(output_path)])
-                    result = self._run_subprocess_cancellable(cmd_fallback)
-                    if result.returncode == 0:
-                        sub_incluir = []
+                        cmd.extend(["-c:a", "copy"])
+
+                    for out_sub_pos, idx in enumerate(sub_incluir):
+                        s = next((st for st in subtitle_streams if st["index"] == idx), None)
+                        if s and s.get("is_external"):
+                            in_idx = ext_inputs[s["external_path"]][0]
+                            cmd.extend(["-map", f"{in_idx}:0"])
+                        else:
+                            cmd.extend(["-map", f"0:{idx}"])
+                        if s:
+                            tags_s = s.get("tags") or {}
+                            lang_s = tags_s.get("language")
+                            if lang_s:
+                                cmd.extend([f"-metadata:s:s:{out_sub_pos}", f"language={lang_s}"])
+
+                    if sub_incluir:
+                        cmd.extend(["-c:s", "mov_text"])
+
+                    cmd.extend(["-movflags", "+faststart", "-y", str(output_path)])
+
+                    self._enviar_mensaje(f"[{i}/{len(combinaciones)}] {output_path.name}")
+                    result = self._run_subprocess_cancellable(cmd)
+
+                    if result.returncode != 0 and sub_incluir:
+                        self._enviar_mensaje("  -> Advertencia: Falló multiplexado de subtítulos en MP4. Reintentando remux sin subtítulos...")
+                        cmd_fallback = [self.ffmpeg_path, "-i", input_file]
+                        for s in main_video_streams:
+                            cmd_fallback.extend(["-map", f"0:{s['index']}"])
+                            if s.get("codec_name", "").lower() in ("hevc", "h265"):
+                                cmd_fallback.extend(["-tag:v", "hvc1"])
+                        cmd_fallback.extend(["-c:v", "copy"])
+                        for idx_pos, idx in enumerate(audio_indices):
+                            cmd_fallback.extend(["-map", f"0:{idx}"])
+                            s = next((st for st in info["streams"] if st.get("index") == idx), None)
+                            acodec = s.get("codec_name", "").lower() if s else ""
+                            if acodec in INCOMPATIBLE_MP4_AUDIO_CODECS:
+                                cmd_fallback.extend([f"-c:a:{idx_pos}", "aac", f"-b:a:{idx_pos}", "320k"])
+                            else:
+                                cmd_fallback.extend([f"-c:a:{idx_pos}", "copy"])
+                        if not audio_indices:
+                            cmd_fallback.extend(["-c:a", "copy"])
+                        cmd_fallback.extend(["-sn", "-movflags", "+faststart", "-y", str(output_path)])
+                        result = self._run_subprocess_cancellable(cmd_fallback)
+                        if result.returncode == 0:
+                            sub_incluir = []
+                finally:
+                    for tf in temp_utf8_files:
+                        if tf and os.path.exists(tf):
+                            try:
+                                os.unlink(tf)
+                            except Exception:
+                                pass
 
                 if result.returncode == 0:
                     ok += 1
