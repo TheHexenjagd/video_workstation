@@ -1097,15 +1097,17 @@ class VWSuite:
         self.activity_summary_label.pack(side=tk.RIGHT, padx=(0, 12))
 
         style = ttk.Style()
-        style.configure("Activity.Treeview", font=("Segoe UI", 9), rowheight=28, background="#FFFFFF", fieldbackground="#FFFFFF", borderwidth=0)
+        style.layout("Activity.Treeview", [("Activity.Treeview.treearea", {"sticky": "nswe"})])
+        style.configure("Activity.Treeview", font=("Segoe UI", 9), rowheight=28, background="#FFFFFF", fieldbackground="#FFFFFF", borderwidth=0, focusthickness=0)
         style.configure("Activity.Treeview.Heading", font=("Segoe UI", 9, "bold"), foreground="#2B3A57")
         style.map("Activity.Treeview", background=[("selected", "#E8F0FE")], foreground=[("selected", "#1F2A44")])
 
-        log_frame = tk.Frame(activity_card, bg="#FFFFFF", highlightthickness=1, highlightbackground="#E5ECF9")
+        log_frame = tk.Frame(activity_card, bg="#FFFFFF", highlightthickness=1, highlightbackground="#E5ECF9", highlightcolor="#E5ECF9")
         log_frame.pack(fill=tk.BOTH, expand=True, padx=12, pady=(6, 10))
 
         cols = ("estado", "video", "accion", "detalle")
-        self.activity_tree = ttk.Treeview(log_frame, columns=cols, show="headings", style="Activity.Treeview", height=12)
+        self.activity_tree = ttk.Treeview(log_frame, columns=cols, show="headings", style="Activity.Treeview", height=12, takefocus=False)
+        self.activity_tree.bind("<FocusIn>", lambda e: self.root.focus_set())
         self.activity_tree.heading("estado", text="Estado")
         self.activity_tree.heading("video", text="Video")
         self.activity_tree.heading("accion", text="Proceso")
