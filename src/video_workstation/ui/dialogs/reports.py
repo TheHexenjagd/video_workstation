@@ -7,7 +7,9 @@ from tkinter import messagebox, ttk
 
 from video_workstation import VERSION
 from video_workstation.constants import PRESETS_AMD, PRESETS_NVIDIA, PRESETS_QSV
+from video_workstation.media.presets import get_valid_preset as obtener_preset_valido
 from video_workstation.ui.theme import get_theme
+from video_workstation.ui.widgets import RoundedButton
 
 
 class ReportsDialogMixin:
@@ -374,37 +376,144 @@ class ReportsDialogMixin:
         _poblar_tabla("todos")
 
     def change_preset(self):
+        t = get_theme(self.theme_var.get())
         gpu_acel = self.gpu_acel_var.get()
+
         if gpu_acel == "nvidia":
             presets = PRESETS_NVIDIA
-            gpu_name = "NVIDIA NVENC"
-            orden_presets = ["lossless", "hq", "slow", "bd", "default", "medium", "llhq", "fast", "ll", "llhp", "hp"]
+            gpu_name = "NVIDIA NVENC (h264_nvenc)"
+            flag_name = "-preset"
+            encoder_name = "h264_nvenc"
+            orden_presets = ["p7", "p6", "p5", "p4", "p3", "p2", "p1"]
         elif gpu_acel == "intel":
             presets = PRESETS_QSV
-            gpu_name = "Intel QSV"
-            orden_presets = ["veryslow", "slow", "medium", "fast", "faster", "veryfast"]
-        else:
+            gpu_name = "Intel Quick Sync (h264_qsv)"
+            flag_name = "-preset"
+            encoder_name = "h264_qsv"
+            orden_presets = ["veryslow", "slower", "slow", "medium", "fast", "faster", "veryfast"]
+        elif gpu_acel == "amd":
             presets = PRESETS_AMD
-            gpu_name = "AMD AMF"
+            gpu_name = "AMD AMF (h264_amf)"
+            flag_name = "-quality"
+            encoder_name = "h264_amf"
             orden_presets = ["quality", "balanced", "speed"]
+        else:
+            presets = None
+            gpu_name = "Sin GPU compatible detectada"
+            flag_name = ""
+            encoder_name = ""
+            orden_presets = []
 
         dialog = tk.Toplevel(self.root)
-        dialog.title(f"Preset - {gpu_name}")
-        dialog.geometry("620x420")
+        dialog.title("Preset de codificación - VW")
+        dialog.geometry("540x430" if presets else "500x260")
+        dialog.resizable(False, False)
         dialog.transient(self.root)
         dialog.grab_set()
-        self.root.attributes('-disabled', True)
-        dialog.bind("<Destroy>", lambda e: self.root.attributes('-disabled', False) if (e.widget == dialog and self.root.winfo_exists()) else None)
+        dialog.configure(bg=t["bg_window"])
+        self.root.attributes("-disabled", True)
+        dialog.bind(
+            "<Destroy>",
+            lambda e: self.root.attributes("-disabled", False)
+            if (e.widget == dialog and self.root.winfo_exists())
+            else None,
+        )
 
-        tk.Label(dialog, text=f"Selecciona preset para {gpu_name}", font=("Segoe UI", 12, "bold")).pack(pady=10)
+        dialog.update_idletasks()
+        x = self.root.winfo_x() + (self.root.winfo_width() - dialog.winfo_width()) // 2
+        y = self.root.winfo_y() + (self.root.winfo_height() - dialog.winfo_height()) // 2
+        dialog.geometry(f"+{max(0, x)}+{max(0, y)}")
+
+        # Header
+        hdr = tk.Frame(dialog, bg=t["bg_surface"], padx=18, pady=14)
+        hdr.pack(fill=tk.X)
+        badge = tk.Label(
+            hdr,
+            text="VW",
+            font=("Segoe UI", 10, "bold"),
+            bg=t["accent"],
+            fg=t["accent_fg"],
+            padx=8,
+            pady=4,
+        )
+        badge.pack(side=tk.LEFT, padx=(0, 12))
+
+        hdr_txt = tk.Frame(hdr, bg=t["bg_surface"])
+        hdr_txt.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        tk.Label(
+            hdr_txt,
+            text="Preset de codificación",
+            font=("Segoe UI", 12, "bold"),
+            bg=t["bg_surface"],
+            fg=t["fg_primary"],
+            anchor=tk.W,
+        ).pack(fill=tk.X)
+        tk.Label(
+            hdr_txt,
+            text=f"Aceleración activa: {gpu_name}",
+            font=("Segoe UI", 9),
+            bg=t["bg_surface"],
+            fg=t["fg_secondary"],
+            anchor=tk.W,
+        ).pack(fill=tk.X)
+
+        tk.Frame(dialog, height=1, bg=t["border"]).pack(fill=tk.X)
+
+        body = tk.Frame(dialog, bg=t["bg_window"], padx=18, pady=14)
+        body.pack(fill=tk.BOTH, expand=True)
+
+        if not presets:
+            card = tk.Frame(
+                body,
+                bg=t["bg_surface"],
+                highlightthickness=1,
+                highlightbackground=t["border"],
+                padx=16,
+                pady=14,
+            )
+            card.pack(fill=tk.BOTH, expand=True)
+            tk.Label(
+                card,
+                text="No hay una GPU compatible activa",
+                font=("Segoe UI", 10, "bold"),
+                bg=t["bg_surface"],
+                fg=t["fg_primary"],
+                anchor=tk.W,
+            ).pack(fill=tk.X, pady=(0, 6))
+            tk.Label(
+                card,
+                text=(
+                    "No se detectó un codificador por hardware disponible "
+                    "(NVIDIA NVENC, Intel Quick Sync o AMD AMF). "
+                    "Verifica tus controladores o selecciona una GPU en Codificación y Reglas."
+                ),
+                font=("Segoe UI", 9),
+                bg=t["bg_surface"],
+                fg=t["fg_secondary"],
+                justify=tk.LEFT,
+                wraplength=420,
+                anchor=tk.W,
+            ).pack(fill=tk.X)
+
+            btm = tk.Frame(dialog, bg=t["bg_window"], padx=18, pady=12)
+            btm.pack(fill=tk.X)
+            RoundedButton(
+                btm,
+                text="Cerrar",
+                command=dialog.destroy,
+                bg=t["btn_primary"],
+                fg=t["accent_fg"],
+                parent_bg=t["bg_window"],
+                width=12,
+            ).pack(side=tk.RIGHT)
+            return
 
         options = []
         map_display = {}
         for key in orden_presets:
             if key not in presets:
                 continue
-            info = presets[key]
-            disp = info["nombre"]
+            disp = presets[key]["nombre"]
             options.append(disp)
             map_display[disp] = key
 
@@ -412,18 +521,127 @@ class ReportsDialogMixin:
         current = current if current in presets else obtener_preset_valido(current, gpu_acel)
         value = tk.StringVar(value=presets[current]["nombre"])
 
-        cb = ttk.Combobox(dialog, values=options, state="readonly", textvariable=value, width=44)
-        cb.pack(pady=8)
+        # Selector card
+        sel_card = tk.Frame(
+            body,
+            bg=t["bg_surface"],
+            highlightthickness=1,
+            highlightbackground=t["border"],
+            padx=14,
+            pady=12,
+        )
+        sel_card.pack(fill=tk.X, pady=(0, 12))
 
-        info_lbl = tk.Label(dialog, text="", justify=tk.LEFT, wraplength=560, anchor=tk.W)
-        info_lbl.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+        sel_top = tk.Frame(sel_card, bg=t["bg_surface"])
+        sel_top.pack(fill=tk.X, pady=(0, 8))
+        tk.Label(
+            sel_top,
+            text="Perfil de rendimiento",
+            font=("Segoe UI", 9, "bold"),
+            bg=t["bg_surface"],
+            fg=t["fg_primary"],
+        ).pack(side=tk.LEFT)
+
+        flag_badge = tk.Label(
+            sel_top,
+            text="",
+            font=("Consolas", 8, "bold"),
+            bg=t["bg_input"],
+            fg=t["accent"],
+            padx=8,
+            pady=2,
+        )
+        flag_badge.pack(side=tk.RIGHT)
+
+        cb = ttk.Combobox(sel_card, values=options, state="readonly", textvariable=value)
+        cb.pack(fill=tk.X)
+
+        # Details card
+        det_card = tk.Frame(
+            body,
+            bg=t["bg_surface"],
+            highlightthickness=1,
+            highlightbackground=t["border"],
+            padx=14,
+            pady=12,
+        )
+        det_card.pack(fill=tk.BOTH, expand=True)
+
+        name_lbl = tk.Label(
+            det_card,
+            text="",
+            font=("Segoe UI", 10, "bold"),
+            bg=t["bg_surface"],
+            fg=t["fg_primary"],
+            anchor=tk.W,
+        )
+        name_lbl.pack(fill=tk.X, pady=(0, 4))
+
+        desc_lbl = tk.Label(
+            det_card,
+            text="",
+            font=("Segoe UI", 9),
+            bg=t["bg_surface"],
+            fg=t["fg_secondary"],
+            justify=tk.LEFT,
+            wraplength=460,
+            anchor=tk.W,
+        )
+        desc_lbl.pack(fill=tk.X, pady=(0, 12))
+
+        tk.Frame(det_card, height=1, bg=t["border"]).pack(fill=tk.X, pady=(0, 12))
+
+        def _make_meter_row(parent, title):
+            row = tk.Frame(parent, bg=t["bg_surface"])
+            row.pack(fill=tk.X, pady=4)
+            tk.Label(
+                row,
+                text=title,
+                font=("Segoe UI", 9, "bold"),
+                bg=t["bg_surface"],
+                fg=t["fg_primary"],
+                width=11,
+                anchor=tk.W,
+            ).pack(side=tk.LEFT)
+            bars_frame = tk.Frame(row, bg=t["bg_surface"])
+            bars_frame.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(4, 10))
+            segments = []
+            for _ in range(5):
+                seg = tk.Frame(bars_frame, height=8, bg=t["bg_input"])
+                seg.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+                segments.append(seg)
+            score_lbl = tk.Label(
+                row,
+                text="0 / 5",
+                font=("Segoe UI", 9),
+                bg=t["bg_surface"],
+                fg=t["fg_secondary"],
+                width=5,
+                anchor=tk.E,
+            )
+            score_lbl.pack(side=tk.RIGHT)
+            return segments, score_lbl
+
+        speed_segs, speed_score = _make_meter_row(det_card, "Velocidad")
+        qual_segs, qual_score = _make_meter_row(det_card, "Calidad")
 
         def refresh(*_):
             selected = map_display.get(value.get())
             if not selected:
                 return
             p = presets[selected]
-            info_lbl.config(text=f"Nombre: {p['nombre']}\nVelocidad: {p['velocidad']}\nCalidad: {p['calidad']}\n\n{p['descripcion']}")
+            flag_badge.config(text=f"{encoder_name}  {flag_name} {selected}")
+            name_lbl.config(text=p["nombre"])
+            desc_lbl.config(text=p["descripcion"])
+
+            spd = int(p["velocidad"])
+            qual = int(p["calidad"])
+            for idx, seg in enumerate(speed_segs):
+                seg.config(bg=t["accent"] if idx < spd else t["bg_input"])
+            speed_score.config(text=f"{spd} / 5")
+            for idx, seg in enumerate(qual_segs):
+                seg.config(bg=t["success"] if idx < qual else t["bg_input"])
+            qual_score.config(text=f"{qual} / 5")
 
         value.trace_add("write", refresh)
         refresh()
@@ -434,17 +652,33 @@ class ReportsDialogMixin:
                 self.preset_var.set(selected)
             dialog.destroy()
 
-        btm = tk.Frame(dialog)
-        btm.pack(pady=10)
-        tk.Button(btm, text="Aceptar", command=aceptar, bg="#2D9CDB", fg="white", width=12).pack(side=tk.LEFT, padx=6)
-        tk.Button(btm, text="Cancelar", command=dialog.destroy, bg="#95A5A6", fg="white", width=12).pack(side=tk.LEFT, padx=6)
+        btm = tk.Frame(dialog, bg=t["bg_window"], padx=18, pady=12)
+        btm.pack(fill=tk.X)
+        RoundedButton(
+            btm,
+            text="Aplicar preset",
+            command=aceptar,
+            bg=t["btn_primary"],
+            fg=t["accent_fg"],
+            parent_bg=t["bg_window"],
+            width=14,
+        ).pack(side=tk.RIGHT, padx=(8, 0))
+        RoundedButton(
+            btm,
+            text="Cancelar",
+            command=dialog.destroy,
+            bg=t["btn_neutral"],
+            fg=t["accent_fg"],
+            parent_bg=t["bg_window"],
+            width=12,
+        ).pack(side=tk.RIGHT)
 
     def show_about(self):
         import webbrowser
 
         dialog = tk.Toplevel(self.root)
         dialog.title("Acerca de Video Workstation (VW)")
-        dialog.geometry("560x350")
+        dialog.geometry("560x380")
         dialog.resizable(False, False)
         dialog.configure(bg="#F3F7FF")
         dialog.transient(self.root)
@@ -528,14 +762,33 @@ class ReportsDialogMixin:
 
         tk.Label(
             info_frame,
-            text="Desarrolladores:",
+            text="Organización:",
             font=("Segoe UI", 9, "bold"),
             bg="#FFFFFF",
             fg="#2B3A57"
         ).grid(row=0, column=0, sticky=tk.NW, pady=3)
 
+        org_lbl = tk.Label(
+            info_frame,
+            text="Team Galleon (teamgalleon.com)",
+            font=("Segoe UI", 9, "underline"),
+            bg="#FFFFFF",
+            fg="#2D9CDB",
+            cursor="hand2"
+        )
+        org_lbl.grid(row=0, column=1, sticky=tk.W, padx=12, pady=3)
+        org_lbl.bind("<Button-1>", lambda e: webbrowser.open_new("https://teamgalleon.com"))
+
+        tk.Label(
+            info_frame,
+            text="Desarrolladores:",
+            font=("Segoe UI", 9, "bold"),
+            bg="#FFFFFF",
+            fg="#2B3A57"
+        ).grid(row=1, column=0, sticky=tk.NW, pady=3)
+
         devs_subframe = tk.Frame(info_frame, bg="#FFFFFF")
-        devs_subframe.grid(row=0, column=1, sticky=tk.W, padx=12, pady=3)
+        devs_subframe.grid(row=1, column=1, sticky=tk.W, padx=12, pady=3)
 
         dev1_lbl = tk.Label(
             devs_subframe,

@@ -7,8 +7,10 @@ import queue
 import subprocess
 import tempfile
 import threading
-from tkinter import messagebox
+import tkinter as tk
+from tkinter import messagebox, ttk
 
+from video_workstation.config import TOOLS_DIR
 from video_workstation.constants import (
     BITMAP_SUB_CODECS,
     INCOMPATIBLE_MP4_AUDIO_CODECS,
@@ -24,6 +26,16 @@ from video_workstation.media.subtitles import (
     ensure_external_subtitle_utf8 as asegurar_subtitulo_externo_utf8,
     find_external_subtitles as buscar_subtitulos_externos,
 )
+from video_workstation.ui.theme import get_theme
+from video_workstation.utils.binaries import (
+    get_binary_filename,
+    resolve_binary_path,
+)
+from video_workstation.utils.downloader import download_ffmpeg_tools
+
+
+def resolve_app_binary(binary_name):
+    return resolve_binary_path(binary_name, TOOLS_DIR)
 
 
 class MediaProcessorMixin:
@@ -129,23 +141,189 @@ class MediaProcessorMixin:
         return None
 
     def _check_ffmpeg_on_startup(self):
+        ffmpeg_bin = get_binary_filename("ffmpeg")
+        ffprobe_bin = get_binary_filename("ffprobe")
+
         if not (self.ffmpeg_path and os.path.exists(self.ffmpeg_path)):
-            self.ffmpeg_path = resolve_app_binary("ffmpeg.exe")
+            self.ffmpeg_path = resolve_app_binary(ffmpeg_bin)
         if not (self.ffprobe_path and os.path.exists(self.ffprobe_path)):
-            self.ffprobe_path = resolve_app_binary("ffprobe.exe")
+            self.ffprobe_path = resolve_app_binary(ffprobe_bin)
 
         if os.path.exists(self.ffmpeg_path) and os.path.exists(self.ffprobe_path):
             self._update_config()
             return
 
-        messagebox.showwarning(
-            "FFmpeg/FFprobe no encontrados",
-            "No se detectaron ffmpeg.exe y ffprobe.exe automáticamente.\n\n"
-            "Puedes colocarlos en la carpeta 'tools/' junto a VW para modo portátil o seleccionarlos manualmente.",
+        self._show_ffmpeg_setup_dialog(ffmpeg_bin, ffprobe_bin)
+
+    def _show_ffmpeg_setup_dialog(self, ffmpeg_bin, ffprobe_bin):
+        t = get_theme(self.theme_var.get())
+        dlg = tk.Toplevel(self.root)
+        dlg.title("Configuración inicial - Video Workstation")
+        dlg.geometry("580x400")
+        dlg.resizable(False, False)
+        dlg.transient(self.root)
+        dlg.grab_set()
+        dlg.configure(bg=t["bg_app"])
+        dlg._vw_themed = True
+
+        dlg.update_idletasks()
+        px = self.root.winfo_x() + max(0, (self.root.winfo_width() - 580) // 2)
+        py = self.root.winfo_y() + max(0, (self.root.winfo_height() - 400) // 2)
+        dlg.geometry(f"+{px}+{py}")
+
+        # Header
+        hdr = tk.Frame(dlg, bg=t["bg_surface"], highlightthickness=1, highlightbackground=t["border"])
+        hdr.pack(fill=tk.X, padx=18, pady=(14, 10))
+        hdr_in = tk.Frame(hdr, bg=t["bg_surface"])
+        hdr_in.pack(fill=tk.X, padx=14, pady=10)
+        tk.Label(hdr_in, text="VW", font=("Segoe UI", 11, "bold"), bg=t["accent"], fg="#FFFFFF", padx=8, pady=2).pack(side=tk.LEFT)
+        hdr_txt = tk.Frame(hdr_in, bg=t["bg_surface"])
+        hdr_txt.pack(side=tk.LEFT, padx=(10, 0))
+        tk.Label(hdr_txt, text="FFmpeg y FFprobe requeridos", font=("Segoe UI", 10, "bold"), bg=t["bg_surface"], fg=t["fg_primary"]).pack(anchor=tk.W)
+        tk.Label(hdr_txt, text="No se detectaron los binarios en el sistema ni en las carpetas de herramientas.", font=("Segoe UI", 8), bg=t["bg_surface"], fg=t["fg_muted"]).pack(anchor=tk.W)
+
+        # Card principal
+        card = tk.Frame(dlg, bg=t["bg_surface"], highlightthickness=1, highlightbackground=t["border"])
+        card.pack(fill=tk.BOTH, expand=True, padx=18, pady=(0, 14))
+
+        body = tk.Frame(card, bg=t["bg_surface"])
+        body.pack(fill=tk.BOTH, expand=True, padx=16, pady=14)
+
+        lbl_intro = tk.Label(
+            body,
+            text="Puedes descargar e instalar los binarios oficiales automáticamente o colocarlos de forma manual.",
+            font=("Segoe UI", 9),
+            bg=t["bg_surface"],
+            fg=t["fg_secondary"],
+            wraplength=510,
+            justify=tk.LEFT,
         )
-        self.change_ffmpeg_path()
-        if not os.path.exists(self.ffprobe_path):
-            self.change_ffprobe_path()
+        lbl_intro.pack(anchor=tk.W, pady=(0, 12))
+
+        # Bloque de progreso (oculto hasta iniciar descarga)
+        prog_box = tk.Frame(body, bg=t["bg_subtle"], highlightthickness=1, highlightbackground=t["border"])
+        lbl_status = tk.Label(prog_box, text="Preparando descarga...", font=("Segoe UI", 9, "bold"), bg=t["bg_subtle"], fg=t["fg_primary"])
+        lbl_status.pack(anchor=tk.W, padx=12, pady=(10, 4))
+        pbar = ttk.Progressbar(prog_box, style="Modern.Horizontal.TProgressbar", mode="indeterminate")
+        pbar.pack(fill=tk.X, padx=12, pady=4)
+        lbl_bytes = tk.Label(prog_box, text="Conectando...", font=("Segoe UI", 8), bg=t["bg_subtle"], fg=t["fg_muted"])
+        lbl_bytes.pack(anchor=tk.W, padx=12, pady=(2, 10))
+
+        # Bloque de rutas manuales (visible por defecto o al rechazar descarga)
+        manual_box = tk.Frame(body, bg=t["bg_subtle"], highlightthickness=1, highlightbackground=t["border"])
+        manual_box.pack(fill=tk.BOTH, expand=True, pady=(0, 12))
+
+        tk.Label(
+            manual_box,
+            text=f"Instalación manual (coloca '{ffmpeg_bin}' y '{ffprobe_bin}' en):",
+            font=("Segoe UI", 8, "bold"),
+            bg=t["bg_subtle"],
+            fg=t["fg_primary"],
+        ).pack(anchor=tk.W, padx=12, pady=(10, 6))
+
+        rutas_txt = f"Carpeta de herramientas:\n  {TOOLS_DIR}"
+        if os.name != "nt":
+            rutas_txt += "\n\nO instala ffmpeg a nivel de sistema (apt / dnf / pacman / brew)."
+
+        tk.Label(
+            manual_box,
+            text=rutas_txt,
+            font=("Consolas", 8),
+            bg=t["bg_subtle"],
+            fg=t["fg_secondary"],
+            justify=tk.LEFT,
+            anchor=tk.W,
+        ).pack(anchor=tk.W, padx=12, pady=(0, 10))
+
+        def _abrir_carpeta_tools():
+            os.makedirs(TOOLS_DIR, exist_ok=True)
+            try:
+                if os.name == "nt":
+                    os.startfile(TOOLS_DIR)
+                elif os.uname().sysname == "Darwin":
+                    subprocess.Popen(["open", TOOLS_DIR])
+                else:
+                    subprocess.Popen(["xdg-open", TOOLS_DIR])
+            except Exception:
+                pass
+
+        # Botonera inferior
+        btns = tk.Frame(body, bg=t["bg_surface"])
+        btns.pack(fill=tk.X, side=tk.BOTTOM)
+
+        def on_status(txt):
+            if dlg.winfo_exists():
+                self.root.after(0, lambda s=txt: lbl_status.config(text=s) if dlg.winfo_exists() else None)
+
+        def on_progress(downloaded, total):
+            if not dlg.winfo_exists():
+                return
+            mb_dl = downloaded / (1024 * 1024)
+            if total > 0:
+                pct = min(100.0, (downloaded / total) * 100)
+                mb_tot = total / (1024 * 1024)
+
+                def _upd():
+                    if not dlg.winfo_exists():
+                        return
+                    if str(pbar.cget("mode")) != "determinate":
+                        pbar.stop()
+                        pbar.config(mode="determinate", maximum=100)
+                    pbar["value"] = pct
+                    lbl_bytes.config(text=f"{mb_dl:.1f} MB / {mb_tot:.1f} MB ({pct:.0f}%)")
+
+                self.root.after(0, _upd)
+            else:
+                self.root.after(0, lambda: lbl_bytes.config(text=f"{mb_dl:.1f} MB descargados...") if dlg.winfo_exists() else None)
+
+        def _iniciar_descarga():
+            btn_dl.config(state=tk.DISABLED)
+            btn_open.config(state=tk.DISABLED)
+            btn_manual.config(state=tk.DISABLED)
+            dlg.protocol("WM_DELETE_WINDOW", lambda: None)
+            manual_box.pack_forget()
+            prog_box.pack(fill=tk.X, pady=(0, 12))
+            pbar.start(12)
+
+            def worker():
+                try:
+                    ff_path, fp_path = download_ffmpeg_tools(TOOLS_DIR, status_cb=on_status, progress_cb=on_progress)
+
+                    def _ok():
+                        if dlg.winfo_exists():
+                            dlg.destroy()
+                        self.ffmpeg_path = ff_path
+                        self.ffprobe_path = fp_path
+                        self._update_config()
+                        self._start_gpu_detection()
+                        messagebox.showinfo("Descarga completada", f"FFmpeg y FFprobe instalados correctamente en:\n{TOOLS_DIR}", parent=self.root)
+
+                    self.root.after(0, _ok)
+                except Exception as exc:
+                    def _err():
+                        if not dlg.winfo_exists():
+                            return
+                        pbar.stop()
+                        prog_box.pack_forget()
+                        manual_box.pack(fill=tk.BOTH, expand=True, pady=(0, 12))
+                        btn_dl.config(state=tk.NORMAL)
+                        btn_open.config(state=tk.NORMAL)
+                        btn_manual.config(state=tk.NORMAL)
+                        dlg.protocol("WM_DELETE_WINDOW", dlg.destroy)
+                        messagebox.showerror("Error al descargar", f"No se pudo completar la descarga:\n{exc}", parent=dlg)
+
+                    self.root.after(0, _err)
+
+            threading.Thread(target=worker, daemon=True).start()
+
+        btn_dl = tk.Button(btns, text="Descargar automáticamente", command=_iniciar_descarga, bg=t["btn_primary"], fg="#FFFFFF", padx=14, pady=5, font=("Segoe UI", 9, "bold"), disabled_bg=t["btn_disabled_bg"], disabled_fg=t["btn_disabled_fg"])
+        btn_dl.pack(side=tk.LEFT, padx=(0, 8))
+
+        btn_open = tk.Button(btns, text="Abrir carpeta", command=_abrir_carpeta_tools, bg=t["btn_secondary_bg"], fg=t["btn_secondary_fg"], padx=12, pady=5, font=("Segoe UI", 9, "bold"), disabled_bg=t["btn_disabled_bg"], disabled_fg=t["btn_disabled_fg"])
+        btn_open.pack(side=tk.LEFT)
+
+        btn_manual = tk.Button(btns, text="Lo haré manualmente", command=dlg.destroy, bg=t["btn_secondary_bg"], fg=t["btn_secondary_fg"], padx=12, pady=5, font=("Segoe UI", 9), disabled_bg=t["btn_disabled_bg"], disabled_fg=t["btn_disabled_fg"])
+        btn_manual.pack(side=tk.RIGHT)
 
     def _on_gpu_change(self):
         preset_actual = self.preset_var.get()

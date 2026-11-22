@@ -4,7 +4,7 @@ import json
 import os
 import re
 import tkinter as tk
-from tkinter import messagebox, ttk
+from tkinter import messagebox, simpledialog, ttk
 
 from video_workstation.ui.theme import get_theme
 

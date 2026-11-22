@@ -14,6 +14,10 @@ from tkinter import filedialog, messagebox, ttk, simpledialog
 import tkinter.font as tkfont
 import math
 
+_SRC_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+if os.path.isdir(_SRC_DIR) and _SRC_DIR not in sys.path:
+    sys.path.insert(0, _SRC_DIR)
+
 from video_workstation import VERSION
 from video_workstation.config import (
     CONFIG_DIR,
@@ -39,6 +43,7 @@ from video_workstation.media.ffprobe import (
     is_hdr_video as _video_es_hdr,
 )
 from video_workstation.media.paths import resolve_subfolder_pattern as _resolver_patron_subcarpeta_helper
+from video_workstation.media.presets import get_valid_preset
 from video_workstation.media.presets import get_valid_preset as obtener_preset_valido
 from video_workstation.media.subtitles import (
     ensure_external_subtitle_utf8 as asegurar_subtitulo_externo_utf8,
@@ -52,7 +57,7 @@ from video_workstation.ui.dialogs.reports import ReportsDialogMixin
 from video_workstation.ui.dialogs.selectors import TrackSelectorDialogMixin
 from video_workstation.ui.widgets import RoundedButton
 from video_workstation.utils.binaries import (
-    get_app_base_dir as obtener_ruta_base_app,
+    get_binary_filename,
     get_default_videos_dir as obtener_directorio_videos_defecto,
     resolve_binary_path as _resolver_ruta_binario,
 )
@@ -93,9 +98,9 @@ class VWSuite(
         self.ffmpeg_path = self.config_ini.get("Paths", "ffmpeg", fallback=DEFAULT_CONFIG["Paths"]["ffmpeg"])
         self.ffprobe_path = self.config_ini.get("Paths", "ffprobe", fallback=DEFAULT_CONFIG["Paths"]["ffprobe"])
         if not self.ffmpeg_path or not os.path.exists(self.ffmpeg_path):
-            self.ffmpeg_path = resolve_app_binary("ffmpeg.exe")
+            self.ffmpeg_path = resolve_app_binary(get_binary_filename("ffmpeg"))
         if not self.ffprobe_path or not os.path.exists(self.ffprobe_path):
-            self.ffprobe_path = resolve_app_binary("ffprobe.exe")
+            self.ffprobe_path = resolve_app_binary(get_binary_filename("ffprobe"))
 
         self.msg_queue = queue.Queue()
         self.procesando = False
@@ -742,7 +747,15 @@ class VWSuite(
         lbl_dec.pack(side=tk.LEFT, padx=(0, 6))
         self._themed_labels.append((lbl_dec, "bg_surface", "fg_secondary"))
         self.cb_decod = ttk.Combobox(r_hw, values=["Software", "D3D11VA", "DXVA2"], state="readonly", textvariable=self.decod_hw_var, width=10)
-        self.cb_decod.pack(side=tk.LEFT)
+        self.cb_decod.pack(side=tk.LEFT, padx=(0, 8))
+
+        self.btn_preset = self._btn(r_hw, "Preset...", self.change_preset, t["btn_secondary"])
+        self.btn_preset.config(width=14)
+        self.btn_preset.pack(side=tk.LEFT)
+        self._themed_buttons.append((self.btn_preset, "btn_secondary", "accent_fg", "bg_surface"))
+        self.preset_var.trace_add("write", lambda *_: self._update_preset_button_label())
+        self.gpu_acel_var.trace_add("write", lambda *_: self._update_preset_button_label())
+        self._update_preset_button_label()
 
         r_chk = tk.Frame(col_enc, bg=t["bg_surface"])
         r_chk.pack(fill=tk.X, pady=(2, 0))
@@ -1155,6 +1168,17 @@ class VWSuite(
             self.lbl_queue_badge.config(text=f"Cola: {cant_activos}  |  Omitidos: {cant_omitidos}")
         return cant_activos, cant_omitidos
 
+    def _update_preset_button_label(self):
+        """Keep the Preset button label in sync with the active GPU and preset."""
+        if not hasattr(self, "btn_preset"):
+            return
+        gpu = self.gpu_acel_var.get()
+        if gpu in ("nvidia", "intel", "amd"):
+            valid = get_valid_preset(self.preset_var.get(), gpu)
+            self.btn_preset.config(text=f"Preset: {valid.upper()}")
+        else:
+            self.btn_preset.config(text="Preset: N/D")
+
     def _btn(self, parent, text, cmd, bg):
         return tk.Button(
             parent,
@@ -1496,7 +1520,7 @@ class VWSuite(
     def show_ffmpeg_info(self):
         messagebox.showinfo(
             "Rutas configuradas",
-            f"FFmpeg:\n{self.ffmpeg_path}\n\nFFProbe:\n{self.ffprobe_path}\n\nConfiguracion VW:\n{CONFIG_DIR}\n\nCarpeta Tools (Portatil):\n{os.path.join(obtener_ruta_base_app(), 'tools')}",
+            f"FFmpeg:\n{self.ffmpeg_path}\n\nFFProbe:\n{self.ffprobe_path}\n\nConfiguracion VW:\n{CONFIG_DIR}\n\nCarpeta Tools:\n{TOOLS_DIR}",
         )
 
     def exit_application(self):

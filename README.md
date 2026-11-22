@@ -166,7 +166,7 @@ python -m unittest discover -s tests -t . -v
 
 ## Configuration
 
-User preferences, queue state, and daily execution logs are automatically persisted under `%APPDATA%/VideoWorkstation/` (or `~/.config/VideoWorkstation/` on Linux/macOS):
+User preferences, queue state, and daily execution logs are automatically persisted under `%APPDATA%/Team Galleon/Video Workstation/` (or `~/.config/Team Galleon/Video Workstation/` on Linux/macOS):
 
 - **Binary paths (`vw_config.ini`):** Discovery and explicit paths for `ffmpeg` and `ffprobe`.
 - **Hardware acceleration (`vw_config.ini`):** Preferred GPU encoder (`nvidia`, `intel`, `amd`) and hardware decoder framework (`Software`, `d3d11va`, `dxva2`).

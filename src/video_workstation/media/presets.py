@@ -9,22 +9,38 @@ def get_valid_preset(preset, gpu_accel):
         if preset in PRESETS_NVIDIA:
             return preset
         mapping = {
-            "veryfast": "hp",
-            "faster": "fast",
-            "fast": "fast",
-            "medium": "medium",
-            "slow": "slow",
-            "veryslow": "hq",
-            "speed": "hp",
-            "balanced": "medium",
-            "quality": "hq",
+            "veryfast": "p1",
+            "faster": "p2",
+            "hp": "p2",
+            "llhp": "p2",
+            "fast": "p3",
+            "ll": "p3",
+            "medium": "p4",
+            "default": "p4",
+            "balanced": "p4",
+            "llhq": "p4",
+            "slow": "p5",
+            "slower": "p6",
+            "hq": "p6",
+            "bd": "p6",
+            "quality": "p6",
+            "veryslow": "p7",
+            "lossless": "p7",
+            "speed": "p1",
         }
-        return mapping.get(preset, "default")
+        return mapping.get(preset, "p4")
 
     if gpu_accel == "intel":
         if preset in PRESETS_QSV:
             return preset
         mapping = {
+            "p7": "veryslow",
+            "p6": "slower",
+            "p5": "slow",
+            "p4": "medium",
+            "p3": "fast",
+            "p2": "faster",
+            "p1": "veryfast",
             "default": "medium",
             "slow": "slow",
             "medium": "medium",
@@ -46,9 +62,17 @@ def get_valid_preset(preset, gpu_accel):
         if preset in PRESETS_AMD:
             return preset
         mapping = {
+            "p7": "quality",
+            "p6": "quality",
+            "p5": "quality",
+            "p4": "balanced",
+            "p3": "balanced",
+            "p2": "speed",
+            "p1": "speed",
             "lossless": "quality",
             "hq": "quality",
             "slow": "quality",
+            "slower": "quality",
             "bd": "quality",
             "default": "balanced",
             "medium": "balanced",

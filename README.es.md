@@ -166,7 +166,7 @@ python -m unittest discover -s tests -t . -v
 
 ## Configuración
 
-Las preferencias del usuario, el estado de la cola y los registros diarios se persisten automáticamente en `%APPDATA%/VideoWorkstation/` (o `~/.config/VideoWorkstation/` en Linux/macOS):
+Las preferencias del usuario, el estado de la cola y los registros diarios se persisten automáticamente en `%APPDATA%/Team Galleon/Video Workstation/` (o `~/.config/Team Galleon/Video Workstation/` en Linux/macOS):
 
 - **Rutas de binarios (`vw_config.ini`):** Almacenamiento y resolución de rutas de `ffmpeg` y `ffprobe`.
 - **Aceleración por hardware (`vw_config.ini`):** Selección de codificador por GPU (`nvidia`, `intel`, `amd`) y decodificador por hardware (`Software`, `d3d11va`, `dxva2`).

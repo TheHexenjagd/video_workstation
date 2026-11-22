@@ -66,27 +66,18 @@ def get_default_videos_dir():
     return os.path.abspath(videos_dir)
 
 
-def get_app_base_dir():
-    """Return the base directory containing the packaged executable or project root."""
-    if getattr(sys, "frozen", False):
-        return os.path.dirname(sys.executable)
-    return str(Path(__file__).resolve().parents[3])
+def get_binary_filename(base_name):
+    """Return the platform-appropriate executable filename (`<name>.exe` on Windows)."""
+    return f"{base_name}.exe" if sys.platform == "win32" else base_name
 
 
 def resolve_binary_path(binary_name, tools_dir):
     """
     Resolve an external binary path in priority order:
-    1. Local `./tools/<binary_name>` next to the application
-    2. Dedicated application tools directory (`<CONFIG_DIR>/tools/<binary_name>`)
-    3. Operating system PATH (`shutil.which`)
-    4. Default fallback inside `tools_dir`
+    1. Dedicated application tools directory (`<CONFIG_DIR>/tools/<binary_name>`)
+    2. Operating system PATH (`shutil.which`)
+    3. Default fallback inside `tools_dir`
     """
-    app_base = get_app_base_dir()
-
-    portable_path = os.path.join(app_base, "tools", binary_name)
-    if os.path.isfile(portable_path):
-        return os.path.abspath(portable_path)
-
     app_tools_path = os.path.join(tools_dir, binary_name)
     if os.path.isfile(app_tools_path):
         return app_tools_path
