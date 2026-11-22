@@ -296,7 +296,11 @@ class MediaProcessorMixin:
                         self.ffprobe_path = fp_path
                         self._update_config()
                         self._start_gpu_detection()
-                        messagebox.showinfo("Descarga completada", f"FFmpeg y FFprobe instalados correctamente en:\n{TOOLS_DIR}", parent=self.root)
+                        self._show_themed_notice(
+                            "Descarga completada",
+                            f"FFmpeg y FFprobe instalados correctamente en:\n{TOOLS_DIR}",
+                            parent=self.root,
+                        )
 
                     self.root.after(0, _ok)
                 except Exception as exc:
@@ -310,7 +314,12 @@ class MediaProcessorMixin:
                         btn_open.config(state=tk.NORMAL)
                         btn_manual.config(state=tk.NORMAL)
                         dlg.protocol("WM_DELETE_WINDOW", dlg.destroy)
-                        messagebox.showerror("Error al descargar", f"No se pudo completar la descarga:\n{exc}", parent=dlg)
+                        self._show_themed_notice(
+                            "Error al descargar",
+                            f"No se pudo completar la descarga:\n{exc}",
+                            kind="error",
+                            parent=dlg,
+                        )
 
                     self.root.after(0, _err)
 

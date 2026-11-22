@@ -676,11 +676,13 @@ class ReportsDialogMixin:
     def show_about(self):
         import webbrowser
 
+        t_act = get_theme(self.theme_var.get())
+
         dialog = tk.Toplevel(self.root)
         dialog.title("Acerca de Video Workstation (VW)")
-        dialog.geometry("560x380")
+        dialog.geometry("560x400")
         dialog.resizable(False, False)
-        dialog.configure(bg="#F3F7FF")
+        dialog.configure(bg=t_act["bg_app"])
         dialog.transient(self.root)
         dialog.grab_set()
         self.root.attributes('-disabled', True)
@@ -691,18 +693,17 @@ class ReportsDialogMixin:
         y = self.root.winfo_y() + (self.root.winfo_height() - dialog.winfo_height()) // 2
         dialog.geometry(f"+{x}+{y}")
 
-        header_card = tk.Frame(dialog, bg="#FFFFFF", highlightthickness=1, highlightbackground="#E5ECF9", bd=0)
+        header_card = tk.Frame(dialog, bg=t_act["bg_surface"], highlightthickness=1, highlightbackground=t_act["border"], bd=0)
         header_card.pack(fill=tk.X, padx=18, pady=(14, 8))
 
-        text_container = tk.Frame(header_card, bg="#FFFFFF")
+        text_container = tk.Frame(header_card, bg=t_act["bg_surface"])
         text_container.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=14, pady=10)
 
-        t_act = get_theme(self.theme_var.get())
         tk.Label(
             text_container,
             text="VW",
             font=("Segoe UI", 11, "bold"),
-            fg="#FFFFFF",
+            fg=t_act["accent_fg"],
             bg=t_act["accent"],
             padx=8,
             pady=2,
@@ -712,30 +713,30 @@ class ReportsDialogMixin:
             text_container,
             text="  Acerca de Video Workstation",
             font=("Segoe UI", 10, "bold"),
-            fg="#1F2A44",
-            bg="#FFFFFF"
+            fg=t_act["fg_primary"],
+            bg=t_act["bg_surface"]
         ).pack(side=tk.LEFT, padx=(6, 0))
 
         tk.Label(
             header_card,
             text=f"v{VERSION}",
             font=("Segoe UI", 9, "bold"),
-            bg="#FFFFFF",
-            fg="#2D9CDB"
+            bg=t_act["bg_surface"],
+            fg=t_act["accent"]
         ).pack(side=tk.RIGHT, padx=14, pady=10)
 
-        content_card = tk.Frame(dialog, bg="#FFFFFF", highlightthickness=1, highlightbackground="#E5ECF9", bd=0)
+        content_card = tk.Frame(dialog, bg=t_act["bg_surface"], highlightthickness=1, highlightbackground=t_act["border"], bd=0)
         content_card.pack(fill=tk.BOTH, expand=True, padx=18, pady=(4, 10))
 
-        content = tk.Frame(content_card, bg="#FFFFFF", padx=16, pady=12)
+        content = tk.Frame(content_card, bg=t_act["bg_surface"], padx=16, pady=12)
         content.pack(fill=tk.BOTH, expand=True)
 
         tk.Label(
             content,
             text="Video Workstation",
             font=("Segoe UI", 12, "bold"),
-            bg="#FFFFFF",
-            fg="#1F2A44"
+            bg=t_act["bg_surface"],
+            fg=t_act["fg_primary"]
         ).pack(anchor=tk.W)
 
         desc = (
@@ -748,15 +749,15 @@ class ReportsDialogMixin:
             content,
             text=desc,
             font=("Segoe UI", 9),
-            bg="#FFFFFF",
-            fg="#5C6B8A",
+            bg=t_act["bg_surface"],
+            fg=t_act["fg_secondary"],
             justify=tk.LEFT,
             wraplength=460
         ).pack(anchor=tk.W, pady=(6, 10))
 
-        tk.Frame(content, height=1, bg="#E5ECF9").pack(fill=tk.X, pady=(0, 10))
+        tk.Frame(content, height=1, bg=t_act["border"]).pack(fill=tk.X, pady=(0, 10))
 
-        info_frame = tk.Frame(content, bg="#FFFFFF")
+        info_frame = tk.Frame(content, bg=t_act["bg_surface"])
         info_frame.pack(fill=tk.X)
         info_frame.columnconfigure(1, weight=1)
 
@@ -764,16 +765,16 @@ class ReportsDialogMixin:
             info_frame,
             text="Organización:",
             font=("Segoe UI", 9, "bold"),
-            bg="#FFFFFF",
-            fg="#2B3A57"
+            bg=t_act["bg_surface"],
+            fg=t_act["fg_primary"]
         ).grid(row=0, column=0, sticky=tk.NW, pady=3)
 
         org_lbl = tk.Label(
             info_frame,
             text="Team Galleon (teamgalleon.com)",
             font=("Segoe UI", 9, "underline"),
-            bg="#FFFFFF",
-            fg="#2D9CDB",
+            bg=t_act["bg_surface"],
+            fg=t_act["accent"],
             cursor="hand2"
         )
         org_lbl.grid(row=0, column=1, sticky=tk.W, padx=12, pady=3)
@@ -783,19 +784,19 @@ class ReportsDialogMixin:
             info_frame,
             text="Desarrolladores:",
             font=("Segoe UI", 9, "bold"),
-            bg="#FFFFFF",
-            fg="#2B3A57"
+            bg=t_act["bg_surface"],
+            fg=t_act["fg_primary"]
         ).grid(row=1, column=0, sticky=tk.NW, pady=3)
 
-        devs_subframe = tk.Frame(info_frame, bg="#FFFFFF")
+        devs_subframe = tk.Frame(info_frame, bg=t_act["bg_surface"])
         devs_subframe.grid(row=1, column=1, sticky=tk.W, padx=12, pady=3)
 
         dev1_lbl = tk.Label(
             devs_subframe,
             text="• Gabriel Giraldo Herrera (github.com/TheHexenjagd)",
             font=("Segoe UI", 9, "underline"),
-            bg="#FFFFFF",
-            fg="#2D9CDB",
+            bg=t_act["bg_surface"],
+            fg=t_act["accent"],
             cursor="hand2"
         )
         dev1_lbl.pack(anchor=tk.W, pady=1)
@@ -805,28 +806,24 @@ class ReportsDialogMixin:
             devs_subframe,
             text="• Jorge Iván Nieto Triviño (github.com/Gatozo)",
             font=("Segoe UI", 9, "underline"),
-            bg="#FFFFFF",
-            fg="#2D9CDB",
+            bg=t_act["bg_surface"],
+            fg=t_act["accent"],
             cursor="hand2"
         )
         dev2_lbl.pack(anchor=tk.W, pady=1)
         dev2_lbl.bind("<Button-1>", lambda e: webbrowser.open_new("https://github.com/Gatozo"))
 
-        btn_close = tk.Button(
-            dialog,
+        btm = tk.Frame(dialog, bg=t_act["bg_app"], padx=18, pady=10)
+        btm.pack(fill=tk.X)
+        RoundedButton(
+            btm,
             text="Cerrar",
             command=dialog.destroy,
-            bg="#2D9CDB",
-            fg="white",
-            activebackground="#2D9CDB",
-            activeforeground="white",
-            relief=tk.FLAT,
-            padx=16,
-            pady=6,
-            cursor="hand2",
-            font=("Segoe UI", 9, "bold")
-        )
-        btn_close.pack(side=tk.BOTTOM, pady=(0, 12))
+            bg=t_act["btn_primary"],
+            fg=t_act["accent_fg"],
+            parent_bg=t_act["bg_app"],
+            width=12,
+        ).pack(side=tk.RIGHT)
 
     def _show_error_summary(self, errores):
         dialog = tk.Toplevel(self.root)

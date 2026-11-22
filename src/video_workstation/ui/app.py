@@ -1500,9 +1500,12 @@ class VWSuite(
         ffprobe_same = os.path.join(os.path.dirname(archivo), "ffprobe.exe")
         if os.path.exists(ffprobe_same):
             self.ffprobe_path = ffprobe_same
-            messagebox.showinfo("Actualizado", f"FFmpeg y FFProbe actualizados\n\n{archivo}")
+            self._show_themed_notice("Rutas actualizadas", f"FFmpeg y FFProbe actualizados:\n{archivo}")
         else:
-            messagebox.showinfo("Actualizado", f"FFmpeg actualizado\n\n{archivo}\n\nSelecciona FFProbe manualmente si hace falta")
+            self._show_themed_notice(
+                "FFmpeg actualizado",
+                f"FFmpeg actualizado:\n{archivo}\n\nSelecciona FFProbe manualmente si hace falta.",
+            )
         self._update_config()
         self._start_gpu_detection()
 
@@ -1515,13 +1518,233 @@ class VWSuite(
         if archivo:
             self.ffprobe_path = archivo
             self._update_config()
-            messagebox.showinfo("Actualizado", f"FFProbe actualizado\n\n{archivo}")
+            self._show_themed_notice("FFProbe actualizado", f"FFProbe actualizado:\n{archivo}")
+
+    def _show_themed_notice(self, title, message, kind="info", parent=None):
+        """Show a studio-themed modal notification instead of a native Windows messagebox."""
+        t = get_theme(self.theme_var.get())
+        owner = parent if (parent is not None and parent.winfo_exists()) else self.root
+        badge_bg = t["danger"] if kind == "error" else (t["warning"] if kind == "warning" else t["accent"])
+        badge_txt = "!" if kind in ("error", "warning") else "VW"
+
+        dlg = tk.Toplevel(owner)
+        dlg.title(f"{title} - VW")
+        dlg.geometry("460x230")
+        dlg.resizable(False, False)
+        dlg.transient(owner)
+        dlg.grab_set()
+        dlg.configure(bg=t["bg_app"])
+        owner.attributes("-disabled", True)
+        dlg.bind(
+            "<Destroy>",
+            lambda e: owner.attributes("-disabled", False)
+            if (e.widget == dlg and owner.winfo_exists())
+            else None,
+        )
+
+        dlg.update_idletasks()
+        x = owner.winfo_x() + (owner.winfo_width() - dlg.winfo_width()) // 2
+        y = owner.winfo_y() + (owner.winfo_height() - dlg.winfo_height()) // 2
+        dlg.geometry(f"+{max(0, x)}+{max(0, y)}")
+
+        hdr = tk.Frame(dlg, bg=t["bg_surface"], padx=16, pady=12)
+        hdr.pack(fill=tk.X)
+        tk.Label(
+            hdr,
+            text=badge_txt,
+            font=("Segoe UI", 10, "bold"),
+            bg=badge_bg,
+            fg=t["accent_fg"],
+            padx=8,
+            pady=3,
+        ).pack(side=tk.LEFT, padx=(0, 10))
+        tk.Label(
+            hdr,
+            text=title,
+            font=("Segoe UI", 11, "bold"),
+            bg=t["bg_surface"],
+            fg=t["fg_primary"],
+            anchor=tk.W,
+        ).pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        tk.Frame(dlg, height=1, bg=t["border"]).pack(fill=tk.X)
+
+        body = tk.Frame(dlg, bg=t["bg_app"], padx=16, pady=12)
+        body.pack(fill=tk.BOTH, expand=True)
+        card = tk.Frame(
+            body,
+            bg=t["bg_surface"],
+            highlightthickness=1,
+            highlightbackground=t["border"],
+            padx=14,
+            pady=12,
+        )
+        card.pack(fill=tk.BOTH, expand=True)
+        tk.Label(
+            card,
+            text=message,
+            font=("Segoe UI", 9),
+            bg=t["bg_surface"],
+            fg=t["fg_secondary"],
+            justify=tk.LEFT,
+            wraplength=390,
+            anchor=tk.NW,
+        ).pack(fill=tk.BOTH, expand=True)
+
+        btm = tk.Frame(dlg, bg=t["bg_app"], padx=16, pady=10)
+        btm.pack(fill=tk.X)
+        btn_ok = tk.Button(
+            btm,
+            text="Aceptar",
+            command=dlg.destroy,
+            bg=t["btn_primary"],
+            fg=t["accent_fg"],
+            parent_bg=t["bg_app"],
+            width=12,
+        )
+        btn_ok.pack(side=tk.RIGHT)
+        dlg.bind("<Return>", lambda _: dlg.destroy())
+        dlg.bind("<Escape>", lambda _: dlg.destroy())
+        dlg.wait_window()
 
     def show_ffmpeg_info(self):
-        messagebox.showinfo(
-            "Rutas configuradas",
-            f"FFmpeg:\n{self.ffmpeg_path}\n\nFFProbe:\n{self.ffprobe_path}\n\nConfiguracion VW:\n{CONFIG_DIR}\n\nCarpeta Tools:\n{TOOLS_DIR}",
+        t = get_theme(self.theme_var.get())
+        dlg = tk.Toplevel(self.root)
+        dlg.title("Rutas configuradas - VW")
+        dlg.geometry("600x430")
+        dlg.resizable(False, False)
+        dlg.transient(self.root)
+        dlg.grab_set()
+        dlg.configure(bg=t["bg_app"])
+        self.root.attributes("-disabled", True)
+        dlg.bind(
+            "<Destroy>",
+            lambda e: self.root.attributes("-disabled", False)
+            if (e.widget == dlg and self.root.winfo_exists())
+            else None,
         )
+
+        dlg.update_idletasks()
+        x = self.root.winfo_x() + (self.root.winfo_width() - dlg.winfo_width()) // 2
+        y = self.root.winfo_y() + (self.root.winfo_height() - dlg.winfo_height()) // 2
+        dlg.geometry(f"+{max(0, x)}+{max(0, y)}")
+
+        hdr = tk.Frame(dlg, bg=t["bg_surface"], padx=18, pady=14)
+        hdr.pack(fill=tk.X)
+        tk.Label(
+            hdr,
+            text="VW",
+            font=("Segoe UI", 10, "bold"),
+            bg=t["accent"],
+            fg=t["accent_fg"],
+            padx=8,
+            pady=4,
+        ).pack(side=tk.LEFT, padx=(0, 12))
+        hdr_txt = tk.Frame(hdr, bg=t["bg_surface"])
+        hdr_txt.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        tk.Label(
+            hdr_txt,
+            text="Rutas configuradas",
+            font=("Segoe UI", 12, "bold"),
+            bg=t["bg_surface"],
+            fg=t["fg_primary"],
+            anchor=tk.W,
+        ).pack(fill=tk.X)
+        tk.Label(
+            hdr_txt,
+            text="Ubicaciones activas de binarios y configuración",
+            font=("Segoe UI", 9),
+            bg=t["bg_surface"],
+            fg=t["fg_secondary"],
+            anchor=tk.W,
+        ).pack(fill=tk.X)
+
+        tk.Frame(dlg, height=1, bg=t["border"]).pack(fill=tk.X)
+
+        body = tk.Frame(dlg, bg=t["bg_app"], padx=18, pady=14)
+        body.pack(fill=tk.BOTH, expand=True)
+
+        card = tk.Frame(
+            body,
+            bg=t["bg_surface"],
+            highlightthickness=1,
+            highlightbackground=t["border"],
+            padx=16,
+            pady=12,
+        )
+        card.pack(fill=tk.BOTH, expand=True)
+
+        rows = [
+            ("FFmpeg", self.ffmpeg_path, os.path.exists(self.ffmpeg_path) if self.ffmpeg_path else False),
+            ("FFProbe", self.ffprobe_path, os.path.exists(self.ffprobe_path) if self.ffprobe_path else False),
+            ("Configuración VW", CONFIG_DIR, os.path.isdir(CONFIG_DIR)),
+            ("Carpeta Tools", TOOLS_DIR, os.path.isdir(TOOLS_DIR)),
+        ]
+
+        for idx, (label, path_val, exists) in enumerate(rows):
+            row = tk.Frame(card, bg=t["bg_surface"])
+            row.pack(fill=tk.X, pady=(0, 8 if idx < len(rows) - 1 else 0))
+
+            top = tk.Frame(row, bg=t["bg_surface"])
+            top.pack(fill=tk.X, pady=(0, 3))
+            tk.Label(
+                top,
+                text=label,
+                font=("Segoe UI", 9, "bold"),
+                bg=t["bg_surface"],
+                fg=t["fg_primary"],
+            ).pack(side=tk.LEFT)
+            tk.Label(
+                top,
+                text="Disponible" if exists else "No encontrado",
+                font=("Segoe UI", 8, "bold"),
+                bg=t["success_bg"] if exists else t["danger_bg"],
+                fg=t["success"] if exists else t["danger"],
+                padx=7,
+                pady=1,
+            ).pack(side=tk.RIGHT)
+
+            tk.Label(
+                row,
+                text=path_val or "(sin definir)",
+                font=("Consolas", 8),
+                bg=t["bg_input"],
+                fg=t["fg_secondary"],
+                anchor=tk.W,
+                padx=8,
+                pady=5,
+                wraplength=520,
+                justify=tk.LEFT,
+            ).pack(fill=tk.X)
+
+        def _copy_paths():
+            summary = "\n".join(f"{lbl}: {val}" for lbl, val, _ in rows)
+            dlg.clipboard_clear()
+            dlg.clipboard_append(summary)
+            btn_copy.config(text="Copiado")
+            dlg.after(1500, lambda: btn_copy.config(text="Copiar rutas") if dlg.winfo_exists() else None)
+
+        btm = tk.Frame(dlg, bg=t["bg_app"], padx=18, pady=12)
+        btm.pack(fill=tk.X)
+        btn_copy = tk.Button(
+            btm,
+            text="Copiar rutas",
+            command=_copy_paths,
+            bg=t["btn_secondary_bg"],
+            fg=t["btn_secondary_fg"],
+            parent_bg=t["bg_app"],
+            width=14,
+        )
+        btn_copy.pack(side=tk.LEFT)
+        tk.Button(
+            btm,
+            text="Cerrar",
+            command=dlg.destroy,
+            bg=t["btn_primary"],
+            fg=t["accent_fg"],
+            parent_bg=t["bg_app"],
+            width=12,
+        ).pack(side=tk.RIGHT)
 
     def exit_application(self):
         if self.procesando and not messagebox.askyesno("Proceso activo", "Hay un proceso en curso. Salir de todos modos?"):
