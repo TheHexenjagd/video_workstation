@@ -375,6 +375,17 @@ STRIP_METADATA_ARGS = (
     "-fflags", "+bitexact",
 )
 
+
+def _video_es_hdr(info):
+    """Devuelve True si el stream de vídeo principal usa transferencia o primarios HDR."""
+    for s in info.get("streams", []):
+        if s.get("codec_type") == "video":
+            return (
+                s.get("color_transfer") in ("smpte2084", "arib-std-b67")
+                or s.get("color_primaries") == "bt2020"
+            )
+    return False
+
 PRESETS_NVIDIA = {
     "lossless": {"nombre": "Lossless", "descripcion": "Sin perdida", "velocidad": "⚡☆☆", "calidad": "★★★★★"},
     "hq": {"nombre": "HQ", "descripcion": "Prioriza calidad", "velocidad": "⚡☆☆", "calidad": "★★★★☆"},
@@ -420,7 +431,6 @@ DEFAULT_CONFIG = {
         "preset": "medium",
         "sufijo_idiomas": "True",
         "eliminar_metadatos": "False",
-        "preservar_color": "True",
         "buscar_subtitulos_externos": "True",
     },
 }
@@ -814,7 +824,6 @@ class VWSuite:
             self.config_ini["Options"]["preset"] = self.preset_var.get()
             self.config_ini["Options"]["sufijo_idiomas"] = str(self.var_sufijo_idiomas.get())
             self.config_ini["Options"]["eliminar_metadatos"] = str(self.var_eliminar_metadatos.get())
-            self.config_ini["Options"]["preservar_color"] = str(self.var_preservar_color.get())
             if hasattr(self, "var_buscar_subtitulos_externos"):
                 self.config_ini["Options"]["buscar_subtitulos_externos"] = str(self.var_buscar_subtitulos_externos.get())
 
@@ -882,9 +891,6 @@ class VWSuite:
             value=self.config_ini.getboolean("Options", "eliminar_metadatos",
                   fallback=self.config_ini.getboolean("Options", "limpiar_metadatos", fallback=False))
         )
-        self.var_preservar_color = tk.BooleanVar(
-            value=self.config_ini.getboolean("Options", "preservar_color", fallback=True)
-        )
         self.var_buscar_subtitulos_externos = tk.BooleanVar(
             value=self.config_ini.getboolean("Options", "buscar_subtitulos_externos", fallback=True)
         )
@@ -900,7 +906,6 @@ class VWSuite:
             self.salida_var,
             self.var_sufijo_idiomas,
             self.var_eliminar_metadatos,
-            self.var_preservar_color,
         ]:
             var.trace_add("write", self._actualizar_configuracion)
 
@@ -1048,7 +1053,6 @@ class VWSuite:
 
         tk.Checkbutton(row3, text="Sufijo al nombre", variable=self.var_sufijo_idiomas, bg="#FFFFFF", fg="#2B3A57", activebackground="#FFFFFF", selectcolor="#FFFFFF").pack(side=tk.LEFT, padx=6)
         tk.Checkbutton(row3, text="Eliminar metadatos al finalizar", variable=self.var_eliminar_metadatos, bg="#FFFFFF", fg="#2B3A57", activebackground="#FFFFFF", selectcolor="#FFFFFF").pack(side=tk.LEFT, padx=6)
-        tk.Checkbutton(row3, text="Preservar color (BT.709)", variable=self.var_preservar_color, bg="#FFFFFF", fg="#2B3A57", activebackground="#FFFFFF", selectcolor="#FFFFFF").pack(side=tk.LEFT, padx=6)
         tk.Checkbutton(row3, text="Incluir subs externos (.srt)", variable=self.var_buscar_subtitulos_externos, bg="#FFFFFF", fg="#2B3A57", activebackground="#FFFFFF", selectcolor="#FFFFFF").pack(side=tk.LEFT, padx=6)
 
         activity_card = ttk.Frame(main, style="Card.TFrame")
@@ -1756,15 +1760,25 @@ class VWSuite:
         audio_vars = []
         sub_vars = []
 
+        es_hdr = _video_es_hdr(info)
+
         def actualizar_estado_hardsub():
             aud_sel = [s for v, s in audio_vars if v.get()]
             sub_sel = [s for v, s in sub_vars if v.get()]
-            if len(aud_sel) == 1 and len(sub_sel) == 1:
-                cb_hardsub.config(state=tk.NORMAL)
-                var_hardsub.set(True)
+            if es_hdr:
+                var_hardsub.set(False)
+                cb_hardsub.config(state=tk.DISABLED, text="Hacer hardsub (Desactivado: video HDR)")
+            elif len(aud_sel) == 1 and len(sub_sel) == 1:
+                sub_codec = (sub_sel[0].get("codec_name") or "").lower()
+                if sub_codec in BITMAP_SUB_CODECS:
+                    var_hardsub.set(False)
+                    cb_hardsub.config(state=tk.DISABLED, text="Hacer hardsub (Desactivado: subtítulo bitmap)")
+                else:
+                    cb_hardsub.config(state=tk.NORMAL, text="Hacer hardsub (Incrustar)")
+                    var_hardsub.set(True)
             else:
                 var_hardsub.set(False)
-                cb_hardsub.config(state=tk.DISABLED)
+                cb_hardsub.config(state=tk.DISABLED, text="Hacer hardsub (Incrustar)")
 
         tk.Label(scrollable_frame, text="Audio", fg="#1E8449", font=("Segoe UI", 9, "bold")).pack(anchor=tk.W, padx=6, pady=(6, 2))
         for i, s in enumerate(audio_streams):
@@ -2011,7 +2025,18 @@ class VWSuite:
             output_path = out_dir / f"{video_stem}{suffix}.mp4"
             self._invalidar_cache_archivo(output_path)
 
-            if combo.get("hardsub"):
+            usar_hardsub = bool(combo.get("hardsub"))
+            if usar_hardsub:
+                if _video_es_hdr(info):
+                    self._enviar_mensaje(f"  -> Aviso: Hardsub desactivado en '{label}' (video HDR; se hará remux sin pérdida para proteger el color).")
+                    usar_hardsub = False
+                elif sub_indices:
+                    sub_obj = next((st for st in subtitle_streams if st.get("index") == sub_indices[0]), None)
+                    if sub_obj and (sub_obj.get("codec_name") or "").lower() in BITMAP_SUB_CODECS:
+                        self._enviar_mensaje(f"  -> Aviso: Hardsub desactivado en '{label}' (subtítulo bitmap no compatible con incrustación).")
+                        usar_hardsub = False
+
+            if usar_hardsub:
                 gpu = self.gpu_acel_var.get()
                 is_ok = self.gpu_availability.get(gpu, True)
                 if not is_ok:
@@ -2074,9 +2099,7 @@ class VWSuite:
                     if decod_val in ("d3d11va", "dxva2") and sub_idx is None:
                         hwaccel_opts = ["-hwaccel", decod_val]
 
-                    color_flags = []
-                    if self.var_preservar_color.get():
-                        color_flags = ["-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709", "-color_range", "tv"]
+                    color_flags = ["-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709", "-color_range", "tv"]
 
                     if gpu == "nvidia":
                         cmd = [
@@ -2641,36 +2664,6 @@ class VWSuite:
 
         if res["has_error"]:
             return res
-
-        video_stream = video_streams[0]
-        pix_fmt = video_stream.get("pix_fmt", "")
-
-        is_10bit = False
-        if any(x in pix_fmt for x in ("10le", "10be", "12le", "12be", "16le", "10p", "12p")):
-            is_10bit = True
-        elif video_stream.get("bits_per_raw_sample") in ("10", "12", "16"):
-            is_10bit = True
-
-        is_hdr = False
-        if video_stream.get("color_transfer") in ("smpte2084", "arib-std-b67") or video_stream.get("color_primaries") == "bt2020":
-            is_hdr = True
-
-        if tipo_proceso == "procesar_cola":
-            if is_10bit or is_hdr:
-                desc = []
-                if is_10bit:
-                    desc.append("10-bit")
-                if is_hdr:
-                    desc.append("HDR")
-                res["has_warning"] = True
-                if self.var_preservar_color.get():
-                    res["warnings"].append(f"El video original es {' y '.join(desc)}. Se aplicará preservación de color BT.709 para evitar tonos lavados al hacer hardsub.")
-                else:
-                    res["warnings"].append(f"El video original es {' y '.join(desc)}. Si decides generar versiones con subtitulos incrustados (hardsub), los colores podrian verse lavados.")
-
-            if any(s.get("codec_name", "").lower() in BITMAP_SUB_CODECS for s in subtitle_streams):
-                res["has_warning"] = True
-                res["warnings"].append("El archivo contiene subtitulos bitmap (PGS/DVD/etc.). La opcion de hacer hardsub (incrustacion) sobre estos subtitulos provocara un fallo.")
 
         return res
 
