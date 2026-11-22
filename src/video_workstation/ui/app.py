@@ -749,10 +749,10 @@ class VWSuite(
         self.cb_decod = ttk.Combobox(r_hw, values=["Software", "D3D11VA", "DXVA2"], state="readonly", textvariable=self.decod_hw_var, width=10)
         self.cb_decod.pack(side=tk.LEFT, padx=(0, 8))
 
-        self.btn_preset = self._btn(r_hw, "Preset...", self.change_preset, t["btn_secondary"])
-        self.btn_preset.config(width=14)
+        self.btn_preset = self._btn(r_hw, "Preset...", self.change_preset, t["btn_secondary_bg"])
+        self.btn_preset.config(width=14, fg=t["btn_secondary_fg"])
         self.btn_preset.pack(side=tk.LEFT)
-        self._themed_buttons.append((self.btn_preset, "btn_secondary", "accent_fg", "bg_surface"))
+        self._themed_buttons.append((self.btn_preset, "btn_secondary_bg", "btn_secondary_fg", "bg_surface"))
         self.preset_var.trace_add("write", lambda *_: self._update_preset_button_label())
         self.gpu_acel_var.trace_add("write", lambda *_: self._update_preset_button_label())
         self._update_preset_button_label()

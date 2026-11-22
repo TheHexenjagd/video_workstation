@@ -410,7 +410,7 @@ class ReportsDialogMixin:
         dialog.resizable(False, False)
         dialog.transient(self.root)
         dialog.grab_set()
-        dialog.configure(bg=t["bg_window"])
+        dialog.configure(bg=t["bg_app"])
         self.root.attributes("-disabled", True)
         dialog.bind(
             "<Destroy>",
@@ -459,7 +459,7 @@ class ReportsDialogMixin:
 
         tk.Frame(dialog, height=1, bg=t["border"]).pack(fill=tk.X)
 
-        body = tk.Frame(dialog, bg=t["bg_window"], padx=18, pady=14)
+        body = tk.Frame(dialog, bg=t["bg_app"], padx=18, pady=14)
         body.pack(fill=tk.BOTH, expand=True)
 
         if not presets:
@@ -495,7 +495,7 @@ class ReportsDialogMixin:
                 anchor=tk.W,
             ).pack(fill=tk.X)
 
-            btm = tk.Frame(dialog, bg=t["bg_window"], padx=18, pady=12)
+            btm = tk.Frame(dialog, bg=t["bg_app"], padx=18, pady=12)
             btm.pack(fill=tk.X)
             RoundedButton(
                 btm,
@@ -503,7 +503,7 @@ class ReportsDialogMixin:
                 command=dialog.destroy,
                 bg=t["btn_primary"],
                 fg=t["accent_fg"],
-                parent_bg=t["bg_window"],
+                parent_bg=t["bg_app"],
                 width=12,
             ).pack(side=tk.RIGHT)
             return
@@ -652,7 +652,7 @@ class ReportsDialogMixin:
                 self.preset_var.set(selected)
             dialog.destroy()
 
-        btm = tk.Frame(dialog, bg=t["bg_window"], padx=18, pady=12)
+        btm = tk.Frame(dialog, bg=t["bg_app"], padx=18, pady=12)
         btm.pack(fill=tk.X)
         RoundedButton(
             btm,
@@ -660,16 +660,16 @@ class ReportsDialogMixin:
             command=aceptar,
             bg=t["btn_primary"],
             fg=t["accent_fg"],
-            parent_bg=t["bg_window"],
+            parent_bg=t["bg_app"],
             width=14,
         ).pack(side=tk.RIGHT, padx=(8, 0))
         RoundedButton(
             btm,
             text="Cancelar",
             command=dialog.destroy,
-            bg=t["btn_neutral"],
-            fg=t["accent_fg"],
-            parent_bg=t["bg_window"],
+            bg=t["btn_secondary_bg"],
+            fg=t["btn_secondary_fg"],
+            parent_bg=t["bg_app"],
             width=12,
         ).pack(side=tk.RIGHT)
 
