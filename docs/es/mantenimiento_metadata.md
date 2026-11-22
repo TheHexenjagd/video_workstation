@@ -12,9 +12,9 @@ El módulo de **Mantenimiento** de Video Workstation (VW) agrupa utilidades ráp
 Los archivos multimedia (especialmente los contenedores `.mkv` y `.mp4`) a menudo contienen metadatos innecesarios incrustados por herramientas de codificación, como etiquetas globales, títulos del archivo, nombres del software de conversión, o información del codificador en cada pista individual.
 
 ### ¿Qué hace esta herramienta?
-* **Limpieza Completa**: Elimina las etiquetas de metadatos globales y los metadatos específicos de cada stream (pistas de vídeo, audio y subtítulos) utilizando los comandos de FFmpeg:
+* **Limpieza Completa**: Elimina las etiquetas globales, metadatos por pista, capítulos, carátulas incrustadas (`-map 0:V?`) y la firma del muxer (`-fflags +bitexact`) en una sola pasada (también aplicada directamente al remuxear o hacer hardsub cuando está activa):
   ```bash
-  ffmpeg -i "archivo_origen" -map 0 -c copy -map_metadata -1 -map_metadata:s:v -1 -map_metadata:s:a -1 -map_metadata:s:s -1 "archivo_temp"
+  ffmpeg -i "archivo_origen" -map 0:V? -map 0:a? -map 0:s? -c:v copy -c:a copy -c:s copy -map_metadata -1 -map_metadata:s -1 -map_chapters -1 -fflags +bitexact "archivo_temp"
   ```
 * **Sin Recodificación**: Todos los flujos de audio, vídeo y subtítulos se copian exactamente sin alteración (`-c copy`), lo que hace que la operación se realice a la máxima velocidad física del disco duro.
 * **Resultado Limpio**: Tu archivo quedará libre de marcas, títulos de pista no deseados y descripciones de software.

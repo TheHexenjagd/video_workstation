@@ -1,0 +1,16 @@
+[project]
+name = "video-workstation"
+version = "1.0.0"
+description = "Desktop workstation for batch video multiplexing, GPU-accelerated subtitle hardcoding, and metadata management."
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+src = ["src", "tests"]

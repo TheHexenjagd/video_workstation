@@ -12,9 +12,9 @@ The **Maintenance** module in Video Workstation (VW) provides high-speed utiliti
 Media containers (particularly `.mkv` and `.mp4`) frequently accumulate unnecessary metadata embedded during authoring: global file titles, ripper tags, conversion software banners, and encoder settings strings on every audio or video stream.
 
 ### How It Works
-* **Exhaustive Tag Purge:** Strips global metadata tags and per-stream metadata (video, audio, and subtitle tracks) via atomic FFmpeg operations:
+* **Exhaustive Tag Purge:** Strips global metadata, per-stream tags, chapters, embedded cover art (`-map 0:V?`), and FFmpeg muxer encoder tags (`-fflags +bitexact`) in a single pass (also applied directly during remuxing/hardcoding when enabled):
   ```bash
-  ffmpeg -i "input.mkv" -map 0 -c copy -map_metadata -1 -map_metadata:s:v -1 -map_metadata:s:a -1 -map_metadata:s:s -1 "temp_output.mkv"
+  ffmpeg -i "input.mkv" -map 0:V? -map 0:a? -map 0:s? -c:v copy -c:a copy -c:s copy -map_metadata -1 -map_metadata:s -1 -map_chapters -1 -fflags +bitexact "temp_output.mkv"
   ```
 * **Zero Re-encoding:** Audio, video, and subtitle bitstreams are copied bit-for-bit (`-c copy`), completing operations at raw disk read/write bandwidth.
 * **Pristine Output:** Strips private tags, tracking watermarks, and unnecessary encoder strings while preserving structural container health.

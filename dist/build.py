@@ -123,19 +123,21 @@ def main():
     except Exception:
         pass
 
-    # 4. Leer version desde vw.py
+    # 4. Leer version desde src/video_workstation/__init__.py (fallback vw.py)
     version = "1.0.0"
+    init_path = os.path.join(project_root, "src", "video_workstation", "__init__.py")
+    version_source = init_path if os.path.exists(init_path) else vw_path
     try:
-        with open(vw_path, "r", encoding="utf-8") as f:
+        with open(version_source, "r", encoding="utf-8") as f:
             content = f.read()
             match = re.search(r'^(?:APP_)?VERSION\s*=\s*[\'"]([^\'"]+)[\'"]', content, re.MULTILINE)
             if match:
                 version = match.group(1)
                 print(f"[*] Version detectada: {version}")
             else:
-                print(f"[*] No se encontro variable VERSION en vw.py. Usando default {version}.")
+                print(f"[*] No se encontro variable VERSION. Usando default {version}.")
     except Exception as e:
-        print(f"[!] Error leyendo version desde vw.py: {e}. Usando default {version}.")
+        print(f"[!] Error leyendo version: {e}. Usando default {version}.")
 
     # 5. Generar file_version_info.txt para los metadatos de Windows (solo en Windows)
     is_windows = (sys.platform == "win32")
@@ -246,6 +248,7 @@ VSVersionInfo(
         f"--distpath={dist_dir}",
         f"--workpath={build_dir}",
         f"--specpath={dist_dir}",
+        f"--paths={os.path.join(project_root, 'src')}",
     ] + version_arg + icon_arg + [vw_path]
     
     print(f"\n[*] Ejecutando PyInstaller...")

@@ -1,16 +1,15 @@
 ========================================================================
- Video Workstation (VW) - Carpeta de Herramientas Portables
+ Video Workstation (VW) - Portable Tools Directory
 ========================================================================
 
-Si deseas utilizar VW en modo 100% PORTABLE e INDEPENDIENTE:
+If you want to run VW in 100% PORTABLE and STANDALONE mode:
 
-1. Coloca en esta carpeta los ejecutables:
-   - ffmpeg.exe
-   - ffprobe.exe
+1. Place the following executables inside this folder:
+   - ffmpeg.exe  (or `ffmpeg` on Linux/macOS)
+   - ffprobe.exe (or `ffprobe` on Linux/macOS)
 
-2. Al iniciar, VW detectará automáticamente estos binarios con máxima
-   prioridad antes de buscar en AppData o en las variables de entorno del
-   sistema (PATH).
+2. On startup, VW will automatically detect these binaries with highest
+   priority before checking the user config directory or system PATH.
 
-Puedes descargar las versiones oficiales de FFmpeg para Windows desde:
-https://ffmpeg.org/download.html o https://www.gyan.dev/ffmpeg/builds/
+You can download official FFmpeg builds from:
+https://ffmpeg.org/download.html or https://www.gyan.dev/ffmpeg/builds/

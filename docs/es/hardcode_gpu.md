@@ -79,8 +79,6 @@ A continuación se detalla la oferta de perfiles disponibles en el programa:
 
 ---
 
-## Advertencia de HDR (Alto Rango Dinámico)
-Si intentas incrustar subtítulos en un vídeo codificado con metadatos HDR (como HDR10 o Dolby Vision) y el programa lo detecta durante el análisis previo, mostrará una advertencia:
-> *El vídeo original tiene rango dinámico HDR. Si decides generar versiones con subtítulos incrustados (hardsub), los colores podrían verse lavados.*
-
-Esto ocurre porque la codificación rápida H.264 por hardware no realiza de forma nativa el mapeo de tonos (*tonemapping*) a SDR, lo cual es importante tener en cuenta antes de iniciar la renderización.
+## Preservación Automática de Color y Protección HDR
+* **Preservación BT.709 en 10-bit SDR:** Al incrustar subtítulos en vídeos 10-bit SDR hacia H.264 de 8-bit, VW aplica automáticamente los parámetros BT.709 (`-colorspace bt709 -color_primaries bt709 -color_trc bt709 -color_range tv`) para evitar tonos lavados.
+* **Protección para HDR y subtítulos bitmap:** Si FFprobe detecta metadatos HDR (`smpte2084`, `arib-std-b67` o `bt2020`) o subtítulos bitmap (como PGS o DVD), VW desactiva automáticamente el hardsub para ese vídeo/pista y realiza remux sin pérdida para proteger la fidelidad del color y evitar fallos.

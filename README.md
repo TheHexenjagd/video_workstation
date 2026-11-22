@@ -84,9 +84,20 @@ video_workstation/
 │       ├── remux_selector.md       # Spanish guide: Multiplexing and version selector
 │       ├── renombrador.md          # Spanish guide: Regex batch renamer
 │       └── rutas_dinamicas.md      # Spanish guide: Dynamic output paths
+├── src/
+│   └── video_workstation/
+│       ├── __init__.py             # Package version metadata
+│       ├── config.py               # App paths (CONFIG_DIR, LOGS_DIR) and INI defaults
+│       ├── constants.py            # Codec sets, GPU presets, metadata & language maps
+│       ├── media/                  # FFprobe inspection, subtitles, presets, dynamic paths
+│       ├── utils/                  # Binary resolution and daily structured logger
+│       └── ui/                     # Main VWSuite GUI and custom Tkinter widgets
+├── tests/                          # Automated unit test suite (unittest)
 ├── tools/
-│   └── README.txt                  # Directory and instructions for portable binaries
-├── vw.py                           # Application entry point and desktop GUI (Tkinter)
+│   ├── README.txt                  # Instructions for portable binaries (English)
+│   └── README.es.txt               # Instructions for portable binaries (Spanish)
+├── pyproject.toml                  # Project metadata, ruff and pytest configuration
+├── vw.py                           # Application entry point launcher
 ├── LICENSE                         # MIT License terms
 ├── README.md                       # Main documentation (English)
 └── README.es.md                    # Documentation in Spanish
@@ -144,13 +155,23 @@ The builder will verify compilation tools, auto-detect any local virtual environ
 
 ---
 
+## Running Tests
+
+Run the automated unit test suite from the repository root:
+```bash
+python -m unittest discover -s tests -t . -v
+```
+
+---
+
 ## Configuration
 
-User preferences and runtime configurations are automatically persisted at `%APPDATA%/VideoWorkstation/vw_config.ini`:
+User preferences, queue state, and daily execution logs are automatically persisted under `%APPDATA%/VideoWorkstation/` (or `~/.config/VideoWorkstation/` on Linux/macOS):
 
-- **Binary paths:** Discovery and explicit paths for `ffmpeg.exe` and `ffprobe.exe`.
-- **Hardware acceleration:** Preferred GPU encoder (`nvidia`, `intel`, `amd`) and hardware decoder framework (`Software`, `d3d11va`, `dxva2`).
-- **Processing parameters:** Dynamic output folder rules, language suffix tags, recursive scanning, and quality presets.
+- **Binary paths (`vw_config.ini`):** Discovery and explicit paths for `ffmpeg` and `ffprobe`.
+- **Hardware acceleration (`vw_config.ini`):** Preferred GPU encoder (`nvidia`, `intel`, `amd`) and hardware decoder framework (`Software`, `d3d11va`, `dxva2`).
+- **Processing parameters (`vw_config.ini`):** Dynamic output folder rules, metadata sanitization, external subtitle detection, recursive scanning, and quality presets.
+- **Daily logs (`logs/YYYY-MM-DD.log`):** Timestamped detailed execution logs separated by session.
 
 ---
 

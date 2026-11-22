@@ -78,6 +78,6 @@ Each encoder pipeline offers calibrated presets to balance encoding speed agains
 
 ---
 
-## High Dynamic Range (HDR) Color Warning
-When processing files containing HDR color metadata (e.g., HDR10, Dolby Vision), FFprobe flags the color profile. VW prompts a safety notice:
-> *Source video contains HDR metadata. Hardcoding subtitles without tone mapping may result in washed-out SDR colors.*
+## Automatic Color Preservation & HDR Safeguards
+* **10-bit SDR Color Preservation:** When hardcoding 10-bit SDR sources into 8-bit H.264, VW automatically applies BT.709 color space flags (`-colorspace bt709 -color_primaries bt709 -color_trc bt709 -color_range tv`) to prevent washed-out colors.
+* **HDR & Bitmap Subtitle Protection:** When FFprobe detects HDR metadata (`smpte2084`, `arib-std-b67`, or `bt2020`) or bitmap subtitle codecs (e.g., PGS, DVD), VW automatically disables hardcoding for that file/track and falls back to lossless remuxing to preserve color fidelity and prevent encoding failures.
