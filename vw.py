@@ -432,7 +432,6 @@ DEFAULT_CONFIG = {
         "gpu_acel": "nvidia",
         "decod_hw": "Software",
         "preset": "medium",
-        "sufijo_idiomas": "True",
         "eliminar_metadatos": "False",
         "buscar_subtitulos_externos": "True",
     },
@@ -825,7 +824,6 @@ class VWSuite:
             self.config_ini["Options"]["decod_hw"] = self.decod_hw_var.get()
             self.config_ini["Options"]["usar_nvidia"] = str(self.gpu_acel_var.get() == "nvidia")
             self.config_ini["Options"]["preset"] = self.preset_var.get()
-            self.config_ini["Options"]["sufijo_idiomas"] = str(self.var_sufijo_idiomas.get())
             self.config_ini["Options"]["eliminar_metadatos"] = str(self.var_eliminar_metadatos.get())
             if hasattr(self, "var_buscar_subtitulos_externos"):
                 self.config_ini["Options"]["buscar_subtitulos_externos"] = str(self.var_buscar_subtitulos_externos.get())
@@ -889,7 +887,6 @@ class VWSuite:
             self.config_ini["Paths"]["output_dir"] = salida_default
             self._guardar_configuracion()
         self.salida_var = tk.StringVar(value=salida_default)
-        self.var_sufijo_idiomas = tk.BooleanVar(value=self.config_ini.getboolean("Options", "sufijo_idiomas", fallback=True))
         self.var_eliminar_metadatos = tk.BooleanVar(
             value=self.config_ini.getboolean("Options", "eliminar_metadatos",
                   fallback=self.config_ini.getboolean("Options", "limpiar_metadatos", fallback=False))
@@ -907,7 +904,6 @@ class VWSuite:
             self.decod_hw_var,
             self.preset_var,
             self.salida_var,
-            self.var_sufijo_idiomas,
             self.var_eliminar_metadatos,
         ]:
             var.trace_add("write", self._actualizar_configuracion)
@@ -1054,7 +1050,6 @@ class VWSuite:
         self.cb_decod = ttk.Combobox(row3, values=["Software", "D3D11VA", "DXVA2"], state="readonly", textvariable=self.decod_hw_var, width=8)
         self.cb_decod.pack(side=tk.LEFT, padx=4)
 
-        tk.Checkbutton(row3, text="Sufijo al nombre", variable=self.var_sufijo_idiomas, bg="#FFFFFF", fg="#2B3A57", activebackground="#FFFFFF", selectcolor="#FFFFFF").pack(side=tk.LEFT, padx=6)
         tk.Checkbutton(row3, text="Eliminar metadatos al finalizar", variable=self.var_eliminar_metadatos, bg="#FFFFFF", fg="#2B3A57", activebackground="#FFFFFF", selectcolor="#FFFFFF").pack(side=tk.LEFT, padx=6)
         tk.Checkbutton(row3, text="Incluir subs externos (.srt)", variable=self.var_buscar_subtitulos_externos, bg="#FFFFFF", fg="#2B3A57", activebackground="#FFFFFF", selectcolor="#FFFFFF").pack(side=tk.LEFT, padx=6)
 
@@ -2144,8 +2139,7 @@ class VWSuite:
                 out_dir = out_dir / Path(patron)
 
             out_dir.mkdir(parents=True, exist_ok=True)
-            suffix = f"_{label}" if self.var_sufijo_idiomas.get() else ""
-            output_path = out_dir / f"{video_stem}{suffix}.mp4"
+            output_path = out_dir / f"{video_stem}.mp4"
             self._invalidar_cache_archivo(output_path)
 
             usar_hardsub = bool(combo.get("hardsub"))
@@ -4283,7 +4277,8 @@ class VWSuite:
             self.var_nombre_subcarpeta.set(old_val)
 
             base_dir = self.salida_var.get().strip() or obtener_directorio_videos_defecto()
-            preview_lbl.config(text=f"{base_dir}/{resolved}")
+            sub_dir = f"{resolved}/" if resolved else ""
+            preview_lbl.config(text=f"{base_dir}/{sub_dir}{video_name}.mp4")
 
         patron_var.trace_add("write", actualizar_preview)
         actualizar_preview()
