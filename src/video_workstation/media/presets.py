@@ -2,6 +2,17 @@
 
 from video_workstation.constants import PRESETS_AMD, PRESETS_NVIDIA, PRESETS_QSV
 
+DEFAULT_GPU_PRESETS = {
+    "nvidia": "p4",
+    "intel": "medium",
+    "amd": "balanced",
+}
+
+
+def get_default_preset(gpu_accel):
+    """Return the medium/balanced default preset for `gpu_accel`."""
+    return DEFAULT_GPU_PRESETS.get(gpu_accel, "medium")
+
 
 def get_valid_preset(preset, gpu_accel):
     """Map a generic or vendor-specific preset name to a valid preset for `gpu_accel`."""

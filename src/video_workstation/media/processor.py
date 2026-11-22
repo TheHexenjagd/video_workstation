@@ -21,7 +21,10 @@ from video_workstation.media.ffprobe import (
     get_track_identifier as obtener_identificador_pista,
     is_hdr_video as _video_es_hdr,
 )
-from video_workstation.media.presets import get_valid_preset as obtener_preset_valido
+from video_workstation.media.presets import (
+    get_default_preset,
+    get_valid_preset as obtener_preset_valido,
+)
 from video_workstation.media.subtitles import (
     ensure_external_subtitle_utf8 as asegurar_subtitulo_externo_utf8,
     find_external_subtitles as buscar_subtitulos_externos,
@@ -335,9 +338,8 @@ class MediaProcessorMixin:
         btn_manual.pack(side=tk.RIGHT)
 
     def _on_gpu_change(self):
-        preset_actual = self.preset_var.get()
-        nuevo = obtener_preset_valido(preset_actual, self.gpu_acel_var.get())
-        if nuevo != preset_actual:
+        nuevo = get_default_preset(self.gpu_acel_var.get())
+        if nuevo != self.preset_var.get():
             self.preset_var.set(nuevo)
 
     def _is_nvidia_available(self):
@@ -431,6 +433,12 @@ class MediaProcessorMixin:
         self.cb_gpu.config(values=values, state="readonly")
         if self.gpu_acel_var.get() not in available_keys:
             self.gpu_acel_var.set(available_keys[0])
+            self._on_gpu_change()
+        else:
+            preset_actual = self.preset_var.get()
+            valid_preset = obtener_preset_valido(preset_actual, self.gpu_acel_var.get())
+            if valid_preset != preset_actual:
+                self.preset_var.set(valid_preset)
         self._sync_gpu_combobox()
 
     def _sync_gpu_combobox(self):
@@ -455,8 +463,9 @@ class MediaProcessorMixin:
             self._sync_gpu_combobox()
             return
 
-        self.gpu_acel_var.set(gpu_key)
-        self._on_gpu_change()
+        if gpu_key != self.gpu_acel_var.get():
+            self.gpu_acel_var.set(gpu_key)
+            self._on_gpu_change()
 
     def _get_combinations_to_build(self, info, filename):
         if self.cancelar_procesamiento:
