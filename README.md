@@ -89,9 +89,9 @@ video_workstation/
 │       ├── __init__.py             # Package version metadata
 │       ├── config.py               # App paths (CONFIG_DIR, LOGS_DIR) and INI defaults
 │       ├── constants.py            # Codec sets, GPU presets, metadata & language maps
-│       ├── media/                  # FFprobe inspection, subtitles, presets, dynamic paths
+│       ├── media/                  # FFprobe, processor, subtitles, presets, dynamic paths
 │       ├── utils/                  # Binary resolution and daily structured logger
-│       └── ui/                     # Main VWSuite GUI and custom Tkinter widgets
+│       └── ui/                     # Main VWSuite GUI, themes, widgets, and dialogs/
 ├── tests/                          # Automated unit test suite (unittest)
 ├── tools/
 │   ├── README.txt                  # Instructions for portable binaries (English)
@@ -170,7 +170,7 @@ User preferences, queue state, and daily execution logs are automatically persis
 
 - **Binary paths (`vw_config.ini`):** Discovery and explicit paths for `ffmpeg` and `ffprobe`.
 - **Hardware acceleration (`vw_config.ini`):** Preferred GPU encoder (`nvidia`, `intel`, `amd`) and hardware decoder framework (`Software`, `d3d11va`, `dxva2`).
-- **Processing parameters (`vw_config.ini`):** Dynamic output folder rules, metadata sanitization, external subtitle detection, recursive scanning, and quality presets.
+- **Processing parameters (`vw_config.ini`):** Dynamic output folder rules, metadata sanitization, external subtitle detection, recursive scanning, quality presets, and UI theme (`light` / `dark`).
 - **Daily logs (`logs/YYYY-MM-DD.log`):** Timestamped detailed execution logs separated by session.
 
 ---

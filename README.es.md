@@ -89,9 +89,9 @@ video_workstation/
 │       ├── __init__.py             # Metadatos de versión del paquete
 │       ├── config.py               # Rutas de configuración (CONFIG_DIR, LOGS_DIR) y valores INI
 │       ├── constants.py            # Códecs, presets GPU, limpieza de metadatos y mapas de idioma
-│       ├── media/                  # Inspección FFprobe, subtítulos, presets y rutas dinámicas
+│       ├── media/                  # FFprobe, procesador, subtítulos, presets y rutas dinámicas
 │       ├── utils/                  # Resolución de binarios y registro diario estructurado
-│       └── ui/                     # Interfaz principal VWSuite y widgets personalizados Tkinter
+│       └── ui/                     # Interfaz principal VWSuite, temas, widgets y dialogs/
 ├── tests/                          # Suite de pruebas unitarias automatizadas (unittest)
 ├── tools/
 │   ├── README.txt                  # Instrucciones para binarios portables (Inglés)
@@ -170,7 +170,7 @@ Las preferencias del usuario, el estado de la cola y los registros diarios se pe
 
 - **Rutas de binarios (`vw_config.ini`):** Almacenamiento y resolución de rutas de `ffmpeg` y `ffprobe`.
 - **Aceleración por hardware (`vw_config.ini`):** Selección de codificador por GPU (`nvidia`, `intel`, `amd`) y decodificador por hardware (`Software`, `d3d11va`, `dxva2`).
-- **Parámetros de procesamiento (`vw_config.ini`):** Fórmulas dinámicas de salida, limpieza de metadatos, detección de subtítulos externos, exploración recursiva y perfiles de calidad de codificación.
+- **Parámetros de procesamiento (`vw_config.ini`):** Fórmulas dinámicas de salida, limpieza de metadatos, detección de subtítulos externos, exploración recursiva, perfiles de calidad y tema de interfaz (`light` / `dark`).
 - **Registros diarios (`logs/YYYY-MM-DD.log`):** Historial detallado de ejecución con marcas de tiempo y separadores por sesión.
 
 ---
