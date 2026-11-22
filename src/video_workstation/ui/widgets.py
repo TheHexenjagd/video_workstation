@@ -287,3 +287,171 @@ class RoundedButton(tk.Canvas):
             self.draw_button(self.active_bg)
             if self.command:
                 self.command()
+
+
+class ModernCheckbutton(tk.Canvas):
+    """Canvas-backed rounded checkbox with theme and hover support."""
+
+    def __init__(
+        self,
+        master,
+        text="",
+        variable=None,
+        command=None,
+        bg="#FFFFFF",
+        fg="#475569",
+        activebackground=None,
+        activeforeground="#0F172A",
+        selectcolor="#F1F5F9",
+        accent="#2563EB",
+        border="#CBD5E1",
+        disabled_fg="#94A3B8",
+        state=tk.NORMAL,
+        font=("Segoe UI", 9),
+        cursor="hand2",
+        **kwargs,
+    ):
+        self.text = text
+        self.variable = variable if variable is not None else tk.BooleanVar(value=False)
+        self.command = command
+        self.bg_color = bg
+        self.fg_color = fg
+        self.active_fg = activeforeground
+        self.box_bg = selectcolor
+        self.accent_color = accent
+        self.border_color = border
+        self.disabled_fg = disabled_fg
+        self.state = state
+        self.font = font
+        self.hovered = False
+
+        f_obj = tkfont.Font(font=self.font)
+        text_w = f_obj.measure(text)
+        text_h = f_obj.metrics("linespace")
+        self.box_size = 16
+        self.height = max(22, text_h + 4)
+        self.width = self.box_size + 8 + text_w + 4
+
+        super().__init__(
+            master,
+            width=self.width,
+            height=self.height,
+            bg=self.bg_color,
+            highlightthickness=0,
+            bd=0,
+            cursor=cursor if self.state == tk.NORMAL else "arrow",
+        )
+
+        self.bind("<Enter>", self._on_enter)
+        self.bind("<Leave>", self._on_leave)
+        self.bind("<ButtonRelease-1>", self._on_toggle)
+        self._trace_id = self.variable.trace_add("write", lambda *_: self._draw())
+        self.bind("<Destroy>", self._on_destroy)
+        self._draw()
+
+    def _on_destroy(self, event):
+        if event.widget == self and self._trace_id:
+            try:
+                self.variable.trace_remove("write", self._trace_id)
+            except Exception:
+                pass
+            self._trace_id = None
+
+    def _draw_rounded_box(self, x1, y1, x2, y2, r, fill, outline, width=1.5):
+        pts = [
+            x1 + r, y1, x1 + r, y1, x2 - r, y1, x2 - r, y1, x2, y1,
+            x2, y1 + r, x2, y1 + r, x2, y2 - r, x2, y2 - r, x2, y2,
+            x2 - r, y2, x2 - r, y2, x1 + r, y2, x1 + r, y2, x1, y2,
+            x1, y2 - r, x1, y2 - r, x1, y1 + r, x1, y1 + r, x1, y1,
+        ]
+        self.create_polygon(pts, smooth=True, fill=fill, outline=outline, width=width)
+
+    def _draw(self):
+        self.delete("all")
+        checked = bool(self.variable.get())
+        cy = self.height / 2
+        bx1 = 1
+        by1 = cy - self.box_size / 2
+        bx2 = bx1 + self.box_size
+        by2 = by1 + self.box_size
+
+        disabled = self.state == tk.DISABLED
+        if checked:
+            fill_box = self.border_color if disabled else self.accent_color
+            self._draw_rounded_box(bx1, by1, bx2, by2, 4, fill=fill_box, outline=fill_box, width=1)
+            # Crisp checkmark inside the 16x16 box
+            self.create_line(
+                bx1 + 4, cy,
+                bx1 + 7, cy + 3.2,
+                bx1 + 12, cy - 3.2,
+                fill="#FFFFFF",
+                width=2,
+                capstyle=tk.ROUND,
+                joinstyle=tk.ROUND,
+            )
+        else:
+            outline = self.border_color if disabled else (self.accent_color if self.hovered else self.border_color)
+            self._draw_rounded_box(bx1, by1, bx2, by2, 4, fill=self.box_bg, outline=outline, width=1.5)
+
+        if disabled:
+            txt_color = self.disabled_fg
+        else:
+            txt_color = self.active_fg if (self.hovered or checked) else self.fg_color
+        self.create_text(
+            bx2 + 8,
+            cy,
+            text=self.text,
+            fill=txt_color,
+            font=self.font,
+            anchor=tk.W,
+        )
+
+    def _on_enter(self, _event):
+        if self.state == tk.NORMAL:
+            self.hovered = True
+            self._draw()
+
+    def _on_leave(self, _event):
+        self.hovered = False
+        self._draw()
+
+    def _on_toggle(self, _event):
+        if self.state != tk.NORMAL:
+            return
+        self.variable.set(not bool(self.variable.get()))
+        if self.command:
+            self.command()
+
+    def config(self, cnf=None, **kw):
+        if cnf:
+            kw.update(cnf)
+        if "bg" in kw:
+            self.bg_color = kw.pop("bg")
+            super().config(bg=self.bg_color)
+        if "background" in kw:
+            self.bg_color = kw.pop("background")
+            super().config(bg=self.bg_color)
+        if "fg" in kw:
+            self.fg_color = kw.pop("fg")
+        if "foreground" in kw:
+            self.fg_color = kw.pop("foreground")
+        if "activeforeground" in kw:
+            self.active_fg = kw.pop("activeforeground")
+        kw.pop("activebackground", None)
+        if "selectcolor" in kw:
+            self.box_bg = kw.pop("selectcolor")
+        if "accent" in kw:
+            self.accent_color = kw.pop("accent")
+        if "border" in kw:
+            self.border_color = kw.pop("border")
+        if "disabled_fg" in kw:
+            self.disabled_fg = kw.pop("disabled_fg")
+        if "state" in kw:
+            self.state = kw.pop("state")
+            super().config(cursor="hand2" if self.state == tk.NORMAL else "arrow")
+        if kw:
+            super().config(**kw)
+        self._draw()
+
+    def configure(self, cnf=None, **kw):
+        self.config(cnf, **kw)

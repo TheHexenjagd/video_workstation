@@ -55,7 +55,7 @@ from video_workstation.ui.dialogs.path_builder import PathBuilderDialogMixin
 from video_workstation.ui.dialogs.renamer import RenamerDialogMixin
 from video_workstation.ui.dialogs.reports import ReportsDialogMixin
 from video_workstation.ui.dialogs.selectors import TrackSelectorDialogMixin
-from video_workstation.ui.widgets import RoundedButton
+from video_workstation.ui.widgets import ModernCheckbutton, RoundedButton
 from video_workstation.utils.binaries import (
     get_binary_filename,
     get_default_videos_dir as obtener_directorio_videos_defecto,
@@ -548,29 +548,12 @@ class VWSuite(
             state=tk.DISABLED,
             font=("Segoe UI", 9, "bold"),
         )
-        self.btn_cancelar.pack(pady=(0, 10))
-
-        div_theme = tk.Frame(side_bottom, height=1, bg=t["border"])
-        div_theme.pack(fill=tk.X, pady=(0, 10))
-        self._themed_dividers.append(div_theme)
+        self.btn_cancelar.pack(pady=0)
 
         self._themed_buttons.extend([
             (self.btn_procesar_cola, "btn_primary", "accent_fg", "bg_sidebar"),
             (self.btn_cancelar, "btn_danger", "accent_fg", "bg_sidebar"),
         ])
-
-        self.btn_theme = tk.Button(
-            side_bottom,
-            text="Tema: Oscuro" if self.theme_var.get() == "light" else "Tema: Claro",
-            command=self._toggle_theme,
-            bg=t["btn_secondary_bg"],
-            fg=t["btn_secondary_fg"],
-            width=196,
-            height=32,
-            font=("Segoe UI", 9, "bold"),
-        )
-        self.btn_theme.pack()
-        self._themed_buttons.append((self.btn_theme, "btn_secondary_bg", "btn_secondary_fg", "bg_sidebar"))
 
         # --- ÁREA PRINCIPAL (DERECHA) ---
         content_shell = tk.Frame(shell, bg=t["bg_app"])
@@ -591,8 +574,21 @@ class VWSuite(
         self.lbl_view_title.pack(side=tk.LEFT, padx=20)
         self._themed_labels.append((self.lbl_view_title, "bg_surface", "fg_primary"))
 
+        self.btn_theme = tk.Button(
+            topbar,
+            text="Tema: Oscuro" if self.theme_var.get() == "light" else "Tema: Claro",
+            command=self._toggle_theme,
+            bg=t["btn_secondary_bg"],
+            fg=t["btn_secondary_fg"],
+            width=112,
+            height=28,
+            font=("Segoe UI", 8, "bold"),
+        )
+        self.btn_theme.pack(side=tk.RIGHT, padx=(0, 18))
+        self._themed_buttons.append((self.btn_theme, "btn_secondary_bg", "btn_secondary_fg", "bg_surface"))
+
         self.lbl_queue_badge = tk.Label(topbar, text="Cola: 0  |  Omitidos: 0", font=("Segoe UI", 9), bg=t["bg_surface"], fg=t["fg_muted"])
-        self.lbl_queue_badge.pack(side=tk.RIGHT, padx=20)
+        self.lbl_queue_badge.pack(side=tk.RIGHT, padx=(0, 14))
         self._themed_labels.append((self.lbl_queue_badge, "bg_surface", "fg_muted"))
 
         self.lbl_top_status = tk.Label(topbar, text="Listo", font=("Segoe UI", 9, "bold"), bg=t["bg_surface"], fg=t["accent"])
@@ -656,15 +652,16 @@ class VWSuite(
             (b_clr, "btn_danger", "accent_fg", "bg_surface"),
         ])
 
-        chk_rec = tk.Checkbutton(
+        chk_rec = ModernCheckbutton(
             acciones,
             text="Buscar recursivo",
             variable=self.var_recursivo,
             bg=t["bg_surface"],
             fg=t["fg_secondary"],
-            activebackground=t["bg_surface"],
             activeforeground=t["fg_primary"],
             selectcolor=t["bg_input"],
+            accent=t["accent"],
+            border=t["border_strong"],
         )
         chk_rec.pack(side=tk.LEFT, padx=4)
         self._themed_checks.append((chk_rec, "bg_surface", "fg_secondary"))
@@ -705,7 +702,7 @@ class VWSuite(
         r_sub = tk.Frame(col_dest, bg=t["bg_surface"])
         r_sub.pack(fill=tk.X)
         self._themed_frames.append((r_sub, "bg_surface", None))
-        chk_sub = tk.Checkbutton(r_sub, text="Subcarpeta:", variable=self.var_subcarpeta, bg=t["bg_surface"], fg=t["fg_secondary"], activebackground=t["bg_surface"], activeforeground=t["fg_primary"], selectcolor=t["bg_input"])
+        chk_sub = ModernCheckbutton(r_sub, text="Subcarpeta:", variable=self.var_subcarpeta, bg=t["bg_surface"], fg=t["fg_secondary"], activeforeground=t["fg_primary"], selectcolor=t["bg_input"], accent=t["accent"], border=t["border_strong"])
         chk_sub.pack(side=tk.LEFT, padx=(0, 6))
         self._themed_checks.append((chk_sub, "bg_surface", "fg_secondary"))
 
@@ -748,9 +745,23 @@ class VWSuite(
         self._themed_labels.append((lbl_dec, "bg_surface", "fg_secondary"))
         self.cb_decod = ttk.Combobox(r_hw, values=["Software", "D3D11VA", "DXVA2"], state="readonly", textvariable=self.decod_hw_var, width=10)
         self.cb_decod.pack(side=tk.LEFT, padx=(0, 8))
+        self.cb_decod.update_idletasks()
+        row_h = max(23, self.cb_decod.winfo_reqheight())
 
-        self.btn_preset = self._btn(r_hw, "Preset...", self.change_preset, t["btn_secondary_bg"])
-        self.btn_preset.config(width=14, fg=t["btn_secondary_fg"])
+        self.btn_preset = tk.Button(
+            r_hw,
+            text="Preset...",
+            command=self.change_preset,
+            bg=t["btn_secondary_bg"],
+            fg=t["btn_secondary_fg"],
+            activebackground=t["btn_secondary_bg"],
+            activeforeground=t["btn_secondary_fg"],
+            width=14,
+            height=row_h,
+            pady=0,
+            cursor="hand2",
+            font=("Segoe UI", 9, "bold"),
+        )
         self.btn_preset.pack(side=tk.LEFT)
         self._themed_buttons.append((self.btn_preset, "btn_secondary_bg", "btn_secondary_fg", "bg_surface"))
         self.preset_var.trace_add("write", lambda *_: self._update_preset_button_label())
@@ -760,11 +771,11 @@ class VWSuite(
         r_chk = tk.Frame(col_enc, bg=t["bg_surface"])
         r_chk.pack(fill=tk.X, pady=(2, 0))
         self._themed_frames.append((r_chk, "bg_surface", None))
-        chk_meta = tk.Checkbutton(r_chk, text="Limpiar metadatos al finalizar", variable=self.var_eliminar_metadatos, bg=t["bg_surface"], fg=t["fg_secondary"], activebackground=t["bg_surface"], activeforeground=t["fg_primary"], selectcolor=t["bg_input"])
+        chk_meta = ModernCheckbutton(r_chk, text="Limpiar metadatos al finalizar", variable=self.var_eliminar_metadatos, bg=t["bg_surface"], fg=t["fg_secondary"], activeforeground=t["fg_primary"], selectcolor=t["bg_input"], accent=t["accent"], border=t["border_strong"])
         chk_meta.pack(side=tk.LEFT, padx=(0, 14))
         self._themed_checks.append((chk_meta, "bg_surface", "fg_secondary"))
 
-        chk_ext = tk.Checkbutton(r_chk, text="Incluir subs externos (.srt)", variable=self.var_buscar_subtitulos_externos, bg=t["bg_surface"], fg=t["fg_secondary"], activebackground=t["bg_surface"], activeforeground=t["fg_primary"], selectcolor=t["bg_input"])
+        chk_ext = ModernCheckbutton(r_chk, text="Incluir subs externos (.srt)", variable=self.var_buscar_subtitulos_externos, bg=t["bg_surface"], fg=t["fg_secondary"], activeforeground=t["fg_primary"], selectcolor=t["bg_input"], accent=t["accent"], border=t["border_strong"])
         chk_ext.pack(side=tk.LEFT)
         self._themed_checks.append((chk_ext, "bg_surface", "fg_secondary"))
 
@@ -993,6 +1004,8 @@ class VWSuite(
                 activebackground=t[bg_key],
                 activeforeground=t["fg_primary"],
                 selectcolor=t["bg_input"],
+                accent=t["accent"],
+                border=t["border_strong"],
             )
 
         for ent in self._themed_entries:
@@ -1529,7 +1542,6 @@ class VWSuite(
 
         dlg = tk.Toplevel(owner)
         dlg.title(f"{title} - VW")
-        dlg.geometry("460x230")
         dlg.resizable(False, False)
         dlg.transient(owner)
         dlg.grab_set()
@@ -1541,11 +1553,6 @@ class VWSuite(
             if (e.widget == dlg and owner.winfo_exists())
             else None,
         )
-
-        dlg.update_idletasks()
-        x = owner.winfo_x() + (owner.winfo_width() - dlg.winfo_width()) // 2
-        y = owner.winfo_y() + (owner.winfo_height() - dlg.winfo_height()) // 2
-        dlg.geometry(f"+{max(0, x)}+{max(0, y)}")
 
         hdr = tk.Frame(dlg, bg=t["bg_surface"], padx=16, pady=12)
         hdr.pack(fill=tk.X)
@@ -1569,6 +1576,18 @@ class VWSuite(
 
         tk.Frame(dlg, height=1, bg=t["border"]).pack(fill=tk.X)
 
+        btm = tk.Frame(dlg, bg=t["bg_app"], padx=16, pady=12)
+        btm.pack(side=tk.BOTTOM, fill=tk.X)
+        btn_ok = tk.Button(
+            btm,
+            text="Aceptar",
+            command=dlg.destroy,
+            bg=t["btn_primary"],
+            fg=t["accent_fg"],
+            width=12,
+        )
+        btn_ok.pack(side=tk.RIGHT)
+
         body = tk.Frame(dlg, bg=t["bg_app"], padx=16, pady=12)
         body.pack(fill=tk.BOTH, expand=True)
         card = tk.Frame(
@@ -1591,18 +1610,13 @@ class VWSuite(
             anchor=tk.NW,
         ).pack(fill=tk.BOTH, expand=True)
 
-        btm = tk.Frame(dlg, bg=t["bg_app"], padx=16, pady=10)
-        btm.pack(fill=tk.X)
-        btn_ok = tk.Button(
-            btm,
-            text="Aceptar",
-            command=dlg.destroy,
-            bg=t["btn_primary"],
-            fg=t["accent_fg"],
-            parent_bg=t["bg_app"],
-            width=12,
-        )
-        btn_ok.pack(side=tk.RIGHT)
+        dlg.update_idletasks()
+        w = max(460, dlg.winfo_reqwidth())
+        h = max(230, dlg.winfo_reqheight())
+        x = owner.winfo_x() + (owner.winfo_width() - w) // 2
+        y = owner.winfo_y() + (owner.winfo_height() - h) // 2
+        dlg.geometry(f"{w}x{h}+{max(0, x)}+{max(0, y)}")
+
         dlg.bind("<Return>", lambda _: dlg.destroy())
         dlg.bind("<Escape>", lambda _: dlg.destroy())
         dlg.wait_window()
@@ -1660,6 +1674,9 @@ class VWSuite(
         ).pack(fill=tk.X)
 
         tk.Frame(dlg, height=1, bg=t["border"]).pack(fill=tk.X)
+
+        btm = tk.Frame(dlg, bg=t["bg_app"], padx=18, pady=12)
+        btm.pack(side=tk.BOTTOM, fill=tk.X)
 
         body = tk.Frame(dlg, bg=t["bg_app"], padx=18, pady=14)
         body.pack(fill=tk.BOTH, expand=True)
@@ -1724,15 +1741,12 @@ class VWSuite(
             btn_copy.config(text="Copiado")
             dlg.after(1500, lambda: btn_copy.config(text="Copiar rutas") if dlg.winfo_exists() else None)
 
-        btm = tk.Frame(dlg, bg=t["bg_app"], padx=18, pady=12)
-        btm.pack(fill=tk.X)
         btn_copy = tk.Button(
             btm,
             text="Copiar rutas",
             command=_copy_paths,
             bg=t["btn_secondary_bg"],
             fg=t["btn_secondary_fg"],
-            parent_bg=t["bg_app"],
             width=14,
         )
         btn_copy.pack(side=tk.LEFT)
@@ -1742,9 +1756,15 @@ class VWSuite(
             command=dlg.destroy,
             bg=t["btn_primary"],
             fg=t["accent_fg"],
-            parent_bg=t["bg_app"],
             width=12,
         ).pack(side=tk.RIGHT)
+
+        dlg.update_idletasks()
+        w = max(600, dlg.winfo_reqwidth())
+        h = max(440, dlg.winfo_reqheight())
+        x = self.root.winfo_x() + (self.root.winfo_width() - w) // 2
+        y = self.root.winfo_y() + (self.root.winfo_height() - h) // 2
+        dlg.geometry(f"{w}x{h}+{max(0, x)}+{max(0, y)}")
 
     def exit_application(self):
         if self.procesando and not messagebox.askyesno("Proceso activo", "Hay un proceso en curso. Salir de todos modos?"):

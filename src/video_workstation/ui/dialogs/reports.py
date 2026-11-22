@@ -459,6 +459,9 @@ class ReportsDialogMixin:
 
         tk.Frame(dialog, height=1, bg=t["border"]).pack(fill=tk.X)
 
+        btm = tk.Frame(dialog, bg=t["bg_app"], padx=18, pady=12)
+        btm.pack(side=tk.BOTTOM, fill=tk.X)
+
         body = tk.Frame(dialog, bg=t["bg_app"], padx=18, pady=14)
         body.pack(fill=tk.BOTH, expand=True)
 
@@ -495,15 +498,12 @@ class ReportsDialogMixin:
                 anchor=tk.W,
             ).pack(fill=tk.X)
 
-            btm = tk.Frame(dialog, bg=t["bg_app"], padx=18, pady=12)
-            btm.pack(fill=tk.X)
             RoundedButton(
                 btm,
                 text="Cerrar",
                 command=dialog.destroy,
                 bg=t["btn_primary"],
                 fg=t["accent_fg"],
-                parent_bg=t["bg_app"],
                 width=12,
             ).pack(side=tk.RIGHT)
             return
@@ -591,7 +591,7 @@ class ReportsDialogMixin:
 
         tk.Frame(det_card, height=1, bg=t["border"]).pack(fill=tk.X, pady=(0, 12))
 
-        def _make_meter_row(parent, title):
+        def _make_meter_row(parent, title, fill_color):
             row = tk.Frame(parent, bg=t["bg_surface"])
             row.pack(fill=tk.X, pady=4)
             tk.Label(
@@ -603,13 +603,14 @@ class ReportsDialogMixin:
                 width=11,
                 anchor=tk.W,
             ).pack(side=tk.LEFT)
-            bars_frame = tk.Frame(row, bg=t["bg_surface"])
-            bars_frame.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(4, 10))
-            segments = []
-            for _ in range(5):
-                seg = tk.Frame(bars_frame, height=8, bg=t["bg_input"])
-                seg.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-                segments.append(seg)
+            canvas = tk.Canvas(
+                row,
+                height=10,
+                bg=t["bg_surface"],
+                highlightthickness=0,
+                bd=0,
+            )
+            canvas.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(4, 10))
             score_lbl = tk.Label(
                 row,
                 text="0 / 5",
@@ -620,10 +621,31 @@ class ReportsDialogMixin:
                 anchor=tk.E,
             )
             score_lbl.pack(side=tk.RIGHT)
-            return segments, score_lbl
 
-        speed_segs, speed_score = _make_meter_row(det_card, "Velocidad")
-        qual_segs, qual_score = _make_meter_row(det_card, "Calidad")
+            state = {"val": 0}
+
+            def _draw(_event=None):
+                canvas.delete("all")
+                w = max(canvas.winfo_width(), 150)
+                gap = 4
+                seg_w = (w - gap * 4) / 5
+                for idx in range(5):
+                    x1 = idx * (seg_w + gap)
+                    x2 = x1 + seg_w
+                    color = fill_color if idx < state["val"] else t["border"]
+                    canvas.create_rectangle(x1, 1, x2, 9, fill=color, outline="")
+
+            canvas.bind("<Configure>", _draw)
+
+            def _set_value(val):
+                state["val"] = int(val)
+                _draw()
+                score_lbl.config(text=f"{state['val']} / 5")
+
+            return _set_value
+
+        set_speed = _make_meter_row(det_card, "Velocidad", t["accent"])
+        set_qual = _make_meter_row(det_card, "Calidad", t["success"])
 
         def refresh(*_):
             selected = map_display.get(value.get())
@@ -633,15 +655,8 @@ class ReportsDialogMixin:
             flag_badge.config(text=f"{encoder_name}  {flag_name} {selected}")
             name_lbl.config(text=p["nombre"])
             desc_lbl.config(text=p["descripcion"])
-
-            spd = int(p["velocidad"])
-            qual = int(p["calidad"])
-            for idx, seg in enumerate(speed_segs):
-                seg.config(bg=t["accent"] if idx < spd else t["bg_input"])
-            speed_score.config(text=f"{spd} / 5")
-            for idx, seg in enumerate(qual_segs):
-                seg.config(bg=t["success"] if idx < qual else t["bg_input"])
-            qual_score.config(text=f"{qual} / 5")
+            set_speed(p["velocidad"])
+            set_qual(p["calidad"])
 
         value.trace_add("write", refresh)
         refresh()
@@ -652,15 +667,12 @@ class ReportsDialogMixin:
                 self.preset_var.set(selected)
             dialog.destroy()
 
-        btm = tk.Frame(dialog, bg=t["bg_app"], padx=18, pady=12)
-        btm.pack(fill=tk.X)
         RoundedButton(
             btm,
             text="Aplicar preset",
             command=aceptar,
             bg=t["btn_primary"],
             fg=t["accent_fg"],
-            parent_bg=t["bg_app"],
             width=14,
         ).pack(side=tk.RIGHT, padx=(8, 0))
         RoundedButton(
@@ -669,7 +681,6 @@ class ReportsDialogMixin:
             command=dialog.destroy,
             bg=t["btn_secondary_bg"],
             fg=t["btn_secondary_fg"],
-            parent_bg=t["bg_app"],
             width=12,
         ).pack(side=tk.RIGHT)
 
@@ -725,6 +736,17 @@ class ReportsDialogMixin:
             fg=t_act["accent"]
         ).pack(side=tk.RIGHT, padx=14, pady=10)
 
+        btm = tk.Frame(dialog, bg=t_act["bg_app"], padx=18, pady=10)
+        btm.pack(side=tk.BOTTOM, fill=tk.X)
+        RoundedButton(
+            btm,
+            text="Cerrar",
+            command=dialog.destroy,
+            bg=t_act["btn_primary"],
+            fg=t_act["accent_fg"],
+            width=12,
+        ).pack(side=tk.RIGHT)
+
         content_card = tk.Frame(dialog, bg=t_act["bg_surface"], highlightthickness=1, highlightbackground=t_act["border"], bd=0)
         content_card.pack(fill=tk.BOTH, expand=True, padx=18, pady=(4, 10))
 
@@ -763,7 +785,7 @@ class ReportsDialogMixin:
 
         tk.Label(
             info_frame,
-            text="Organización:",
+            text="Desarrollado por:",
             font=("Segoe UI", 9, "bold"),
             bg=t_act["bg_surface"],
             fg=t_act["fg_primary"]
@@ -782,7 +804,7 @@ class ReportsDialogMixin:
 
         tk.Label(
             info_frame,
-            text="Desarrolladores:",
+            text="Equipo:",
             font=("Segoe UI", 9, "bold"),
             bg=t_act["bg_surface"],
             fg=t_act["fg_primary"]
@@ -793,7 +815,7 @@ class ReportsDialogMixin:
 
         dev1_lbl = tk.Label(
             devs_subframe,
-            text="• Gabriel Giraldo Herrera (github.com/TheHexenjagd)",
+            text="Gabriel Giraldo Herrera (github.com/TheHexenjagd)",
             font=("Segoe UI", 9, "underline"),
             bg=t_act["bg_surface"],
             fg=t_act["accent"],
@@ -804,7 +826,7 @@ class ReportsDialogMixin:
 
         dev2_lbl = tk.Label(
             devs_subframe,
-            text="• Jorge Iván Nieto Triviño (github.com/Gatozo)",
+            text="Jorge Iván Nieto Triviño (github.com/Gatozo)",
             font=("Segoe UI", 9, "underline"),
             bg=t_act["bg_surface"],
             fg=t_act["accent"],
@@ -812,18 +834,6 @@ class ReportsDialogMixin:
         )
         dev2_lbl.pack(anchor=tk.W, pady=1)
         dev2_lbl.bind("<Button-1>", lambda e: webbrowser.open_new("https://github.com/Gatozo"))
-
-        btm = tk.Frame(dialog, bg=t_act["bg_app"], padx=18, pady=10)
-        btm.pack(fill=tk.X)
-        RoundedButton(
-            btm,
-            text="Cerrar",
-            command=dialog.destroy,
-            bg=t_act["btn_primary"],
-            fg=t_act["accent_fg"],
-            parent_bg=t_act["bg_app"],
-            width=12,
-        ).pack(side=tk.RIGHT)
 
     def _show_error_summary(self, errores):
         dialog = tk.Toplevel(self.root)

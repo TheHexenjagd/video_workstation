@@ -10,6 +10,7 @@ from video_workstation.media.ffprobe import (
     is_hdr_video as _video_es_hdr,
 )
 from video_workstation.ui.theme import get_theme
+from video_workstation.ui.widgets import ModernCheckbutton
 
 
 class TrackSelectorDialogMixin:
@@ -42,8 +43,19 @@ class TrackSelectorDialogMixin:
         btns = tk.Frame(dialog)
         btns.pack(side=tk.BOTTOM, pady=10)
 
+        t_sel = get_theme(self.theme_var.get())
         apply_all = tk.BooleanVar(value=False)
-        tk.Checkbutton(dialog, text="Aplicar seleccion a todos los archivos", variable=apply_all).pack(side=tk.BOTTOM, pady=6)
+        ModernCheckbutton(
+            dialog,
+            text="Aplicar seleccion a todos los archivos",
+            variable=apply_all,
+            bg=dialog.cget("bg"),
+            fg=t_sel["fg_secondary"],
+            activeforeground=t_sel["fg_primary"],
+            selectcolor=t_sel["bg_input"],
+            accent=t_sel["accent"],
+            border=t_sel["border_strong"],
+        ).pack(side=tk.BOTTOM, pady=6)
 
         body_container = tk.Frame(dialog)
         body_container.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=10)
@@ -205,15 +217,16 @@ class TrackSelectorDialogMixin:
 
         apply_all = tk.BooleanVar(value=True if modo_previo else False)
         chk_text = "Aplicar esta configuración a todos los archivos de este subgrupo" if modo_previo else "Aplicar esta configuración a todos los similares (mismo subgrupo)"
-        tk.Checkbutton(
+        ModernCheckbutton(
             dialog,
             text=chk_text,
             variable=apply_all,
             bg=t["bg_app"],
             fg=t["fg_secondary"],
-            activebackground=t["bg_app"],
             activeforeground=t["fg_primary"],
             selectcolor=t["bg_input"],
+            accent=t["accent"],
+            border=t["border_strong"],
         ).pack(side=tk.BOTTOM, pady=(4, 2))
 
         body = tk.Frame(dialog, bg=t["bg_app"])
@@ -226,16 +239,18 @@ class TrackSelectorDialogMixin:
         tk.Frame(left, height=1, bg=t["border"]).pack(fill=tk.X, padx=14, pady=(0, 8))
 
         var_hardsub = tk.BooleanVar(value=False)
-        cb_hardsub = tk.Checkbutton(
+        cb_hardsub = ModernCheckbutton(
             left,
             text="Hacer hardsub (Incrustar)",
             variable=var_hardsub,
             font=("Segoe UI", 9, "bold"),
             bg=t["bg_surface"],
             fg=t["danger"],
-            activebackground=t["bg_surface"],
             activeforeground=t["danger"],
             selectcolor=t["bg_input"],
+            accent=t["accent"],
+            border=t["border_strong"],
+            disabled_fg=t["fg_muted"],
             state=tk.DISABLED,
         )
         cb_hardsub.pack(side=tk.BOTTOM, anchor=tk.W, padx=14, pady=(6, 10))
@@ -321,7 +336,17 @@ class TrackSelectorDialogMixin:
             var = tk.BooleanVar(value=False)
             var.trace_add("write", lambda *_: actualizar_estado_hardsub())
             audio_vars.append((var, s))
-            tk.Checkbutton(scrollable_frame, text=f"{title} ({lang})", variable=var, anchor=tk.W, bg=t["bg_surface"], fg=t["fg_primary"], activebackground=t["bg_surface"], activeforeground=t["fg_primary"], selectcolor=t["bg_input"]).pack(fill=tk.X, padx=8, pady=2)
+            ModernCheckbutton(
+                scrollable_frame,
+                text=f"{title} ({lang})",
+                variable=var,
+                bg=t["bg_surface"],
+                fg=t["fg_primary"],
+                activeforeground=t["fg_primary"],
+                selectcolor=t["bg_input"],
+                accent=t["accent"],
+                border=t["border_strong"],
+            ).pack(anchor=tk.W, padx=8, pady=2)
 
         tk.Label(scrollable_frame, text="Subtítulos", bg=t["bg_surface"], fg=t["accent"], font=("Segoe UI", 9, "bold")).pack(anchor=tk.W, padx=6, pady=(8, 2))
         for i, s in enumerate(subtitle_streams):
@@ -331,7 +356,17 @@ class TrackSelectorDialogMixin:
             var = tk.BooleanVar(value=False)
             var.trace_add("write", lambda *_: actualizar_estado_hardsub())
             sub_vars.append((var, s))
-            tk.Checkbutton(scrollable_frame, text=f"{title} ({lang})", variable=var, anchor=tk.W, bg=t["bg_surface"], fg=t["fg_primary"], activebackground=t["bg_surface"], activeforeground=t["fg_primary"], selectcolor=t["bg_input"]).pack(fill=tk.X, padx=8, pady=2)
+            ModernCheckbutton(
+                scrollable_frame,
+                text=f"{title} ({lang})",
+                variable=var,
+                bg=t["bg_surface"],
+                fg=t["fg_primary"],
+                activeforeground=t["fg_primary"],
+                selectcolor=t["bg_input"],
+                accent=t["accent"],
+                border=t["border_strong"],
+            ).pack(anchor=tk.W, padx=8, pady=2)
 
         dialog.after(50, _actualizar_scroll_combos)
 
