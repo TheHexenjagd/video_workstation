@@ -368,6 +368,12 @@ INCOMPATIBLE_MP4_AUDIO_CODECS = {
     "pcm_u8", "pcm_bluray", "pcm_dvd", "pcm_alaw", "pcm_mulaw", "truehd",
     "mlp", "vorbis", "opus"
 }
+STRIP_METADATA_ARGS = (
+    "-map_metadata", "-1",
+    "-map_metadata:s", "-1",
+    "-map_chapters", "-1",
+    "-fflags", "+bitexact",
+)
 
 PRESETS_NVIDIA = {
     "lossless": {"nombre": "Lossless", "descripcion": "Sin perdida", "velocidad": "⚡☆☆", "calidad": "★★★★★"},
@@ -1985,6 +1991,8 @@ class VWSuite:
 
         ok = 0
         fail = 0
+        limpiar_meta = bool(self.var_eliminar_metadatos.get())
+        meta_args = list(STRIP_METADATA_ARGS) if limpiar_meta else []
 
         for i, combo in enumerate(combinaciones, 1):
             if self.cancelar_procesamiento:
@@ -2079,7 +2087,7 @@ class VWSuite:
                             "-profile:v", "high", "-rc", "vbr", "-cq", "23",
                             "-b:v", "5M", "-maxrate", "8M", "-bufsize", "10M",
                             *color_flags,
-                            *audio_settings, "-movflags", "+faststart", "-y", str(output_path)
+                            *audio_settings, *meta_args, "-movflags", "+faststart", "-y", str(output_path)
                         ]
                     elif gpu == "intel":
                         cmd = [
@@ -2090,7 +2098,7 @@ class VWSuite:
                             "-global_quality", "23",
                             "-b:v", "5M", "-maxrate", "8M", "-bufsize", "10M",
                             *color_flags,
-                            *audio_settings, "-movflags", "+faststart", "-y", str(output_path)
+                            *audio_settings, *meta_args, "-movflags", "+faststart", "-y", str(output_path)
                         ]
                     else:
                         cmd = [
@@ -2100,7 +2108,7 @@ class VWSuite:
                             "-c:v", "h264_amf", "-quality", preset,
                             "-rc", "vbr_peak", "-b:v", "5M", "-maxrate", "8M", "-bufsize", "10M",
                             *color_flags,
-                            *audio_settings, "-movflags", "+faststart", "-y", str(output_path)
+                            *audio_settings, *meta_args, "-movflags", "+faststart", "-y", str(output_path)
                         ]
 
                     self._enviar_mensaje(f"[{i}/{len(combinaciones)}] {output_path.name} (Incrustando subtítulos...)")
@@ -2132,10 +2140,8 @@ class VWSuite:
                         self._enviar_mensaje(f"  -> Archivo generado: {ruta_completa}")
                         self._enviar_mensaje(f"     Audios: {audios_info}")
                         self._enviar_mensaje(f"     Subtítulos: {subs_info}")
-
-                        if self.var_eliminar_metadatos.get():
-                            self._enviar_mensaje(f"Eliminando metadatos de {output_path.name}...")
-                            self._eliminar_metadatos_archivo(output_path)
+                        if limpiar_meta:
+                            self._enviar_mensaje("     Metadatos: Eliminados")
                     else:
                         err_detail = ""
                         if hasattr(result, "stderr") and result.stderr:
@@ -2220,7 +2226,7 @@ class VWSuite:
                             cmd.extend(["-map", f"{in_idx}:0"])
                         else:
                             cmd.extend(["-map", f"0:{idx}"])
-                        if s:
+                        if s and not limpiar_meta:
                             tags_s = s.get("tags") or {}
                             lang_s = tags_s.get("language")
                             if lang_s:
@@ -2229,7 +2235,7 @@ class VWSuite:
                     if sub_incluir:
                         cmd.extend(["-c:s", "mov_text"])
 
-                    cmd.extend(["-movflags", "+faststart", "-y", str(output_path)])
+                    cmd.extend([*meta_args, "-movflags", "+faststart", "-y", str(output_path)])
 
                     self._enviar_mensaje(f"[{i}/{len(combinaciones)}] {output_path.name}")
                     result = self._run_subprocess_cancellable(cmd)
@@ -2252,7 +2258,7 @@ class VWSuite:
                                 cmd_fallback.extend([f"-c:a:{idx_pos}", "copy"])
                         if not audio_indices:
                             cmd_fallback.extend(["-c:a", "copy"])
-                        cmd_fallback.extend(["-sn", "-movflags", "+faststart", "-y", str(output_path)])
+                        cmd_fallback.extend(["-sn", *meta_args, "-movflags", "+faststart", "-y", str(output_path)])
                         result = self._run_subprocess_cancellable(cmd_fallback)
                         if result.returncode == 0:
                             sub_incluir = []
@@ -2290,10 +2296,8 @@ class VWSuite:
                     self._enviar_mensaje(f"  -> Archivo generado: {ruta_completa}")
                     self._enviar_mensaje(f"     Audios: {audios_info}")
                     self._enviar_mensaje(f"     Subtítulos: {subs_info}")
-
-                    if self.var_eliminar_metadatos.get():
-                        self._enviar_mensaje(f"Eliminando metadatos de {output_path.name}...")
-                        self._eliminar_metadatos_archivo(output_path)
+                    if limpiar_meta:
+                        self._enviar_mensaje("     Metadatos: Eliminados")
                 else:
                     err_detail = ""
                     if hasattr(result, "stderr") and result.stderr:
@@ -3010,19 +3014,21 @@ class VWSuite:
                 else:
                     sub_args = ["-c:s", "mov_text"]
 
+        mp4_faststart = ["-movflags", "+faststart"] if is_mp4 else []
+
         cmd = [
             self.ffmpeg_path,
             "-i",
             str(video_file),
             "-map",
-            "0:v?",
+            "0:V?",
             "-map",
             "0:a?",
         ]
         if sub_args != ["-sn"]:
             cmd.extend(["-map", "0:s?"])
 
-        cmd.extend(["-c:v", "copy", *audio_args, *sub_args, "-map_metadata", "-1", "-y", str(temp_output)])
+        cmd.extend(["-c:v", "copy", *audio_args, *sub_args, *STRIP_METADATA_ARGS, *mp4_faststart, "-y", str(temp_output)])
 
         try:
             res = self._run_subprocess_cancellable(cmd, stdout_devnull=True)
@@ -3032,15 +3038,15 @@ class VWSuite:
                     "-i",
                     str(video_file),
                     "-map",
-                    "0:v?",
+                    "0:V?",
                     "-map",
                     "0:a?",
                     "-c:v",
                     "copy",
                     *audio_args,
                     "-sn",
-                    "-map_metadata",
-                    "-1",
+                    *STRIP_METADATA_ARGS,
+                    *mp4_faststart,
                     "-y",
                     str(temp_output),
                 ]
