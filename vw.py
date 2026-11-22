@@ -1,4 +1,5 @@
 import configparser
+from datetime import datetime
 import json
 import os
 import queue
@@ -256,6 +257,8 @@ QUEUE_FILE = os.path.join(CONFIG_DIR, "vw_queue.ini")
 
 TOOLS_DIR = os.path.join(CONFIG_DIR, "tools")
 os.makedirs(TOOLS_DIR, exist_ok=True)
+LOGS_DIR = os.path.join(CONFIG_DIR, "logs")
+os.makedirs(LOGS_DIR, exist_ok=True)
 
 def obtener_directorio_videos_defecto():
     """
@@ -1055,6 +1058,11 @@ class VWSuite:
         tk.Checkbutton(row3, text="Eliminar metadatos al finalizar", variable=self.var_eliminar_metadatos, bg="#FFFFFF", fg="#2B3A57", activebackground="#FFFFFF", selectcolor="#FFFFFF").pack(side=tk.LEFT, padx=6)
         tk.Checkbutton(row3, text="Incluir subs externos (.srt)", variable=self.var_buscar_subtitulos_externos, bg="#FFFFFF", fg="#2B3A57", activebackground="#FFFFFF", selectcolor="#FFFFFF").pack(side=tk.LEFT, padx=6)
 
+        self._log_lock = threading.Lock()
+        self._activity_items = {}
+        self._act_ok = 0
+        self._act_err = 0
+
         activity_card = ttk.Frame(main, style="Card.TFrame")
         activity_card.pack(fill=tk.BOTH, expand=True, padx=18, pady=(0, 14))
 
@@ -1065,14 +1073,62 @@ class VWSuite:
         self.progress = ttk.Progressbar(prog, style="Modern.Horizontal.TProgressbar", mode="determinate")
         self.progress.pack(fill=tk.X, pady=(4, 0))
 
-        tk.Label(activity_card, text="Actividad", bg="#FFFFFF", fg="#2B3A57", font=("Segoe UI", 10, "bold")).pack(anchor=tk.W, padx=12, pady=(4, 0))
-        log_frame = tk.Frame(activity_card, bg="#FFFFFF")
-        log_frame.pack(fill=tk.BOTH, expand=True, padx=12, pady=(4, 8))
-        self.log = tk.Text(log_frame, bg="#F9FBFF", fg="#24324A", font=("Consolas", 9), relief=tk.FLAT, state=tk.DISABLED, height=18)
-        self.log.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        scr = tk.Scrollbar(log_frame, command=self.log.yview)
+        act_header = tk.Frame(activity_card, bg="#FFFFFF")
+        act_header.pack(fill=tk.X, padx=12, pady=(4, 0))
+        tk.Label(act_header, text="Actividad", bg="#FFFFFF", fg="#2B3A57", font=("Segoe UI", 10, "bold")).pack(side=tk.LEFT)
+
+        tk.Button(
+            act_header,
+            text="Ver log detallado",
+            command=self._abrir_log_diario,
+            bg="#EEF3FB",
+            fg="#2B3A57",
+            activebackground="#DCE7F7",
+            activeforeground="#1F2A44",
+            relief=tk.FLAT,
+            padx=10,
+            pady=2,
+            cursor="hand2",
+            font=("Segoe UI", 8, "bold"),
+        ).pack(side=tk.RIGHT)
+
+        self.activity_summary_label = tk.Label(
+            act_header,
+            text="Éxitos: 0  |  Errores: 0",
+            bg="#FFFFFF",
+            fg="#5C6B8A",
+            font=("Segoe UI", 9),
+        )
+        self.activity_summary_label.pack(side=tk.RIGHT, padx=(0, 12))
+
+        style = ttk.Style()
+        style.configure("Activity.Treeview", font=("Segoe UI", 9), rowheight=26, background="#FFFFFF", fieldbackground="#FFFFFF", borderwidth=0)
+        style.configure("Activity.Treeview.Heading", font=("Segoe UI", 9, "bold"), foreground="#2B3A57")
+
+        log_frame = tk.Frame(activity_card, bg="#FFFFFF", highlightthickness=1, highlightbackground="#E5ECF9")
+        log_frame.pack(fill=tk.BOTH, expand=True, padx=12, pady=(6, 10))
+
+        cols = ("estado", "video", "accion", "detalle")
+        self.activity_tree = ttk.Treeview(log_frame, columns=cols, show="headings", style="Activity.Treeview", height=12)
+        self.activity_tree.heading("estado", text="Estado")
+        self.activity_tree.heading("video", text="Video")
+        self.activity_tree.heading("accion", text="Proceso")
+        self.activity_tree.heading("detalle", text="Resultado")
+
+        self.activity_tree.column("estado", width=110, minwidth=95, anchor=tk.CENTER, stretch=False)
+        self.activity_tree.column("video", width=280, minwidth=160, anchor=tk.W, stretch=True)
+        self.activity_tree.column("accion", width=125, minwidth=100, anchor=tk.CENTER, stretch=False)
+        self.activity_tree.column("detalle", width=340, minwidth=180, anchor=tk.W, stretch=True)
+
+        self.activity_tree.tag_configure("exito", foreground="#1E8449", background="#F2FBF5")
+        self.activity_tree.tag_configure("error", foreground="#C0392B", background="#FDF2F2")
+        self.activity_tree.tag_configure("procesando", foreground="#1F618D", background="#F0F7FF")
+        self.activity_tree.tag_configure("aviso", foreground="#B9770E", background="#FEF9E7")
+
+        self.activity_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scr = ttk.Scrollbar(log_frame, orient="vertical", command=self.activity_tree.yview)
         scr.pack(side=tk.RIGHT, fill=tk.Y)
-        self.log.config(yscrollcommand=scr.set)
+        self.activity_tree.configure(yscrollcommand=scr.set)
 
         try:
             if os.path.exists(QUEUE_FILE):
@@ -1119,14 +1175,80 @@ class VWSuite:
             font=("Segoe UI", 9, "bold"),
         )
 
-    def _enviar_mensaje(self, msg):
-        self.msg_queue.put(msg)
+    def _obtener_ruta_log_diario(self):
+        return os.path.join(LOGS_DIR, f"{datetime.now():%Y-%m-%d}.log")
 
-    def _append_log(self, msg):
-        self.log.config(state=tk.NORMAL)
-        self.log.insert(tk.END, msg + "\n")
-        self.log.see(tk.END)
-        self.log.config(state=tk.DISABLED)
+    def _escribir_log_archivo(self, msg, separador=False):
+        try:
+            os.makedirs(LOGS_DIR, exist_ok=True)
+            ruta_log = self._obtener_ruta_log_diario()
+            ahora = datetime.now()
+            with self._log_lock:
+                tiene_contenido = os.path.exists(ruta_log) and os.path.getsize(ruta_log) > 0
+                with open(ruta_log, "a", encoding="utf-8") as f:
+                    if separador:
+                        if tiene_contenido:
+                            f.write("\n")
+                        f.write("=" * 80 + "\n")
+                        f.write(f"[{ahora:%Y-%m-%d %H:%M:%S}] {msg}\n")
+                        f.write("=" * 80 + "\n")
+                    else:
+                        for linea in str(msg).splitlines() or [""]:
+                            f.write(f"[{ahora:%H:%M:%S}] {linea}\n")
+        except Exception:
+            pass
+
+    def _abrir_log_diario(self):
+        ruta_log = self._obtener_ruta_log_diario()
+        objetivo = ruta_log if os.path.exists(ruta_log) else LOGS_DIR
+        try:
+            if sys.platform.startswith("win"):
+                os.startfile(objetivo)
+            elif sys.platform == "darwin":
+                subprocess.Popen(["open", objetivo])
+            else:
+                subprocess.Popen(["xdg-open", objetivo])
+        except Exception as exc:
+            messagebox.showerror("Error", f"No se pudo abrir el registro:\n{exc}")
+
+    def _enviar_mensaje(self, msg):
+        self._escribir_log_archivo(msg)
+
+    def _registrar_actividad(self, estado, video, accion, detalle="", item_key=None):
+        self._escribir_log_archivo(f"[{estado.upper()}] [{accion}] {video} | {detalle}")
+        self.msg_queue.put(("ACTIVIDAD", estado, video, accion, detalle, item_key))
+
+    def _actualizar_actividad_ui(self, estado, video, accion, detalle, item_key=None):
+        etiquetas = {
+            "procesando": "Procesando",
+            "exito": "Éxito",
+            "error": "Error",
+            "aviso": "Aviso",
+        }
+        estado_txt = etiquetas.get(estado, estado)
+        tag = estado if estado in etiquetas else "procesando"
+        valores = (estado_txt, video, accion, detalle)
+
+        if item_key and item_key in self._activity_items:
+            item_id = self._activity_items[item_key]
+            prev_tags = self.activity_tree.item(item_id, "tags")
+            if "exito" in prev_tags:
+                self._act_ok = max(0, self._act_ok - 1)
+            elif "error" in prev_tags:
+                self._act_err = max(0, self._act_err - 1)
+            self.activity_tree.item(item_id, values=valores, tags=(tag,))
+        else:
+            item_id = self.activity_tree.insert("", tk.END, values=valores, tags=(tag,))
+            if item_key:
+                self._activity_items[item_key] = item_id
+
+        if estado == "exito":
+            self._act_ok += 1
+        elif estado == "error":
+            self._act_err += 1
+
+        self.activity_summary_label.config(text=f"Éxitos: {self._act_ok}  |  Errores: {self._act_err}")
+        self.activity_tree.see(item_id)
 
     def _actualizar_ui(self):
         try:
@@ -1197,6 +1319,9 @@ class VWSuite:
                         total = ok + fail
                         if total > 1 and fail > 0 and errores:
                             self._mostrar_resumen_errores(errores)
+                    elif msg[0] == "ACTIVIDAD":
+                        _, estado, video, accion, detalle, item_key = msg
+                        self._actualizar_actividad_ui(estado, video, accion, detalle, item_key)
                     elif msg[0] == "SELECTOR_PISTAS":
                         _, info, filename, q = msg
                         if self.cancelar_procesamiento:
@@ -1209,8 +1334,6 @@ class VWSuite:
                             q.put({"ok": False, "combinaciones": [], "aplicar_todos": False})
                         else:
                             q.put(self._mostrar_selector_combinaciones(info, filename, subgrupo_label))
-                else:
-                    self._append_log(msg)
         except queue.Empty:
             pass
 
@@ -2043,6 +2166,7 @@ class VWSuite:
                     status = self.gpus_status.get(gpu, (False, "No disponible"))
                     err_msg = f"El codificador {gpu.upper()} no está disponible. Detalle: {status[1]}"
                     self._enviar_mensaje(f"Error: {err_msg}. Saltando hardsub.")
+                    self._registrar_actividad("error", os.path.basename(input_file), f"Hardsub ({label})", err_msg, item_key=f"combo:{output_path}")
                     errores.append((input_file, f"Versión '{label}': {err_msg}"))
                     fail += 1
                     continue
@@ -2075,6 +2199,7 @@ class VWSuite:
                                     err_detail = f" Detalle: {' '.join(lines_err[-2:])}"
                             err_msg = f"Fallo al extraer/procesar subtítulo de la versión '{label}'.{err_detail}"
                             self._enviar_mensaje(err_msg)
+                            self._registrar_actividad("error", os.path.basename(input_file), f"Hardsub ({label})", err_msg, item_key=f"combo:{output_path}")
                             errores.append((input_file, f"Versión '{label}': {err_msg}"))
                             fail += 1
                             continue
@@ -2135,6 +2260,7 @@ class VWSuite:
                         ]
 
                     self._enviar_mensaje(f"[{i}/{len(combinaciones)}] {output_path.name} (Incrustando subtítulos...)")
+                    self._registrar_actividad("procesando", os.path.basename(input_file), f"Hardsub ({label})", f"Generando {output_path.name}...", item_key=f"combo:{output_path}")
                     result = self._run_subprocess_cancellable(cmd)
                     if result.returncode == 0:
                         ok += 1
@@ -2165,6 +2291,7 @@ class VWSuite:
                         self._enviar_mensaje(f"     Subtítulos: {subs_info}")
                         if limpiar_meta:
                             self._enviar_mensaje("     Metadatos: Eliminados")
+                        self._registrar_actividad("exito", os.path.basename(input_file), f"Hardsub ({label})", f"Generado: {output_path.name}", item_key=f"combo:{output_path}")
                     else:
                         err_detail = ""
                         if hasattr(result, "stderr") and result.stderr:
@@ -2173,6 +2300,7 @@ class VWSuite:
                                 err_detail = f" Detalle: {' '.join(lines_err[-2:])}"
                         err_msg = f"Error de FFmpeg al codificar la versión hardsub (código de salida: {result.returncode}).{err_detail}"
                         self._enviar_mensaje(err_msg)
+                        self._registrar_actividad("error", os.path.basename(input_file), f"Hardsub ({label})", err_msg, item_key=f"combo:{output_path}")
                         errores.append((input_file, f"Versión '{label}': {err_msg}"))
                         fail += 1
                 finally:
@@ -2261,6 +2389,7 @@ class VWSuite:
                     cmd.extend([*meta_args, "-movflags", "+faststart", "-y", str(output_path)])
 
                     self._enviar_mensaje(f"[{i}/{len(combinaciones)}] {output_path.name}")
+                    self._registrar_actividad("procesando", os.path.basename(input_file), f"Remux ({label})", f"Generando {output_path.name}...", item_key=f"combo:{output_path}")
                     result = self._run_subprocess_cancellable(cmd)
 
                     if result.returncode != 0 and sub_incluir:
@@ -2321,6 +2450,7 @@ class VWSuite:
                     self._enviar_mensaje(f"     Subtítulos: {subs_info}")
                     if limpiar_meta:
                         self._enviar_mensaje("     Metadatos: Eliminados")
+                    self._registrar_actividad("exito", os.path.basename(input_file), f"Remux ({label})", f"Generado: {output_path.name}", item_key=f"combo:{output_path}")
                 else:
                     err_detail = ""
                     if hasattr(result, "stderr") and result.stderr:
@@ -2329,6 +2459,7 @@ class VWSuite:
                             err_detail = f" Detalle: {' '.join(lines[-2:])}"
                     err_msg = f"Error de FFmpeg al copiar/remuxear la versión (código de salida: {result.returncode}).{err_detail}"
                     self._enviar_mensaje(err_msg)
+                    self._registrar_actividad("error", os.path.basename(input_file), f"Remux ({label})", err_msg, item_key=f"combo:{output_path}")
                     errores.append((input_file, f"Versión '{label}': {err_msg}"))
                     fail += 1
 
@@ -3095,7 +3226,9 @@ class VWSuite:
                 fue_cancelado = True
                 break
             self.msg_queue.put(("PROGRESO", i, total))
-            self._enviar_mensaje(f"Eliminando metadatos {i}/{total}: {os.path.basename(archivo)}")
+            nombre_archivo = os.path.basename(archivo)
+            self._enviar_mensaje(f"Eliminando metadatos {i}/{total}: {nombre_archivo}")
+            self._registrar_actividad("procesando", nombre_archivo, "Eliminar meta", "Limpiando metadatos...", item_key=f"meta:{archivo}")
             result = self._eliminar_metadatos_archivo(archivo, errores)
 
             if self.cancelar_procesamiento:
@@ -3105,8 +3238,11 @@ class VWSuite:
 
             if result:
                 archivos_exitosos.append(archivo)
+                self._registrar_actividad("exito", nombre_archivo, "Eliminar meta", "Metadatos eliminados", item_key=f"meta:{archivo}")
                 ok += 1
             else:
+                err_txt = next((e[1] for e in reversed(errores) if e[0] == archivo), "Error al limpiar metadatos")
+                self._registrar_actividad("error", nombre_archivo, "Eliminar meta", err_txt, item_key=f"meta:{archivo}")
                 fail += 1
 
         self._enviar_mensaje("===== FIN ELIMINACIÓN METADATOS =====")
@@ -3231,7 +3367,9 @@ class VWSuite:
                 fue_cancelado = True
                 break
             self.msg_queue.put(("PROGRESO", i, total))
-            self._enviar_mensaje(f"Eliminando subs {i}/{total}: {os.path.basename(archivo)}")
+            nombre_archivo = os.path.basename(archivo)
+            self._enviar_mensaje(f"Eliminando subs {i}/{total}: {nombre_archivo}")
+            self._registrar_actividad("procesando", nombre_archivo, "Eliminar subs", "Eliminando subtítulos...", item_key=f"subs:{archivo}")
             result = self._eliminar_subtitulos_archivo(archivo, errores)
 
             if self.cancelar_procesamiento:
@@ -3241,8 +3379,11 @@ class VWSuite:
 
             if result:
                 archivos_exitosos.append(archivo)
+                self._registrar_actividad("exito", nombre_archivo, "Eliminar subs", "Subtítulos eliminados", item_key=f"subs:{archivo}")
                 ok += 1
             else:
+                err_txt = next((e[1] for e in reversed(errores) if e[0] == archivo), "Error al eliminar subtítulos")
+                self._registrar_actividad("error", nombre_archivo, "Eliminar subs", err_txt, item_key=f"subs:{archivo}")
                 fail += 1
 
         self._enviar_mensaje("===== FIN ELIMINACIÓN DE SUBTÍTULOS =====")
@@ -3740,6 +3881,7 @@ class VWSuite:
             if not confirm:
                 return
 
+        self._clear_log_and_progress("Renombrando archivos...")
         self._enviar_mensaje("===== INICIO RENOMBRADO DE ARCHIVOS =====")
         ok_count = 0
         fail_count = 0
@@ -3763,12 +3905,17 @@ class VWSuite:
                 os.rename(original_path, new_path)
                 self._invalidar_cache_archivo(original_path)
                 self._enviar_mensaje(f"Renombrado con éxito:\n  De: {original_path}\n  A: {new_path}")
+                self._registrar_actividad("exito", os.path.basename(new_path), "Renombrado", f"Antes: {os.path.basename(original_path)}")
                 mapping_renombres[original_path] = new_path
                 ok_count += 1
             except Exception as exc:
                 self._enviar_mensaje(f"Error al renombrar {os.path.basename(original_path)}: {exc}")
+                self._registrar_actividad("error", os.path.basename(original_path), "Renombrado", str(exc))
                 mapping_renombres[original_path] = original_path
                 fail_count += 1
+
+        self.progress["value"] = 100
+        self.progress_label.config(text=f"Renombrado completado | Éxitos: {ok_count} | Fallos: {fail_count}")
 
         all_items = list(self.lista.get(0, tk.END))
         self.lista.delete(0, tk.END)
@@ -3784,11 +3931,14 @@ class VWSuite:
         messagebox.showinfo("Renombrado Finalizado", f"Se han renombrado {ok_count} archivos correctamente.\nErrores: {fail_count}")
 
     def _clear_log_and_progress(self, status):
-        self.log.config(state=tk.NORMAL)
-        self.log.delete("1.0", tk.END)
-        self.log.config(state=tk.DISABLED)
+        self.activity_tree.delete(*self.activity_tree.get_children())
+        self._activity_items = {}
+        self._act_ok = 0
+        self._act_err = 0
+        self.activity_summary_label.config(text="Éxitos: 0  |  Errores: 0")
         self.progress["value"] = 0
         self.progress_label.config(text=status)
+        self._escribir_log_archivo(status, separador=True)
 
     def seleccionar_archivos(self):
         files = filedialog.askopenfilenames(title="Seleccionar videos", filetypes=[("Videos", "*.mp4 *.mkv *.mov *.avi *.flv *.webm *.ts *.m4v")])
