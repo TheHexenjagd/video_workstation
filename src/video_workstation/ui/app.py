@@ -429,9 +429,23 @@ class VWSuite:
         div_mant.pack(fill=tk.X, padx=16, pady=(12, 10))
         self._themed_dividers.append(div_mant)
 
-        lbl_mant_sec = tk.Label(sidebar, text="MANTENIMIENTO", font=("Segoe UI", 8, "bold"), bg=t["bg_sidebar"], fg=t["fg_muted"])
+        lbl_mant_sec = tk.Label(sidebar, text="ACCIONES EN COLA", font=("Segoe UI", 8, "bold"), bg=t["bg_sidebar"], fg=t["fg_muted"])
         lbl_mant_sec.pack(anchor=tk.W, padx=18, pady=(0, 6))
         self._themed_labels.append((lbl_mant_sec, "bg_sidebar", "fg_muted"))
+
+        self.btn_verificar = tk.Button(
+            sidebar,
+            text="Verificar archivos",
+            command=self.verify_queue_files,
+            bg=t["bg_sidebar"],
+            fg=t["fg_secondary"],
+            width=198,
+            height=32,
+            align="left",
+            padx=12,
+            font=("Segoe UI", 9),
+        )
+        self.btn_verificar.pack(padx=16, pady=2)
 
         self.btn_eliminar_meta = tk.Button(
             sidebar,
@@ -476,6 +490,7 @@ class VWSuite:
         self.btn_renombrar.pack(padx=16, pady=2)
 
         self._themed_buttons.extend([
+            (self.btn_verificar, "bg_sidebar", "fg_secondary", "bg_sidebar"),
             (self.btn_eliminar_meta, "bg_sidebar", "fg_secondary", "bg_sidebar"),
             (self.btn_eliminar_subs, "bg_sidebar", "fg_secondary", "bg_sidebar"),
             (self.btn_renombrar, "bg_sidebar", "fg_secondary", "bg_sidebar"),
@@ -490,7 +505,7 @@ class VWSuite:
         div_side_btm.pack(fill=tk.X, pady=(0, 12))
         self._themed_dividers.append(div_side_btm)
 
-        lbl_exec_sec = tk.Label(side_bottom, text="EJECUCIÓN", font=("Segoe UI", 8, "bold"), bg=t["bg_sidebar"], fg=t["fg_muted"])
+        lbl_exec_sec = tk.Label(side_bottom, text="PROCESAMIENTO", font=("Segoe UI", 8, "bold"), bg=t["bg_sidebar"], fg=t["fg_muted"])
         lbl_exec_sec.pack(anchor=tk.W, padx=2, pady=(0, 6))
         self._themed_labels.append((lbl_exec_sec, "bg_sidebar", "fg_muted"))
 
@@ -506,18 +521,6 @@ class VWSuite:
         )
         self.btn_procesar_cola.pack(pady=(0, 6))
 
-        self.btn_verificar = tk.Button(
-            side_bottom,
-            text="Verificar archivos",
-            command=self.verify_queue_files,
-            bg=t["btn_secondary_bg"],
-            fg=t["btn_secondary_fg"],
-            width=196,
-            height=32,
-            font=("Segoe UI", 9, "bold"),
-        )
-        self.btn_verificar.pack(pady=(0, 6))
-
         self.btn_cancelar = tk.Button(
             side_bottom,
             text="Cancelar proceso",
@@ -529,11 +532,14 @@ class VWSuite:
             state=tk.DISABLED,
             font=("Segoe UI", 9, "bold"),
         )
-        self.btn_cancelar.pack(pady=(0, 6))
+        self.btn_cancelar.pack(pady=(0, 10))
+
+        div_theme = tk.Frame(side_bottom, height=1, bg=t["border"])
+        div_theme.pack(fill=tk.X, pady=(0, 10))
+        self._themed_dividers.append(div_theme)
 
         self._themed_buttons.extend([
             (self.btn_procesar_cola, "btn_primary", "accent_fg", "bg_sidebar"),
-            (self.btn_verificar, "btn_secondary_bg", "btn_secondary_fg", "bg_sidebar"),
             (self.btn_cancelar, "btn_danger", "accent_fg", "bg_sidebar"),
         ])
 
