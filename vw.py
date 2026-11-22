@@ -1097,8 +1097,9 @@ class VWSuite:
         self.activity_summary_label.pack(side=tk.RIGHT, padx=(0, 12))
 
         style = ttk.Style()
-        style.configure("Activity.Treeview", font=("Segoe UI", 9), rowheight=26, background="#FFFFFF", fieldbackground="#FFFFFF", borderwidth=0)
+        style.configure("Activity.Treeview", font=("Segoe UI", 9), rowheight=28, background="#FFFFFF", fieldbackground="#FFFFFF", borderwidth=0)
         style.configure("Activity.Treeview.Heading", font=("Segoe UI", 9, "bold"), foreground="#2B3A57")
+        style.map("Activity.Treeview", background=[("selected", "#E8F0FE")], foreground=[("selected", "#1F2A44")])
 
         log_frame = tk.Frame(activity_card, bg="#FFFFFF", highlightthickness=1, highlightbackground="#E5ECF9")
         log_frame.pack(fill=tk.BOTH, expand=True, padx=12, pady=(6, 10))
@@ -1108,17 +1109,27 @@ class VWSuite:
         self.activity_tree.heading("estado", text="Estado")
         self.activity_tree.heading("video", text="Video")
         self.activity_tree.heading("accion", text="Proceso")
-        self.activity_tree.heading("detalle", text="Resultado")
+        self.activity_tree.heading("detalle", text="Detalle")
 
-        self.activity_tree.column("estado", width=110, minwidth=95, anchor=tk.CENTER, stretch=False)
-        self.activity_tree.column("video", width=280, minwidth=160, anchor=tk.W, stretch=True)
-        self.activity_tree.column("accion", width=125, minwidth=100, anchor=tk.CENTER, stretch=False)
-        self.activity_tree.column("detalle", width=340, minwidth=180, anchor=tk.W, stretch=True)
+        self.activity_tree.column("estado", width=105, minwidth=95, anchor=tk.CENTER, stretch=False)
+        self.activity_tree.column("video", width=290, minwidth=180, anchor=tk.W, stretch=True)
+        self.activity_tree.column("accion", width=175, minwidth=145, anchor=tk.CENTER, stretch=False)
+        self.activity_tree.column("detalle", width=340, minwidth=200, anchor=tk.W, stretch=True)
 
         self.activity_tree.tag_configure("exito", foreground="#1E8449", background="#F2FBF5")
         self.activity_tree.tag_configure("error", foreground="#C0392B", background="#FDF2F2")
         self.activity_tree.tag_configure("procesando", foreground="#1F618D", background="#F0F7FF")
         self.activity_tree.tag_configure("aviso", foreground="#B9770E", background="#FEF9E7")
+
+        def _limpiar_seleccion_actividad(event):
+            if event.widget is self.activity_tree:
+                if not self.activity_tree.identify_row(event.y):
+                    self.activity_tree.selection_remove(self.activity_tree.selection())
+            else:
+                if self.activity_tree.selection():
+                    self.activity_tree.selection_remove(self.activity_tree.selection())
+
+        self.root.bind("<Button-1>", _limpiar_seleccion_actividad, add="+")
 
         self.activity_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scr = ttk.Scrollbar(log_frame, orient="vertical", command=self.activity_tree.yview)
@@ -1185,11 +1196,14 @@ class VWSuite:
                         if tiene_contenido:
                             f.write("\n")
                         f.write("=" * 80 + "\n")
-                        f.write(f"[{ahora:%Y-%m-%d %H:%M:%S}] {msg}\n")
+                        f.write(f"SESIÓN: {ahora:%Y-%m-%d %H:%M:%S}  |  {msg}\n")
                         f.write("=" * 80 + "\n")
                     else:
                         for linea in str(msg).splitlines() or [""]:
-                            f.write(f"[{ahora:%H:%M:%S}] {linea}\n")
+                            if linea.startswith("  "):
+                                f.write(f"           {linea}\n")
+                            else:
+                                f.write(f"[{ahora:%H:%M:%S}] {linea}\n")
         except Exception:
             pass
 
@@ -1209,8 +1223,15 @@ class VWSuite:
     def _enviar_mensaje(self, msg):
         self._escribir_log_archivo(msg)
 
-    def _registrar_actividad(self, estado, video, accion, detalle="", item_key=None):
-        self._escribir_log_archivo(f"[{estado.upper()}] [{accion}] {video} | {detalle}")
+    def _registrar_actividad(self, estado, video, accion, detalle="", item_key=None, log_extra=None):
+        if estado != "procesando":
+            lineas = [f"[{estado.upper()}] {accion}  |  {video}"]
+            if detalle:
+                lineas.append(f"  Detalle: {detalle}")
+            if log_extra:
+                for k, v in log_extra.items():
+                    lineas.append(f"  {k}: {v}")
+            self._escribir_log_archivo("\n".join(lineas))
         self.msg_queue.put(("ACTIVIDAD", estado, video, accion, detalle, item_key))
 
     def _actualizar_actividad_ui(self, estado, video, accion, detalle, item_key=None):
@@ -2253,8 +2274,7 @@ class VWSuite:
                             *audio_settings, *meta_args, "-movflags", "+faststart", "-y", str(output_path)
                         ]
 
-                    self._enviar_mensaje(f"[{i}/{len(combinaciones)}] {output_path.name} (Incrustando subtítulos...)")
-                    self._registrar_actividad("procesando", os.path.basename(input_file), f"Hardsub ({label})", f"Generando {output_path.name}...", item_key=f"combo:{output_path}")
+                    self._registrar_actividad("procesando", os.path.basename(input_file), f"Hardsub ({label})", "Incrustando subtítulos...", item_key=f"combo:{output_path}")
                     result = self._run_subprocess_cancellable(cmd)
                     if result.returncode == 0:
                         ok += 1
@@ -2280,12 +2300,21 @@ class VWSuite:
                         ruta_completa = os.path.abspath(output_path)
                         audios_info = ", ".join(aud_langs) if aud_langs else "Ninguno"
                         subs_info = ", ".join(sub_langs) if sub_langs else "Ninguno"
-                        self._enviar_mensaje(f"  -> Archivo generado: {ruta_completa}")
-                        self._enviar_mensaje(f"     Audios: {audios_info}")
-                        self._enviar_mensaje(f"     Subtítulos: {subs_info}")
-                        if limpiar_meta:
-                            self._enviar_mensaje("     Metadatos: Eliminados")
-                        self._registrar_actividad("exito", os.path.basename(input_file), f"Hardsub ({label})", f"Generado: {output_path.name}", item_key=f"combo:{output_path}")
+                        carpeta_salida = output_path.parent.name or str(output_path.parent)
+                        meta_txt = "Sin metadatos" if limpiar_meta else "Con metadatos"
+                        self._registrar_actividad(
+                            "exito",
+                            os.path.basename(input_file),
+                            f"Hardsub ({label})",
+                            f"Carpeta: {carpeta_salida}/ | {meta_txt}",
+                            item_key=f"combo:{output_path}",
+                            log_extra={
+                                "Salida": ruta_completa,
+                                "Audios": audios_info,
+                                "Subtítulos": subs_info,
+                                "Metadatos": "Eliminados" if limpiar_meta else "Conservados",
+                            },
+                        )
                     else:
                         err_detail = ""
                         if hasattr(result, "stderr") and result.stderr:
@@ -2382,8 +2411,7 @@ class VWSuite:
 
                     cmd.extend([*meta_args, "-movflags", "+faststart", "-y", str(output_path)])
 
-                    self._enviar_mensaje(f"[{i}/{len(combinaciones)}] {output_path.name}")
-                    self._registrar_actividad("procesando", os.path.basename(input_file), f"Remux ({label})", f"Generando {output_path.name}...", item_key=f"combo:{output_path}")
+                    self._registrar_actividad("procesando", os.path.basename(input_file), f"Remux ({label})", "Multiplexando pistas...", item_key=f"combo:{output_path}")
                     result = self._run_subprocess_cancellable(cmd)
 
                     if result.returncode != 0 and sub_incluir:
@@ -2439,12 +2467,21 @@ class VWSuite:
                     ruta_completa = os.path.abspath(output_path)
                     audios_info = ", ".join(aud_langs) if aud_langs else "Ninguno"
                     subs_info = ", ".join(sub_langs) if sub_langs else "Ninguno"
-                    self._enviar_mensaje(f"  -> Archivo generado: {ruta_completa}")
-                    self._enviar_mensaje(f"     Audios: {audios_info}")
-                    self._enviar_mensaje(f"     Subtítulos: {subs_info}")
-                    if limpiar_meta:
-                        self._enviar_mensaje("     Metadatos: Eliminados")
-                    self._registrar_actividad("exito", os.path.basename(input_file), f"Remux ({label})", f"Generado: {output_path.name}", item_key=f"combo:{output_path}")
+                    carpeta_salida = output_path.parent.name or str(output_path.parent)
+                    meta_txt = "Sin metadatos" if limpiar_meta else "Con metadatos"
+                    self._registrar_actividad(
+                        "exito",
+                        os.path.basename(input_file),
+                        f"Remux ({label})",
+                        f"Carpeta: {carpeta_salida}/ | {meta_txt}",
+                        item_key=f"combo:{output_path}",
+                        log_extra={
+                            "Salida": ruta_completa,
+                            "Audios": audios_info,
+                            "Subtítulos": subs_info,
+                            "Metadatos": "Eliminados" if limpiar_meta else "Conservados",
+                        },
+                    )
                 else:
                     err_detail = ""
                     if hasattr(result, "stderr") and result.stderr:
