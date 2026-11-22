@@ -56,7 +56,7 @@ from video_workstation.utils.logger import DailyLogger
 tk.Button = RoundedButton
 
 
-def resolver_ruta_binario(nombre_binario):
+def resolve_app_binary(nombre_binario):
     return _resolver_ruta_binario(nombre_binario, TOOLS_DIR)
 
 
@@ -64,12 +64,8 @@ class VWSuite:
     def __init__(self):
         self.root = tk.Tk()
         self.root.title("Video Workstation (VW)")
-        win_w, win_h = 1220, 820
+        self.root.withdraw()
         self.root.minsize(1100, 740)
-        self.root.update_idletasks()
-        pos_x = max(0, (self.root.winfo_screenwidth() - win_w) // 2)
-        pos_y = max(0, (self.root.winfo_screenheight() - win_h) // 2)
-        self.root.geometry(f"{win_w}x{win_h}+{pos_x}+{pos_y}")
 
         self.gpus_status = {}
         self.gpu_availability = {}
@@ -82,13 +78,13 @@ class VWSuite:
             "AMD (AMF) (No disponible)": "amd",
         }
 
-        self.config_ini = self._cargar_configuracion()
+        self.config_ini = self._load_config()
         self.ffmpeg_path = self.config_ini.get("Paths", "ffmpeg", fallback=DEFAULT_CONFIG["Paths"]["ffmpeg"])
         self.ffprobe_path = self.config_ini.get("Paths", "ffprobe", fallback=DEFAULT_CONFIG["Paths"]["ffprobe"])
         if not self.ffmpeg_path or not os.path.exists(self.ffmpeg_path):
-            self.ffmpeg_path = resolver_ruta_binario("ffmpeg.exe")
+            self.ffmpeg_path = resolve_app_binary("ffmpeg.exe")
         if not self.ffprobe_path or not os.path.exists(self.ffprobe_path):
-            self.ffprobe_path = resolver_ruta_binario("ffprobe.exe")
+            self.ffprobe_path = resolve_app_binary("ffprobe.exe")
 
         self.msg_queue = queue.Queue()
         self.procesando = False
@@ -108,16 +104,27 @@ class VWSuite:
         if self.theme_var.get() not in ("light", "dark"):
             self.theme_var.set("light")
 
-        self._crear_estilos()
-        self._crear_menu()
-        self._crear_ui()
-        self._aplicar_tema()
-        self._verificar_ffmpeg_inicio()
-        self._iniciar_deteccion_gpus()
+        self._create_styles()
+        self._create_menu()
+        self._create_ui()
+        self._apply_theme()
+        self._center_window(1220, 820)
+        self.root.deiconify()
+        self._check_ffmpeg_on_startup()
+        self._start_gpu_detection()
 
-        self.root.protocol("WM_DELETE_WINDOW", self.salir_aplicacion)
+        self.root.protocol("WM_DELETE_WINDOW", self.exit_application)
 
-    def _obtener_gpu_inicial(self):
+    def _center_window(self, width=1220, height=820):
+        self.root.update_idletasks()
+        screen_w = self.root.winfo_screenwidth()
+        screen_h = self.root.winfo_screenheight()
+        # Compensar barra de título + menú (~56px) y barra de tareas (~48px)
+        pos_x = max(0, (screen_w - width) // 2)
+        pos_y = max(0, (screen_h - 48 - (height + 56)) // 2)
+        self.root.geometry(f"{width}x{height}+{pos_x}+{pos_y}")
+
+    def _get_initial_gpu(self):
         val = self.config_ini.get("Options", "gpu_acel", fallback=None)
         if val is None:
             usar_nvidia = self.config_ini.getboolean("Options", "usar_nvidia", fallback=True)
@@ -127,25 +134,25 @@ class VWSuite:
             val = "nvidia"
         return val
 
-    def _cargar_configuracion(self):
+    def _load_config(self):
         config = configparser.ConfigParser()
         if os.path.exists(CONFIG_FILE):
             try:
                 config.read(CONFIG_FILE, encoding="utf-8")
                 if config.has_section("Queue"):
                     config.remove_section("Queue")
-                    self._guardar_configuracion(config)
+                    self._save_config(config)
             except Exception:
                 for section, values in DEFAULT_CONFIG.items():
                     config[section] = values
-                self._guardar_configuracion(config)
+                self._save_config(config)
         else:
             for section, values in DEFAULT_CONFIG.items():
                 config[section] = values
-            self._guardar_configuracion(config)
+            self._save_config(config)
         return config
 
-    def _guardar_configuracion(self, config=None):
+    def _save_config(self, config=None):
         cfg = config if config else self.config_ini
         try:
             with open(CONFIG_FILE, "w", encoding="utf-8") as f:
@@ -153,7 +160,7 @@ class VWSuite:
         except Exception as exc:
             print(f"Error guardando configuracion: {exc}")
 
-    def _actualizar_configuracion(self, *_):
+    def _update_config(self, *_):
         try:
             if "Paths" not in self.config_ini:
                 self.config_ini["Paths"] = {}
@@ -176,23 +183,23 @@ class VWSuite:
             if hasattr(self, "theme_var"):
                 self.config_ini["Options"]["tema"] = self.theme_var.get()
 
-            self._guardar_configuracion()
+            self._save_config()
         except Exception as exc:
             print(f"Error actualizando configuracion: {exc}")
 
-    def _on_buscar_subtitulos_toggle(self, *_):
-        self._actualizar_configuracion()
+    def _on_external_subs_toggle(self, *_):
+        self._update_config()
         if hasattr(self, "ffprobe_cache"):
             self.ffprobe_cache.clear()
-        self._limpiar_subgrupos()
+        self._clear_subgroups()
 
-    def _alternar_tema(self):
+    def _toggle_theme(self):
         nuevo = "dark" if self.theme_var.get() == "light" else "light"
         self.theme_var.set(nuevo)
-        self._actualizar_configuracion()
-        self._aplicar_tema()
+        self._update_config()
+        self._apply_theme()
 
-    def _crear_estilos(self):
+    def _create_styles(self):
         t = get_theme(self.theme_var.get() if hasattr(self, "theme_var") else "light")
         self.root.configure(bg=t["bg_app"])
         style = ttk.Style()
@@ -279,35 +286,35 @@ class VWSuite:
             relief="flat",
         )
 
-    def _crear_menu(self):
+    def _create_menu(self):
         menubar = tk.Menu(self.root)
         self.root.config(menu=menubar)
 
         archivo = tk.Menu(menubar, tearoff=0)
-        archivo.add_command(label="Salir", command=self.salir_aplicacion)
+        archivo.add_command(label="Salir", command=self.exit_application)
         menubar.add_cascade(label="Archivo", menu=archivo)
 
         config_menu = tk.Menu(menubar, tearoff=0)
-        config_menu.add_command(label="Cambiar ruta de FFmpeg...", command=self.cambiar_ruta_ffmpeg)
-        config_menu.add_command(label="Cambiar ruta de FFProbe...", command=self.cambiar_ruta_ffprobe)
-        config_menu.add_command(label="Preset de codificacion...", command=self.cambiar_preset)
+        config_menu.add_command(label="Cambiar ruta de FFmpeg...", command=self.change_ffmpeg_path)
+        config_menu.add_command(label="Cambiar ruta de FFProbe...", command=self.change_ffprobe_path)
+        config_menu.add_command(label="Preset de codificacion...", command=self.change_preset)
         config_menu.add_separator()
-        config_menu.add_command(label="Alternar tema claro / oscuro", command=self._alternar_tema)
+        config_menu.add_command(label="Alternar tema claro / oscuro", command=self._toggle_theme)
         config_menu.add_separator()
-        config_menu.add_command(label="Info de rutas FFmpeg/FFProbe", command=self.ver_info_ffmpeg)
+        config_menu.add_command(label="Info de rutas FFmpeg/FFProbe", command=self.show_ffmpeg_info)
         menubar.add_cascade(label="Configuracion", menu=config_menu)
 
         ayuda = tk.Menu(menubar, tearoff=0)
-        ayuda.add_command(label="Acerca de...", command=self.mostrar_acerca_de)
+        ayuda.add_command(label="Acerca de...", command=self.show_about)
         menubar.add_cascade(label="Ayuda", menu=ayuda)
 
-        self.root.bind("<F1>", lambda _: self.mostrar_acerca_de())
+        self.root.bind("<F1>", lambda _: self.show_about())
 
-    def _crear_ui(self):
+    def _create_ui(self):
         self.var_recursivo = tk.BooleanVar(value=self.config_ini.getboolean("Options", "buscar_recursivo", fallback=True))
         self.var_subcarpeta = tk.BooleanVar(value=self.config_ini.getboolean("Options", "crear_subcarpeta", fallback=False))
         self.var_nombre_subcarpeta = tk.StringVar(value=self.config_ini.get("Options", "nombre_subcarpeta", fallback=""))
-        self.gpu_acel_var = tk.StringVar(value=self._obtener_gpu_inicial())
+        self.gpu_acel_var = tk.StringVar(value=self._get_initial_gpu())
         self.decod_hw_var = tk.StringVar(value=self.config_ini.get("Options", "decod_hw", fallback="Software"))
         self.preset_var = tk.StringVar(value=self.config_ini.get("Options", "preset", fallback="medium"))
         salida_default = self.config_ini.get("Paths", "output_dir", fallback="").strip()
@@ -316,7 +323,7 @@ class VWSuite:
             if "Paths" not in self.config_ini:
                 self.config_ini["Paths"] = {}
             self.config_ini["Paths"]["output_dir"] = salida_default
-            self._guardar_configuracion()
+            self._save_config()
         self.salida_var = tk.StringVar(value=salida_default)
         self.var_eliminar_metadatos = tk.BooleanVar(
             value=self.config_ini.getboolean("Options", "eliminar_metadatos",
@@ -325,7 +332,7 @@ class VWSuite:
         self.var_buscar_subtitulos_externos = tk.BooleanVar(
             value=self.config_ini.getboolean("Options", "buscar_subtitulos_externos", fallback=True)
         )
-        self.var_buscar_subtitulos_externos.trace_add("write", self._on_buscar_subtitulos_toggle)
+        self.var_buscar_subtitulos_externos.trace_add("write", self._on_external_subs_toggle)
 
         for var in [
             self.var_recursivo,
@@ -337,7 +344,7 @@ class VWSuite:
             self.salida_var,
             self.var_eliminar_metadatos,
         ]:
-            var.trace_add("write", self._actualizar_configuracion)
+            var.trace_add("write", self._update_config)
 
         t = get_theme(self.theme_var.get())
         self._themed_frames = []
@@ -405,7 +412,7 @@ class VWSuite:
             btn_nav = tk.Button(
                 sidebar,
                 text=label_txt,
-                command=lambda k=key: self._mostrar_vista(k),
+                command=lambda k=key: self._show_view(k),
                 bg=t["bg_sidebar"],
                 fg=t["fg_secondary"],
                 relief=tk.FLAT,
@@ -429,9 +436,9 @@ class VWSuite:
         self.btn_eliminar_meta = tk.Button(
             sidebar,
             text="Limpiar metadatos",
-            command=self.eliminar_metadatos,
-            bg=t["btn_secondary_bg"],
-            fg=t["btn_secondary_fg"],
+            command=self.strip_metadata,
+            bg=t["bg_sidebar"],
+            fg=t["fg_secondary"],
             width=198,
             height=32,
             align="left",
@@ -443,9 +450,9 @@ class VWSuite:
         self.btn_eliminar_subs = tk.Button(
             sidebar,
             text="Quitar subtítulos",
-            command=self.eliminar_subtitulos,
-            bg=t["btn_secondary_bg"],
-            fg=t["btn_secondary_fg"],
+            command=self.strip_subtitles,
+            bg=t["bg_sidebar"],
+            fg=t["fg_secondary"],
             width=198,
             height=32,
             align="left",
@@ -457,9 +464,9 @@ class VWSuite:
         self.btn_renombrar = tk.Button(
             sidebar,
             text="Renombrar por lotes",
-            command=self.abrir_renombrador,
-            bg=t["btn_secondary_bg"],
-            fg=t["btn_secondary_fg"],
+            command=self.open_renamer,
+            bg=t["bg_sidebar"],
+            fg=t["fg_secondary"],
             width=198,
             height=32,
             align="left",
@@ -469,9 +476,9 @@ class VWSuite:
         self.btn_renombrar.pack(padx=16, pady=2)
 
         self._themed_buttons.extend([
-            (self.btn_eliminar_meta, "btn_secondary_bg", "btn_secondary_fg", "bg_sidebar"),
-            (self.btn_eliminar_subs, "btn_secondary_bg", "btn_secondary_fg", "bg_sidebar"),
-            (self.btn_renombrar, "btn_secondary_bg", "btn_secondary_fg", "bg_sidebar"),
+            (self.btn_eliminar_meta, "bg_sidebar", "fg_secondary", "bg_sidebar"),
+            (self.btn_eliminar_subs, "bg_sidebar", "fg_secondary", "bg_sidebar"),
+            (self.btn_renombrar, "bg_sidebar", "fg_secondary", "bg_sidebar"),
         ])
 
         # Controles persistentes en parte inferior del sidebar
@@ -490,7 +497,7 @@ class VWSuite:
         self.btn_procesar_cola = tk.Button(
             side_bottom,
             text="Procesar cola",
-            command=self.procesar_cola,
+            command=self.process_queue,
             bg=t["btn_primary"],
             fg="#FFFFFF",
             width=196,
@@ -502,9 +509,9 @@ class VWSuite:
         self.btn_verificar = tk.Button(
             side_bottom,
             text="Verificar archivos",
-            command=self.verificar_condiciones_carpeta,
-            bg=t["btn_success"],
-            fg="#FFFFFF",
+            command=self.verify_queue_files,
+            bg=t["btn_secondary_bg"],
+            fg=t["btn_secondary_fg"],
             width=196,
             height=32,
             font=("Segoe UI", 9, "bold"),
@@ -514,7 +521,7 @@ class VWSuite:
         self.btn_cancelar = tk.Button(
             side_bottom,
             text="Cancelar proceso",
-            command=self.cancelar,
+            command=self.cancel_processing,
             bg=t["btn_danger"],
             fg="#FFFFFF",
             width=196,
@@ -522,23 +529,23 @@ class VWSuite:
             state=tk.DISABLED,
             font=("Segoe UI", 9, "bold"),
         )
-        self.btn_cancelar.pack(pady=(0, 12))
+        self.btn_cancelar.pack(pady=(0, 6))
 
         self._themed_buttons.extend([
             (self.btn_procesar_cola, "btn_primary", "accent_fg", "bg_sidebar"),
-            (self.btn_verificar, "btn_success", "accent_fg", "bg_sidebar"),
+            (self.btn_verificar, "btn_secondary_bg", "btn_secondary_fg", "bg_sidebar"),
             (self.btn_cancelar, "btn_danger", "accent_fg", "bg_sidebar"),
         ])
 
         self.btn_theme = tk.Button(
             side_bottom,
             text="Tema: Oscuro" if self.theme_var.get() == "light" else "Tema: Claro",
-            command=self._alternar_tema,
+            command=self._toggle_theme,
             bg=t["btn_secondary_bg"],
             fg=t["btn_secondary_fg"],
             width=196,
-            height=30,
-            font=("Segoe UI", 8, "bold"),
+            height=32,
+            font=("Segoe UI", 9, "bold"),
         )
         self.btn_theme.pack()
         self._themed_buttons.append((self.btn_theme, "btn_secondary_bg", "btn_secondary_fg", "bg_sidebar"))
@@ -612,13 +619,13 @@ class VWSuite:
         acciones.pack(fill=tk.X, padx=16, pady=(0, 14))
         self._themed_frames.append((acciones, "bg_surface", None))
 
-        b_add = self._btn(acciones, "Agregar archivos", self.seleccionar_archivos, t["btn_primary"])
+        b_add = self._btn(acciones, "Agregar archivos", self.select_files, t["btn_primary"])
         b_add.pack(side=tk.LEFT, padx=(0, 6))
-        b_dir = self._btn(acciones, "Cargar carpeta", self.cargar_carpeta, t["btn_primary"])
+        b_dir = self._btn(acciones, "Cargar carpeta", self.load_folder, t["btn_primary"])
         b_dir.pack(side=tk.LEFT, padx=(0, 6))
-        b_rem = self._btn(acciones, "Quitar selección", self.eliminar_seleccionados, t["btn_warning"])
+        b_rem = self._btn(acciones, "Quitar selección", self.remove_selected_files, t["btn_warning"])
         b_rem.pack(side=tk.LEFT, padx=(0, 6))
-        b_clr = self._btn(acciones, "Vaciar cola", self.limpiar_lista, t["btn_danger"])
+        b_clr = self._btn(acciones, "Vaciar cola", self.clear_queue, t["btn_danger"])
         b_clr.pack(side=tk.LEFT, padx=(0, 12))
         self._themed_buttons.extend([
             (b_add, "btn_primary", "accent_fg", "bg_surface"),
@@ -668,7 +675,7 @@ class VWSuite:
         ent_salida.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 8), ipady=3)
         self._themed_entries.append(ent_salida)
 
-        b_sel = self._btn(r_out, "Seleccionar", self.seleccionar_directorio, t["btn_info"])
+        b_sel = self._btn(r_out, "Seleccionar", self.select_output_directory, t["btn_info"])
         b_sel.config(width=12)
         b_sel.pack(side=tk.LEFT)
         self._themed_buttons.append((b_sel, "btn_info", "accent_fg", "bg_surface"))
@@ -687,7 +694,7 @@ class VWSuite:
         self.cb_nombre_subcarpeta = ttk.Combobox(r_sub, textvariable=self.var_nombre_subcarpeta, values=presets_data, width=24)
         self.cb_nombre_subcarpeta.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 8))
 
-        btn_build = self._btn(r_sub, "Configurar", self._abrir_constructor_rutas, t["btn_primary"])
+        btn_build = self._btn(r_sub, "Configurar", self._open_path_builder, t["btn_primary"])
         btn_build.config(width=12)
         btn_build.pack(side=tk.LEFT)
         self._themed_buttons.append((btn_build, "btn_primary", "accent_fg", "bg_surface"))
@@ -768,11 +775,11 @@ class VWSuite:
         acciones_omitidos.pack(fill=tk.X, padx=16, pady=(0, 14))
         self._themed_frames.append((acciones_omitidos, "bg_surface", None))
 
-        b_reinc = self._btn(acciones_omitidos, "Reincorporar", self.reincorporar_omitidos, t["btn_success"])
+        b_reinc = self._btn(acciones_omitidos, "Reincorporar", self.requeue_skipped, t["btn_success"])
         b_reinc.pack(side=tk.LEFT, padx=(0, 6))
-        b_orem = self._btn(acciones_omitidos, "Quitar selección", self.eliminar_omitidos_seleccionados, t["btn_warning"])
+        b_orem = self._btn(acciones_omitidos, "Quitar selección", self.remove_selected_skipped, t["btn_warning"])
         b_orem.pack(side=tk.LEFT, padx=(0, 6))
-        b_oclr = self._btn(acciones_omitidos, "Vaciar lista", self.limpiar_omitidos, t["btn_danger"])
+        b_oclr = self._btn(acciones_omitidos, "Vaciar lista", self.clear_skipped, t["btn_danger"])
         b_oclr.pack(side=tk.LEFT)
         self._themed_buttons.extend([
             (b_reinc, "btn_success", "accent_fg", "bg_surface"),
@@ -813,7 +820,7 @@ class VWSuite:
         self.btn_ver_log = tk.Button(
             act_header,
             text="Ver log detallado",
-            command=self._abrir_log_diario,
+            command=self._open_daily_log,
             bg=t["btn_secondary_bg"],
             fg=t["btn_secondary_fg"],
             relief=tk.FLAT,
@@ -866,7 +873,7 @@ class VWSuite:
             w = event.widget
             if isinstance(w, tk.Toplevel) and not getattr(w, "_vw_themed", False):
                 w._vw_themed = True
-                self._aplicar_tema_dialogo(w)
+                self._apply_dialog_theme(w)
 
         self.root.bind_class("Toplevel", "<Map>", _al_mapear_toplevel, add="+")
 
@@ -885,7 +892,7 @@ class VWSuite:
             "omitidos": "Omitidos / Errores",
             "actividad": "Actividad y Registro",
         }
-        self._mostrar_vista("cola")
+        self._show_view("cola")
 
         try:
             if os.path.exists(QUEUE_FILE):
@@ -904,9 +911,9 @@ class VWSuite:
         except Exception as e:
             print(f"Error al cargar cola persistida: {e}")
 
-        self._actualizar_contadores_colas()
+        self._update_queue_counters()
 
-    def _mostrar_vista(self, vista_key):
+    def _show_view(self, vista_key):
         self._current_view = vista_key
         for key, frame in self._views.items():
             if key == vista_key:
@@ -915,9 +922,9 @@ class VWSuite:
                 frame.pack_forget()
         if hasattr(self, "lbl_view_title"):
             self.lbl_view_title.config(text=self._view_titles.get(vista_key, ""))
-        self._actualizar_nav_estilos()
+        self._update_nav_styles()
 
-    def _actualizar_nav_estilos(self):
+    def _update_nav_styles(self):
         t = get_theme(self.theme_var.get())
         if not hasattr(self, "_nav_buttons"):
             return
@@ -929,9 +936,9 @@ class VWSuite:
                 parent_bg=t["bg_sidebar"],
             )
 
-    def _aplicar_tema(self):
+    def _apply_theme(self):
         t = get_theme(self.theme_var.get())
-        self._crear_estilos()
+        self._create_styles()
 
         if hasattr(self, "_lbl_brand_badge"):
             self._lbl_brand_badge.config(bg=t["accent"], fg="#FFFFFF")
@@ -1000,9 +1007,9 @@ class VWSuite:
         self.activity_tree.tag_configure("error", foreground=t["danger"], background=t["danger_bg"])
         self.activity_tree.tag_configure("procesando", foreground=t["info"], background=t["info_bg"])
         self.activity_tree.tag_configure("aviso", foreground=t["warning"], background=t["warning_bg"])
-        self._actualizar_nav_estilos()
+        self._update_nav_styles()
 
-    def _aplicar_tema_dialogo(self, win):
+    def _apply_dialog_theme(self, win):
         """Aplica la paleta activa (clara u oscura) de forma recursiva a cualquier ventana secundaria."""
         if not win or not win.winfo_exists():
             return
@@ -1119,7 +1126,7 @@ class VWSuite:
 
         _recorrer(win, t["bg_app"])
 
-    def _actualizar_contadores_colas(self):
+    def _update_queue_counters(self):
         cant_activos = len([f for f in self.lista.get(0, tk.END) if f and str(f).strip()])
         cant_omitidos = len([f for f in self.lista_omitidos.get(0, tk.END) if f and str(f).strip()])
         if hasattr(self, "_nav_buttons"):
@@ -1147,14 +1154,14 @@ class VWSuite:
             font=("Segoe UI", 9, "bold"),
         )
 
-    def _obtener_ruta_log_diario(self):
+    def _get_daily_log_path(self):
         return self.daily_logger.get_daily_path()
 
-    def _escribir_log_archivo(self, msg, separador=False):
+    def _write_log_file(self, msg, separador=False):
         self.daily_logger.write(msg, separator=separador)
 
-    def _abrir_log_diario(self):
-        ruta_log = self._obtener_ruta_log_diario()
+    def _open_daily_log(self):
+        ruta_log = self._get_daily_log_path()
         objetivo = ruta_log if os.path.exists(ruta_log) else LOGS_DIR
         try:
             if sys.platform.startswith("win"):
@@ -1166,10 +1173,10 @@ class VWSuite:
         except Exception as exc:
             messagebox.showerror("Error", f"No se pudo abrir el registro:\n{exc}")
 
-    def _enviar_mensaje(self, msg):
-        self._escribir_log_archivo(msg)
+    def _log_message(self, msg):
+        self._write_log_file(msg)
 
-    def _registrar_actividad(self, estado, video, accion, detalle="", item_key=None, log_extra=None):
+    def _record_activity(self, estado, video, accion, detalle="", item_key=None, log_extra=None):
         if estado != "procesando":
             lineas = [f"[{estado.upper()}] {accion}  |  {video}"]
             if detalle:
@@ -1177,10 +1184,10 @@ class VWSuite:
             if log_extra:
                 for k, v in log_extra.items():
                     lineas.append(f"  {k}: {v}")
-            self._escribir_log_archivo("\n".join(lineas))
+            self._write_log_file("\n".join(lineas))
         self.msg_queue.put(("ACTIVIDAD", estado, video, accion, detalle, item_key))
 
-    def _actualizar_actividad_ui(self, estado, video, accion, detalle, item_key=None):
+    def _update_activity_ui(self, estado, video, accion, detalle, item_key=None):
         etiquetas = {
             "procesando": "Procesando",
             "exito": "Éxito",
@@ -1212,7 +1219,7 @@ class VWSuite:
         self.activity_summary_label.config(text=f"Éxitos: {self._act_ok}  |  Errores: {self._act_err}")
         self.activity_tree.see(item_id)
 
-    def _actualizar_ui(self):
+    def _poll_ui_queue(self):
         try:
             while True:
                 msg = self.msg_queue.get_nowait()
@@ -1273,12 +1280,12 @@ class VWSuite:
 
                             self.archivos_en_proceso = []
 
-                            self._actualizar_contadores_colas()
+                            self._update_queue_counters()
 
                             if failed_files_norm:
-                                self._mostrar_vista("omitidos")
+                                self._show_view("omitidos")
 
-                        self._limpiar_subgrupos()
+                        self._clear_subgroups()
 
                         title = "Proceso cancelado" if fue_cancelado else "Completado"
                         desc = "El procesamiento fue cancelado por el usuario." if fue_cancelado else "Proceso terminado."
@@ -1286,29 +1293,29 @@ class VWSuite:
 
                         total = ok + fail
                         if total > 1 and fail > 0 and errores:
-                            self._mostrar_resumen_errores(errores)
+                            self._show_error_summary(errores)
                     elif msg[0] == "ACTIVIDAD":
                         _, estado, video, accion, detalle, item_key = msg
-                        self._actualizar_actividad_ui(estado, video, accion, detalle, item_key)
+                        self._update_activity_ui(estado, video, accion, detalle, item_key)
                     elif msg[0] == "SELECTOR_PISTAS":
                         _, info, filename, q = msg
                         if self.cancelar_procesamiento:
                             q.put({"ok": False, "audio": None, "subtitle": None, "aplicar_todos": False})
                         else:
-                            q.put(self._mostrar_selector_pistas(info, filename))
+                            q.put(self._show_track_selector(info, filename))
                     elif msg[0] == "SELECTOR_COMBINACIONES":
                         _, info, filename, subgrupo_label, q = msg
                         if self.cancelar_procesamiento:
                             q.put({"ok": False, "combinaciones": [], "aplicar_todos": False})
                         else:
-                            q.put(self._mostrar_selector_combinaciones(info, filename, subgrupo_label))
+                            q.put(self._show_combination_selector(info, filename, subgrupo_label))
         except queue.Empty:
             pass
 
         if self.procesando or not self.msg_queue.empty():
-            self.root.after(100, self._actualizar_ui)
+            self.root.after(100, self._poll_ui_queue)
 
-    def _mover_a_omitidos(self, archivos):
+    def _move_to_skipped(self, archivos):
         archivos_set = set(archivos)
 
         all_items = list(self.lista.get(0, tk.END))
@@ -1322,10 +1329,10 @@ class VWSuite:
             if f not in existentes:
                 self.lista_omitidos.insert(tk.END, f)
 
-        self._actualizar_contadores_colas()
-        self._mostrar_vista("omitidos")
+        self._update_queue_counters()
+        self._show_view("omitidos")
 
-    def reincorporar_omitidos(self):
+    def requeue_skipped(self):
         sel = self.lista_omitidos.curselection()
         if not sel:
             messagebox.showwarning("Sin seleccion", "Selecciona elementos en la lista de omitidos", parent=self.root)
@@ -1341,25 +1348,25 @@ class VWSuite:
             if item not in existentes:
                 self.lista.insert(tk.END, item)
 
-        self._actualizar_contadores_colas()
-        self._limpiar_subgrupos()
-        self._mostrar_vista("cola")
+        self._update_queue_counters()
+        self._clear_subgroups()
+        self._show_view("cola")
 
-    def eliminar_omitidos_seleccionados(self):
+    def remove_selected_skipped(self):
         sel = self.lista_omitidos.curselection()
         if not sel:
             messagebox.showwarning("Sin seleccion", "Selecciona elementos en la lista de omitidos", parent=self.root)
             return
         for i in reversed(sel):
             self.lista_omitidos.delete(i)
-        self._actualizar_contadores_colas()
+        self._update_queue_counters()
 
-    def limpiar_omitidos(self):
+    def clear_skipped(self):
         if self.lista_omitidos.size() == 0:
             return
         if messagebox.askyesno("Confirmar", "Deseas limpiar todos los archivos omitidos?", parent=self.root):
             self.lista_omitidos.delete(0, tk.END)
-            self._actualizar_contadores_colas()
+            self._update_queue_counters()
 
     def _set_running_state(self, running):
         self.btn_procesar_cola.config(state=tk.DISABLED if running else tk.NORMAL)
@@ -1387,7 +1394,7 @@ class VWSuite:
 
         result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace", startupinfo=startupinfo)
         if result.returncode != 0:
-            self._enviar_mensaje(f"Error ffprobe: {result.stderr[:220]}")
+            self._log_message(f"Error ffprobe: {result.stderr[:220]}")
             return None
 
         try:
@@ -1395,14 +1402,14 @@ class VWSuite:
             if "streams" not in data:
                 return None
             if getattr(self, "var_buscar_subtitulos_externos", None) is None or self.var_buscar_subtitulos_externos.get():
-                self._adjuntar_subtitulos_externos(filepath, data)
+                self._attach_external_subtitles(filepath, data)
             if hasattr(self, "ffprobe_cache"):
                 self.ffprobe_cache[filepath] = data
             return data
         except json.JSONDecodeError:
             return None
 
-    def _adjuntar_subtitulos_externos(self, filepath, data):
+    def _attach_external_subtitles(self, filepath, data):
         if not data or "streams" not in data:
             return
         data["streams"] = [s for s in data["streams"] if not s.get("is_external")]
@@ -1429,7 +1436,7 @@ class VWSuite:
             }
             data["streams"].append(ext_stream)
 
-    def _invalidar_cache_archivo(self, filepath):
+    def _invalidate_file_cache(self, filepath):
         if not hasattr(self, "ffprobe_cache"):
             return
         filepath_norm = os.path.abspath(os.path.normpath(filepath))
@@ -1443,7 +1450,7 @@ class VWSuite:
             if lower_norm in self.ffprobe_cache:
                 del self.ffprobe_cache[lower_norm]
 
-    def _obtener_firma_idiomas(self, info):
+    def _get_language_signature(self, info):
         if not info or "streams" not in info:
             return ((), ())
         audio_streams = [s for s in info["streams"] if s.get("codec_type") == "audio"]
@@ -1452,7 +1459,7 @@ class VWSuite:
         sub_langs = tuple((s.get("tags") or {}).get("language", "und").lower() for s in subtitle_streams)
         return (audio_langs, sub_langs)
 
-    def _formatear_resumen_idiomas(self, langs, max_items=5):
+    def _format_language_summary(self, langs, max_items=5):
         if not langs:
             return "NINGUNO"
         unicos = list(dict.fromkeys(l.upper() for l in langs if l))
@@ -1464,19 +1471,19 @@ class VWSuite:
         restantes = len(unicos) - max_items
         return f"{visibles} (+{restantes} más)"
 
-    def _encontrar_firma_compatible(self, firma):
+    def _find_compatible_signature(self, firma):
         if hasattr(self, "combinaciones_por_grupo") and firma in self.combinaciones_por_grupo:
             return firma
         return None
 
-    def _verificar_ffmpeg_inicio(self):
+    def _check_ffmpeg_on_startup(self):
         if not (self.ffmpeg_path and os.path.exists(self.ffmpeg_path)):
-            self.ffmpeg_path = resolver_ruta_binario("ffmpeg.exe")
+            self.ffmpeg_path = resolve_app_binary("ffmpeg.exe")
         if not (self.ffprobe_path and os.path.exists(self.ffprobe_path)):
-            self.ffprobe_path = resolver_ruta_binario("ffprobe.exe")
+            self.ffprobe_path = resolve_app_binary("ffprobe.exe")
 
         if os.path.exists(self.ffmpeg_path) and os.path.exists(self.ffprobe_path):
-            self._actualizar_configuracion()
+            self._update_config()
             return
 
         messagebox.showwarning(
@@ -1484,9 +1491,9 @@ class VWSuite:
             "No se detectaron ffmpeg.exe y ffprobe.exe automáticamente.\n\n"
             "Puedes colocarlos en la carpeta 'tools/' junto a VW para modo portátil o seleccionarlos manualmente.",
         )
-        self.cambiar_ruta_ffmpeg()
+        self.change_ffmpeg_path()
         if not os.path.exists(self.ffprobe_path):
-            self.cambiar_ruta_ffprobe()
+            self.change_ffprobe_path()
 
     def _on_gpu_change(self):
         preset_actual = self.preset_var.get()
@@ -1494,7 +1501,7 @@ class VWSuite:
         if nuevo != preset_actual:
             self.preset_var.set(nuevo)
 
-    def _nvidia_disponible(self):
+    def _is_nvidia_available(self):
         return self._check_encoder("h264_nvenc")
 
     def _check_encoder(self, encoder):
@@ -1544,11 +1551,11 @@ class VWSuite:
         except Exception as exc:
             return False, f"Error: {exc}"
 
-    def _iniciar_deteccion_gpus(self):
-        self._enviar_mensaje("Iniciando detección de hardware gráfico...")
-        threading.Thread(target=self._detectar_gpus_thread, daemon=True).start()
+    def _start_gpu_detection(self):
+        self._log_message("Iniciando detección de hardware gráfico...")
+        threading.Thread(target=self._detect_gpus_worker, daemon=True).start()
 
-    def _detectar_gpus_thread(self):
+    def _detect_gpus_worker(self):
         nv_ok, nv_msg = self._check_encoder("h264_nvenc")
         intel_ok, intel_msg = self._check_encoder("h264_qsv")
         amd_ok, amd_msg = self._check_encoder("h264_amf")
@@ -1559,13 +1566,13 @@ class VWSuite:
             "amd": (amd_ok, amd_msg)
         }
 
-        self._enviar_mensaje(f"Detección GPU - NVIDIA NVENC: {'OK' if nv_ok else 'No disponible (' + nv_msg + ')'}")
-        self._enviar_mensaje(f"Detección GPU - Intel QSV: {'OK' if intel_ok else 'No disponible (' + intel_msg + ')'}")
-        self._enviar_mensaje(f"Detección GPU - AMD AMF: {'OK' if amd_ok else 'No disponible (' + amd_msg + ')'}")
+        self._log_message(f"Detección GPU - NVIDIA NVENC: {'OK' if nv_ok else 'No disponible (' + nv_msg + ')'}")
+        self._log_message(f"Detección GPU - Intel QSV: {'OK' if intel_ok else 'No disponible (' + intel_msg + ')'}")
+        self._log_message(f"Detección GPU - AMD AMF: {'OK' if amd_ok else 'No disponible (' + amd_msg + ')'}")
 
-        self.root.after(0, self._actualizar_selector_gpus_ui)
+        self.root.after(0, self._update_gpu_selector_ui)
 
-    def _actualizar_selector_gpus_ui(self):
+    def _update_gpu_selector_ui(self):
         values = []
         available_keys = []
         self.gpu_availability = {}
@@ -1585,9 +1592,9 @@ class VWSuite:
         self.cb_gpu.config(values=values, state="readonly")
         if self.gpu_acel_var.get() not in available_keys:
             self.gpu_acel_var.set(available_keys[0])
-        self._sincronizar_combobox_con_variable()
+        self._sync_gpu_combobox()
 
-    def _sincronizar_combobox_con_variable(self):
+    def _sync_gpu_combobox(self):
         current_val = self.gpu_acel_var.get()
         for lbl in self.cb_gpu["values"]:
             if self.gpu_map_display_to_val.get(lbl) == current_val:
@@ -1606,13 +1613,13 @@ class VWSuite:
                 f"El codificador seleccionado ({selected_lbl}) no está disponible o no se pudo inicializar en su sistema.\nDetalle: {status[1]}\n\nSe restablecerá la selección anterior.",
                 parent=self.root
             )
-            self._sincronizar_combobox_con_variable()
+            self._sync_gpu_combobox()
             return
 
         self.gpu_acel_var.set(gpu_key)
         self._on_gpu_change()
 
-    def _mostrar_selector_pistas(self, info, filename):
+    def _show_track_selector(self, info, filename):
         audio_streams = [s for s in info["streams"] if s.get("codec_type") == "audio"]
         subtitle_streams = [s for s in info["streams"] if s.get("codec_type") == "subtitle"]
 
@@ -1747,10 +1754,10 @@ class VWSuite:
             else:
                 if self.cancelar_procesamiento:
                     return resultado
-                return self._mostrar_selector_pistas(info, filename)
+                return self._show_track_selector(info, filename)
         return resultado
 
-    def _mostrar_selector_combinaciones(self, info, filename, subgrupo_label=None, modo_previo=False):
+    def _show_combination_selector(self, info, filename, subgrupo_label=None, modo_previo=False):
         audio_streams = [s for s in info["streams"] if s.get("codec_type") == "audio"]
         subtitle_streams = [s for s in info["streams"] if s.get("codec_type") == "subtitle"]
 
@@ -1777,42 +1784,75 @@ class VWSuite:
         except Exception:
             pass
 
+        t = get_theme(self.theme_var.get())
+        dialog.configure(bg=t["bg_app"])
+        dialog._vw_themed = True
         resultado = {"ok": False, "combinaciones": [], "aplicar_todos": False}
         combinaciones = []
 
+        hdr_card = tk.Frame(dialog, bg=t["bg_surface"], highlightthickness=1, highlightbackground=t["border"])
+        hdr_card.pack(fill=tk.X, padx=16, pady=(14, 10))
+        hdr_in = tk.Frame(hdr_card, bg=t["bg_surface"])
+        hdr_in.pack(fill=tk.X, padx=14, pady=10)
+        tk.Label(hdr_in, text="VW", font=("Segoe UI", 10, "bold"), bg=t["accent"], fg="#FFFFFF", padx=7, pady=2).pack(side=tk.LEFT)
+        hdr_txt = tk.Frame(hdr_in, bg=t["bg_surface"])
+        hdr_txt.pack(side=tk.LEFT, padx=(10, 0), fill=tk.X, expand=True)
         if subgrupo_label:
-            tk.Label(dialog, text=subgrupo_label, font=("Segoe UI", 11, "bold"), fg="#2D9CDB", wraplength=860, justify=tk.CENTER).pack(pady=(8, 2))
-            tk.Label(dialog, text="Marca las pistas deseadas y pulsa Aceptar (o agrégalas como versiones múltiples).", font=("Segoe UI", 9)).pack(pady=(0, 6))
+            tk.Label(hdr_txt, text=subgrupo_label, font=("Segoe UI", 10, "bold"), bg=t["bg_surface"], fg=t["accent"], anchor=tk.W, wraplength=760, justify=tk.LEFT).pack(anchor=tk.W)
+            tk.Label(hdr_txt, text="Marca las pistas deseadas y pulsa Aceptar (o agrégalas como versiones múltiples).", font=("Segoe UI", 8), bg=t["bg_surface"], fg=t["fg_muted"]).pack(anchor=tk.W)
         else:
-            tk.Label(dialog, text="Marca las pistas deseadas y pulsa Aceptar", font=("Segoe UI", 10, "bold")).pack(pady=8)
+            tk.Label(hdr_txt, text="Marca las pistas deseadas y pulsa Aceptar", font=("Segoe UI", 10, "bold"), bg=t["bg_surface"], fg=t["fg_primary"]).pack(anchor=tk.W)
 
         # Empaquetar la barra inferior primero para garantizar que los botones Aceptar/Cancelar nunca queden fuera de pantalla
-        bottom = tk.Frame(dialog)
-        bottom.pack(side=tk.BOTTOM, pady=10)
+        bottom = tk.Frame(dialog, bg=t["bg_app"])
+        bottom.pack(side=tk.BOTTOM, pady=(4, 14))
 
         apply_all = tk.BooleanVar(value=True if modo_previo else False)
         chk_text = "Aplicar esta configuración a todos los archivos de este subgrupo" if modo_previo else "Aplicar esta configuración a todos los similares (mismo subgrupo)"
-        tk.Checkbutton(dialog, text=chk_text, variable=apply_all).pack(side=tk.BOTTOM, pady=(0, 4))
+        tk.Checkbutton(
+            dialog,
+            text=chk_text,
+            variable=apply_all,
+            bg=t["bg_app"],
+            fg=t["fg_secondary"],
+            activebackground=t["bg_app"],
+            activeforeground=t["fg_primary"],
+            selectcolor=t["bg_input"],
+        ).pack(side=tk.BOTTOM, pady=(4, 2))
 
-        body = tk.Frame(dialog)
-        body.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=10, pady=(2, 0))
+        body = tk.Frame(dialog, bg=t["bg_app"])
+        body.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=16, pady=(0, 8))
 
-        left = tk.LabelFrame(body, text="Pistas disponibles")
-        left.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 6))
+        left = tk.Frame(body, bg=t["bg_surface"], highlightthickness=1, highlightbackground=t["border"])
+        left.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 8))
+
+        tk.Label(left, text="Pistas disponibles", font=("Segoe UI", 10, "bold"), bg=t["bg_surface"], fg=t["fg_primary"]).pack(anchor=tk.W, padx=14, pady=(12, 8))
+        tk.Frame(left, height=1, bg=t["border"]).pack(fill=tk.X, padx=14, pady=(0, 8))
 
         var_hardsub = tk.BooleanVar(value=False)
-        cb_hardsub = tk.Checkbutton(left, text="Hacer hardsub (Incrustar)", variable=var_hardsub, font=("Segoe UI", 9, "bold"), fg="#E74C3C", activeforeground="#E74C3C", state=tk.DISABLED)
-        cb_hardsub.pack(side=tk.BOTTOM, anchor=tk.W, padx=8, pady=(4, 6))
+        cb_hardsub = tk.Checkbutton(
+            left,
+            text="Hacer hardsub (Incrustar)",
+            variable=var_hardsub,
+            font=("Segoe UI", 9, "bold"),
+            bg=t["bg_surface"],
+            fg=t["danger"],
+            activebackground=t["bg_surface"],
+            activeforeground=t["danger"],
+            selectcolor=t["bg_input"],
+            state=tk.DISABLED,
+        )
+        cb_hardsub.pack(side=tk.BOTTOM, anchor=tk.W, padx=14, pady=(6, 10))
 
-        tracks_container = tk.Frame(left)
-        tracks_container.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+        tracks_container = tk.Frame(left, bg=t["bg_surface"])
+        tracks_container.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=10)
 
-        canvas = tk.Canvas(tracks_container, highlightthickness=0)
-        scrollbar = ttk.Scrollbar(tracks_container, orient="vertical", command=canvas.yview)
+        canvas = tk.Canvas(tracks_container, bg=t["bg_surface"], highlightthickness=0)
+        scrollbar = ttk.Scrollbar(tracks_container, orient="vertical", command=canvas.yview, style="Vertical.TScrollbar")
         canvas.configure(yscrollcommand=scrollbar.set)
         canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        scrollable_frame = tk.Frame(canvas)
+        scrollable_frame = tk.Frame(canvas, bg=t["bg_surface"])
         canvas_window = canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
 
         def _actualizar_scroll_combos(event=None):
@@ -1877,7 +1917,7 @@ class VWSuite:
                 var_hardsub.set(False)
                 cb_hardsub.config(state=tk.DISABLED, text="Hacer hardsub (Incrustar)")
 
-        tk.Label(scrollable_frame, text="Audio", fg="#1E8449", font=("Segoe UI", 9, "bold")).pack(anchor=tk.W, padx=6, pady=(6, 2))
+        tk.Label(scrollable_frame, text="Audio", bg=t["bg_surface"], fg=t["success"], font=("Segoe UI", 9, "bold")).pack(anchor=tk.W, padx=6, pady=(6, 2))
         for i, s in enumerate(audio_streams):
             tags = s.get("tags") or {}
             title = tags.get("title") or f"Audio {i + 1}"
@@ -1885,9 +1925,9 @@ class VWSuite:
             var = tk.BooleanVar(value=False)
             var.trace_add("write", lambda *_: actualizar_estado_hardsub())
             audio_vars.append((var, s))
-            tk.Checkbutton(scrollable_frame, text=f"{title} ({lang})", variable=var, anchor=tk.W).pack(fill=tk.X, padx=8, pady=2)
+            tk.Checkbutton(scrollable_frame, text=f"{title} ({lang})", variable=var, anchor=tk.W, bg=t["bg_surface"], fg=t["fg_primary"], activebackground=t["bg_surface"], activeforeground=t["fg_primary"], selectcolor=t["bg_input"]).pack(fill=tk.X, padx=8, pady=2)
 
-        tk.Label(scrollable_frame, text="Subtitulos", fg="#2980B9", font=("Segoe UI", 9, "bold")).pack(anchor=tk.W, padx=6, pady=(8, 2))
+        tk.Label(scrollable_frame, text="Subtítulos", bg=t["bg_surface"], fg=t["accent"], font=("Segoe UI", 9, "bold")).pack(anchor=tk.W, padx=6, pady=(8, 2))
         for i, s in enumerate(subtitle_streams):
             tags = s.get("tags") or {}
             title = tags.get("title") or f"Sub {i + 1}"
@@ -1895,12 +1935,15 @@ class VWSuite:
             var = tk.BooleanVar(value=False)
             var.trace_add("write", lambda *_: actualizar_estado_hardsub())
             sub_vars.append((var, s))
-            tk.Checkbutton(scrollable_frame, text=f"{title} ({lang})", variable=var, anchor=tk.W).pack(fill=tk.X, padx=8, pady=2)
+            tk.Checkbutton(scrollable_frame, text=f"{title} ({lang})", variable=var, anchor=tk.W, bg=t["bg_surface"], fg=t["fg_primary"], activebackground=t["bg_surface"], activeforeground=t["fg_primary"], selectcolor=t["bg_input"]).pack(fill=tk.X, padx=8, pady=2)
 
         dialog.after(50, _actualizar_scroll_combos)
 
-        right = tk.LabelFrame(body, text="Versiones a generar")
-        right.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(6, 0))
+        right = tk.Frame(body, bg=t["bg_surface"], highlightthickness=1, highlightbackground=t["border"])
+        right.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(8, 0))
+
+        tk.Label(right, text="Versiones a generar", font=("Segoe UI", 10, "bold"), bg=t["bg_surface"], fg=t["fg_primary"]).pack(anchor=tk.W, padx=14, pady=(12, 8))
+        tk.Frame(right, height=1, bg=t["border"]).pack(fill=tk.X, padx=14, pady=(0, 8))
 
         def refresh():
             lst.delete(0, tk.END)
@@ -1953,13 +1996,23 @@ class VWSuite:
                 del combinaciones[sel[0]]
                 refresh()
 
-        bt = tk.Frame(right)
-        bt.pack(side=tk.BOTTOM, fill=tk.X, padx=8, pady=6)
-        tk.Button(bt, text="Agregar versión adicional", command=agregar, bg="#27AE60", fg="white").pack(side=tk.LEFT, padx=4)
-        tk.Button(bt, text="Quitar", command=quitar, bg="#EB5757", fg="white").pack(side=tk.LEFT, padx=4)
+        bt = tk.Frame(right, bg=t["bg_surface"])
+        bt.pack(side=tk.BOTTOM, fill=tk.X, padx=14, pady=(6, 12))
+        tk.Button(bt, text="Agregar versión adicional", command=agregar, bg=t["btn_success"], fg="white").pack(side=tk.LEFT, padx=(0, 6))
+        tk.Button(bt, text="Quitar", command=quitar, bg=t["btn_danger"], fg="white").pack(side=tk.LEFT)
 
-        lst = tk.Listbox(right, font=("Consolas", 9))
-        lst.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=8, pady=(8, 4))
+        lst = tk.Listbox(
+            right,
+            font=("Consolas", 9),
+            bg=t["bg_subtle"],
+            fg=t["fg_primary"],
+            selectbackground=t["accent"],
+            selectforeground=t["accent_fg"],
+            highlightthickness=1,
+            highlightbackground=t["border"],
+            relief=tk.FLAT,
+        )
+        lst.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=14, pady=(0, 4))
 
         def aceptar():
             aud_sel = [s for var, s in audio_vars if var.get()]
@@ -2021,25 +2074,25 @@ class VWSuite:
             )
             if ans is True:
                 self.cancelar_procesamiento = True
-                self._limpiar_subgrupos()
+                self._clear_subgroups()
                 resultado["ok"] = False
             elif ans is False:
                 resultado["ok"] = False
             else:
                 if self.cancelar_procesamiento:
                     return resultado
-                return self._mostrar_selector_combinaciones(info, filename, subgrupo_label)
+                return self._show_combination_selector(info, filename, subgrupo_label)
         return resultado
 
-    def _obtener_combinaciones_a_generar(self, info, filename):
+    def _get_combinations_to_build(self, info, filename):
         if self.cancelar_procesamiento:
             return None
 
-        firma = self._obtener_firma_idiomas(info)
+        firma = self._get_language_signature(info)
 
-        signature_match = self._encontrar_firma_compatible(firma)
+        signature_match = self._find_compatible_signature(firma)
         if signature_match:
-            self._enviar_mensaje(f"  -> Aplicando configuración previamente guardada para el grupo de idiomas.")
+            self._log_message(f"  -> Aplicando configuración previamente guardada para el grupo de idiomas.")
             config_grupo = self.combinaciones_por_grupo[signature_match]
             combos = []
             for c in config_grupo:
@@ -2066,11 +2119,11 @@ class VWSuite:
             return None
 
         subgrupo_num = self.subgrupos.get(firma, 1)
-        audio_langs_str = self._formatear_resumen_idiomas(firma[0])
-        sub_langs_str = self._formatear_resumen_idiomas(firma[1])
+        audio_langs_str = self._format_language_summary(firma[0])
+        sub_langs_str = self._format_language_summary(firma[1])
         subgrupo_label = f"Subgrupo {subgrupo_num} (Audio: {audio_langs_str} | Subs: {sub_langs_str})"
 
-        self._enviar_mensaje(f"  -> Abriendo selección de versiones para el {subgrupo_label}...")
+        self._log_message(f"  -> Abriendo selección de versiones para el {subgrupo_label}...")
 
         q = queue.Queue()
         self.msg_queue.put(("SELECTOR_COMBINACIONES", info, filename, subgrupo_label, q))
@@ -2096,7 +2149,7 @@ class VWSuite:
 
         return r["combinaciones"]
 
-    def _generar_combinaciones(self, input_file, output_dir, info, combinaciones, errores):
+    def _build_combinations(self, input_file, output_dir, info, combinaciones, errores):
         subtitle_streams = [s for s in info["streams"] if s.get("codec_type") == "subtitle"]
         video_stem = Path(input_file).stem
 
@@ -2114,22 +2167,22 @@ class VWSuite:
 
             out_dir = Path(output_dir)
             if self.var_subcarpeta.get():
-                patron = self._resolver_patron_subcarpeta(input_file, info, label, audio_indices, sub_indices)
+                patron = self._resolve_subfolder_pattern(input_file, info, label, audio_indices, sub_indices)
                 out_dir = out_dir / Path(patron)
 
             out_dir.mkdir(parents=True, exist_ok=True)
             output_path = out_dir / f"{video_stem}.mp4"
-            self._invalidar_cache_archivo(output_path)
+            self._invalidate_file_cache(output_path)
 
             usar_hardsub = bool(combo.get("hardsub"))
             if usar_hardsub:
                 if _video_es_hdr(info):
-                    self._enviar_mensaje(f"  -> Aviso: Hardsub desactivado en '{label}' (video HDR; se hará remux sin pérdida para proteger el color).")
+                    self._log_message(f"  -> Aviso: Hardsub desactivado en '{label}' (video HDR; se hará remux sin pérdida para proteger el color).")
                     usar_hardsub = False
                 elif sub_indices:
                     sub_obj = next((st for st in subtitle_streams if st.get("index") == sub_indices[0]), None)
                     if sub_obj and (sub_obj.get("codec_name") or "").lower() in BITMAP_SUB_CODECS:
-                        self._enviar_mensaje(f"  -> Aviso: Hardsub desactivado en '{label}' (subtítulo bitmap no compatible con incrustación).")
+                        self._log_message(f"  -> Aviso: Hardsub desactivado en '{label}' (subtítulo bitmap no compatible con incrustación).")
                         usar_hardsub = False
 
             if usar_hardsub:
@@ -2138,8 +2191,8 @@ class VWSuite:
                 if not is_ok:
                     status = self.gpus_status.get(gpu, (False, "No disponible"))
                     err_msg = f"El codificador {gpu.upper()} no está disponible. Detalle: {status[1]}"
-                    self._enviar_mensaje(f"Error: {err_msg}. Saltando hardsub.")
-                    self._registrar_actividad("error", os.path.basename(input_file), f"Hardsub ({label})", err_msg, item_key=f"combo:{output_path}")
+                    self._log_message(f"Error: {err_msg}. Saltando hardsub.")
+                    self._record_activity("error", os.path.basename(input_file), f"Hardsub ({label})", err_msg, item_key=f"combo:{output_path}")
                     errores.append((input_file, f"Versión '{label}': {err_msg}"))
                     fail += 1
                     continue
@@ -2171,8 +2224,8 @@ class VWSuite:
                                 if lines_err:
                                     err_detail = f" Detalle: {' '.join(lines_err[-2:])}"
                             err_msg = f"Fallo al extraer/procesar subtítulo de la versión '{label}'.{err_detail}"
-                            self._enviar_mensaje(err_msg)
-                            self._registrar_actividad("error", os.path.basename(input_file), f"Hardsub ({label})", err_msg, item_key=f"combo:{output_path}")
+                            self._log_message(err_msg)
+                            self._record_activity("error", os.path.basename(input_file), f"Hardsub ({label})", err_msg, item_key=f"combo:{output_path}")
                             errores.append((input_file, f"Versión '{label}': {err_msg}"))
                             fail += 1
                             continue
@@ -2232,7 +2285,7 @@ class VWSuite:
                             *audio_settings, *meta_args, "-movflags", "+faststart", "-y", str(output_path)
                         ]
 
-                    self._registrar_actividad("procesando", os.path.basename(input_file), f"Hardsub ({label})", "Incrustando subtítulos...", item_key=f"combo:{output_path}")
+                    self._record_activity("procesando", os.path.basename(input_file), f"Hardsub ({label})", "Incrustando subtítulos...", item_key=f"combo:{output_path}")
                     result = self._run_subprocess_cancellable(cmd)
                     if result.returncode == 0:
                         ok += 1
@@ -2260,7 +2313,7 @@ class VWSuite:
                         subs_info = ", ".join(sub_langs) if sub_langs else "Ninguno"
                         carpeta_salida = output_path.parent.name or str(output_path.parent)
                         meta_txt = "Sin metadatos" if limpiar_meta else "Con metadatos"
-                        self._registrar_actividad(
+                        self._record_activity(
                             "exito",
                             os.path.basename(input_file),
                             f"Hardsub ({label})",
@@ -2280,8 +2333,8 @@ class VWSuite:
                             if lines_err:
                                 err_detail = f" Detalle: {' '.join(lines_err[-2:])}"
                         err_msg = f"Error de FFmpeg al codificar la versión hardsub (código de salida: {result.returncode}).{err_detail}"
-                        self._enviar_mensaje(err_msg)
-                        self._registrar_actividad("error", os.path.basename(input_file), f"Hardsub ({label})", err_msg, item_key=f"combo:{output_path}")
+                        self._log_message(err_msg)
+                        self._record_activity("error", os.path.basename(input_file), f"Hardsub ({label})", err_msg, item_key=f"combo:{output_path}")
                         errores.append((input_file, f"Versión '{label}': {err_msg}"))
                         fail += 1
                 finally:
@@ -2306,7 +2359,7 @@ class VWSuite:
                         sub_incluir.append(idx)
 
                 if excluidos:
-                    self._enviar_mensaje(f"Advertencia: {excluidos} subtítulos bitmap/no texto excluidos")
+                    self._log_message(f"Advertencia: {excluidos} subtítulos bitmap/no texto excluidos")
 
                 video_streams = [s for s in info["streams"] if s.get("codec_type") == "video"]
                 main_video_streams = [s for s in video_streams if not s.get("disposition", {}).get("attached_pic")]
@@ -2369,11 +2422,11 @@ class VWSuite:
 
                     cmd.extend([*meta_args, "-movflags", "+faststart", "-y", str(output_path)])
 
-                    self._registrar_actividad("procesando", os.path.basename(input_file), f"Remux ({label})", "Multiplexando pistas...", item_key=f"combo:{output_path}")
+                    self._record_activity("procesando", os.path.basename(input_file), f"Remux ({label})", "Multiplexando pistas...", item_key=f"combo:{output_path}")
                     result = self._run_subprocess_cancellable(cmd)
 
                     if result.returncode != 0 and sub_incluir:
-                        self._enviar_mensaje("  -> Advertencia: Falló multiplexado de subtítulos en MP4. Reintentando remux sin subtítulos...")
+                        self._log_message("  -> Advertencia: Falló multiplexado de subtítulos en MP4. Reintentando remux sin subtítulos...")
                         cmd_fallback = [self.ffmpeg_path, "-i", input_file]
                         for s in main_video_streams:
                             cmd_fallback.extend(["-map", f"0:{s['index']}"])
@@ -2427,7 +2480,7 @@ class VWSuite:
                     subs_info = ", ".join(sub_langs) if sub_langs else "Ninguno"
                     carpeta_salida = output_path.parent.name or str(output_path.parent)
                     meta_txt = "Sin metadatos" if limpiar_meta else "Con metadatos"
-                    self._registrar_actividad(
+                    self._record_activity(
                         "exito",
                         os.path.basename(input_file),
                         f"Remux ({label})",
@@ -2447,21 +2500,21 @@ class VWSuite:
                         if lines:
                             err_detail = f" Detalle: {' '.join(lines[-2:])}"
                     err_msg = f"Error de FFmpeg al copiar/remuxear la versión (código de salida: {result.returncode}).{err_detail}"
-                    self._enviar_mensaje(err_msg)
-                    self._registrar_actividad("error", os.path.basename(input_file), f"Remux ({label})", err_msg, item_key=f"combo:{output_path}")
+                    self._log_message(err_msg)
+                    self._record_activity("error", os.path.basename(input_file), f"Remux ({label})", err_msg, item_key=f"combo:{output_path}")
                     errores.append((input_file, f"Versión '{label}': {err_msg}"))
                     fail += 1
 
         return ok, fail
 
-    def _eliminar_pistas_procesamiento(self, archivo, output_dir, errores):
+    def _strip_tracks_processing(self, archivo, output_dir, errores):
         if self.cancelar_procesamiento:
             return False
 
         info = self._ffprobe_info(archivo)
         if info is None:
             err_msg = "No se pudo leer streams con ffprobe."
-            self._enviar_mensaje(err_msg)
+            self._log_message(err_msg)
             errores.append((archivo, err_msg))
             return False
 
@@ -2471,21 +2524,21 @@ class VWSuite:
         v = sum(1 for s in info["streams"] if s.get("codec_type") == "video")
         if v < 1:
             err_msg = "El archivo no contiene ninguna pista de video."
-            self._enviar_mensaje(err_msg)
+            self._log_message(err_msg)
             errores.append((archivo, err_msg))
             return False
 
-        combinaciones = self._obtener_combinaciones_a_generar(info, archivo)
+        combinaciones = self._get_combinations_to_build(info, archivo)
         if self.cancelar_procesamiento or combinaciones is None:
             if not self.cancelar_procesamiento:
                 err_msg = "Se canceló la selección de combinaciones."
-                self._enviar_mensaje(err_msg)
+                self._log_message(err_msg)
                 errores.append((archivo, err_msg))
             return False
 
-        return self._generar_combinaciones(archivo, output_dir, info, combinaciones, errores)
+        return self._build_combinations(archivo, output_dir, info, combinaciones, errores)
 
-    def _limpiar_subgrupos(self):
+    def _clear_subgroups(self):
         if hasattr(self, "subgrupos"):
             self.subgrupos.clear()
         else:
@@ -2497,14 +2550,14 @@ class VWSuite:
         self.combinaciones_a_aplicar = {"combinaciones": [], "aplicar_a_todos": False}
         self.pistas_config = {"audio_tag": None, "subtitle_tag": None, "aplicar_a_todos": False}
 
-    def _obtener_mapa_subgrupos(self, archivos):
+    def _get_subgroup_map(self, archivos):
         subgrupos_dict = {}
         subgrupo_counter = 1
         for archivo in archivos:
             info = self._ffprobe_info(archivo)
             if not info:
                 continue
-            firma = self._obtener_firma_idiomas(info)
+            firma = self._get_language_signature(info)
             if firma not in subgrupos_dict:
                 subgrupos_dict[firma] = {
                     "firma": firma,
@@ -2518,10 +2571,10 @@ class VWSuite:
                 subgrupos_dict[firma]["archivos"].append(archivo)
         return list(subgrupos_dict.values())
 
-    def _preconfigurar_subgrupos_cola(self, archivos, output_dir=None, forzar_reconfiguracion=False):
-        subgrupos_list = self._obtener_mapa_subgrupos(archivos)
+    def _preconfigure_queue_subgroups(self, archivos, output_dir=None, forzar_reconfiguracion=False):
+        subgrupos_list = self._get_subgroup_map(archivos)
         if not subgrupos_list:
-            self._limpiar_subgrupos()
+            self._clear_subgroups()
             return True
 
         if not hasattr(self, "combinaciones_por_grupo") or forzar_reconfiguracion:
@@ -2552,12 +2605,12 @@ class VWSuite:
 
             cant_archivos = len(sg["archivos"])
             txt_archivos = f"{cant_archivos} archivo" if cant_archivos == 1 else f"{cant_archivos} archivos"
-            audio_langs_str = self._formatear_resumen_idiomas(firma[0])
-            sub_langs_str = self._formatear_resumen_idiomas(firma[1])
+            audio_langs_str = self._format_language_summary(firma[0])
+            sub_langs_str = self._format_language_summary(firma[1])
             subgrupo_label = f"Subgrupo {sg['num']} de {total_sg} ({txt_archivos}) | Audio: {audio_langs_str} | Subs: {sub_langs_str}"
 
             while True:
-                r = self._mostrar_selector_combinaciones(
+                r = self._show_combination_selector(
                     sample_info,
                     sample_archivo,
                     subgrupo_label=subgrupo_label,
@@ -2582,7 +2635,7 @@ class VWSuite:
                             parent=self.root
                         )
                         if ans:
-                            self._limpiar_subgrupos()
+                            self._clear_subgroups()
                             return False
                         else:
                             ans_omitir = messagebox.askyesno(
@@ -2591,17 +2644,17 @@ class VWSuite:
                                 parent=self.root
                             )
                             if ans_omitir:
-                                self._mover_a_omitidos(sg["archivos"])
+                                self._move_to_skipped(sg["archivos"])
                                 break
                             else:
                                 continue
                     else:
-                        self._limpiar_subgrupos()
+                        self._clear_subgroups()
                         return False
 
         return True
 
-    def _thread_procesar_cola(self, archivos, output_dir):
+    def _process_queue_worker(self, archivos, output_dir):
         self.procesando = True
         self.cancelar_procesamiento = False
         self.combinaciones_a_aplicar = {"combinaciones": [], "aplicar_a_todos": False}
@@ -2614,7 +2667,7 @@ class VWSuite:
             for archivo in archivos:
                 info = self._ffprobe_info(archivo)
                 if info:
-                    firma = self._obtener_firma_idiomas(info)
+                    firma = self._get_language_signature(info)
                     if firma not in self.subgrupos:
                         self.subgrupos[firma] = subgrupo_counter
                         subgrupo_counter += 1
@@ -2623,18 +2676,18 @@ class VWSuite:
         fail = 0
         total = len(archivos)
         errores = []
-        self._enviar_mensaje("===== INICIO PROCESAMIENTO =====")
+        self._log_message("===== INICIO PROCESAMIENTO =====")
 
         fue_cancelado = False
         archivos_exitosos = []
         for i, archivo in enumerate(archivos, 1):
             if self.cancelar_procesamiento:
-                self._enviar_mensaje("Cancelado por usuario")
+                self._log_message("Cancelado por usuario")
                 fue_cancelado = True
                 break
             self.msg_queue.put(("PROGRESO", i, total))
-            self._enviar_mensaje(f"Archivo {i}/{total}: {os.path.basename(archivo)}")
-            result = self._eliminar_pistas_procesamiento(archivo, output_dir, errores)
+            self._log_message(f"Archivo {i}/{total}: {os.path.basename(archivo)}")
+            result = self._strip_tracks_processing(archivo, output_dir, errores)
 
             if self.cancelar_procesamiento:
                 fue_cancelado = True
@@ -2653,17 +2706,17 @@ class VWSuite:
             else:
                 fail += 1
 
-        self._enviar_mensaje("===== FIN PROCESAMIENTO =====")
+        self._log_message("===== FIN PROCESAMIENTO =====")
         self.msg_queue.put(("FINALIZADO", ok, fail, errores, fue_cancelado, archivos_exitosos))
         self.procesando = False
         self.cancelar_procesamiento = False
-        self._limpiar_subgrupos()
+        self._clear_subgroups()
 
-    def procesar_cola(self):
+    def process_queue(self):
         if self.procesando:
             messagebox.showwarning("En curso", "Ya hay un proceso activo")
             return
-        self._limpiar_subgrupos()
+        self._clear_subgroups()
         output = self.salida_var.get().strip()
         if not output:
             messagebox.showerror("Error", "Selecciona un directorio de salida")
@@ -2674,26 +2727,26 @@ class VWSuite:
             return
 
         def callback_iniciar(archivos_validos):
-            ok = self._preconfigurar_subgrupos_cola(archivos_validos, output_dir=output, forzar_reconfiguracion=True)
+            ok = self._preconfigure_queue_subgroups(archivos_validos, output_dir=output, forzar_reconfiguracion=True)
             if not ok:
-                self._limpiar_subgrupos()
+                self._clear_subgroups()
                 return
 
             archivos_a_procesar = [f for f in archivos_validos if f in set(self.lista.get(0, tk.END))]
             if not archivos_a_procesar:
                 messagebox.showwarning("Cola vacía", "No quedan archivos para procesar.")
-                self._limpiar_subgrupos()
+                self._clear_subgroups()
                 return
 
             self.archivos_en_proceso = list(archivos_a_procesar)
             self._clear_log_and_progress("Preparando procesamiento de cola...")
             self._set_running_state(True)
-            threading.Thread(target=self._thread_procesar_cola, args=(archivos_a_procesar, output), daemon=True).start()
-            self._actualizar_ui()
+            threading.Thread(target=self._process_queue_worker, args=(archivos_a_procesar, output), daemon=True).start()
+            self._poll_ui_queue()
 
-        self.pre_verificar_cola("procesar_cola", archivos, output, callback_iniciar)
+        self.precheck_queue("procesar_cola", archivos, output, callback_iniciar)
 
-    def pre_verificar_cola(self, tipo_proceso, archivos, output_dir, callback_exito):
+    def precheck_queue(self, tipo_proceso, archivos, output_dir, callback_exito):
         if tipo_proceso in ("procesar_cola",):
             if not os.path.exists(output_dir):
                 try:
@@ -2739,15 +2792,15 @@ class VWSuite:
                 infos[archivo] = info
 
             for archivo in archivos:
-                res = self._validar_archivo_pre_verificacion(archivo, tipo_proceso, output_dir, infos.get(archivo))
+                res = self._validate_file_for_precheck(archivo, tipo_proceso, output_dir, infos.get(archivo))
                 resultados.append(res)
 
             progreso.destroy()
-            self.root.after(0, lambda: self._procesar_resultados_pre_verificacion(resultados, tipo_proceso, archivos, callback_exito))
+            self.root.after(0, lambda: self._handle_precheck_results(resultados, tipo_proceso, archivos, callback_exito))
 
         threading.Thread(target=worker, daemon=True).start()
 
-    def _validar_archivo_pre_verificacion(self, archivo, tipo_proceso, output_dir, info=None):
+    def _validate_file_for_precheck(self, archivo, tipo_proceso, output_dir, info=None):
         res = {
             "archivo": archivo,
             "basename": os.path.basename(archivo),
@@ -2787,7 +2840,7 @@ class VWSuite:
 
         return res
 
-    def _procesar_resultados_pre_verificacion(self, resultados, tipo_proceso, archivos, callback_exito):
+    def _handle_precheck_results(self, resultados, tipo_proceso, archivos, callback_exito):
         con_errores = [r for r in resultados if r["has_error"]]
         con_advertencias = [r for r in resultados if r["has_warning"]]
 
@@ -2795,9 +2848,9 @@ class VWSuite:
             callback_exito(archivos)
             return
 
-        self._mostrar_reporte_pre_verificacion(resultados, tipo_proceso, archivos, callback_exito)
+        self._show_precheck_report(resultados, tipo_proceso, archivos, callback_exito)
 
-    def _mostrar_reporte_pre_verificacion(self, resultados, tipo_proceso, archivos, callback_exito):
+    def _show_precheck_report(self, resultados, tipo_proceso, archivos, callback_exito):
         dialog = tk.Toplevel(self.root)
         dialog.title("Reporte de Pre-verificacion - VW")
         dialog.geometry("820x600")
@@ -2849,7 +2902,7 @@ class VWSuite:
 
             con_errores = [r["archivo"] for r in resultados if r["has_error"]]
             if con_errores:
-                self.root.after(0, lambda: self._mover_a_omitidos(con_errores))
+                self.root.after(0, lambda: self._move_to_skipped(con_errores))
 
             if filtrados:
                 callback_exito(filtrados)
@@ -2862,7 +2915,7 @@ class VWSuite:
 
             con_problemas = [r["archivo"] for r in resultados if r["has_error"] or r["has_warning"]]
             if con_problemas:
-                self.root.after(0, lambda: self._mover_a_omitidos(con_problemas))
+                self.root.after(0, lambda: self._move_to_skipped(con_problemas))
 
             if filtrados:
                 callback_exito(filtrados)
@@ -2870,7 +2923,7 @@ class VWSuite:
                 messagebox.showwarning("Cola vacia", "No quedan archivos limpios sin advertencias ni errores para procesar.")
 
         def cmd_cancelar():
-            self._limpiar_subgrupos()
+            self._clear_subgroups()
             dialog.destroy()
 
         btn_cancelar = tk.Button(
@@ -2997,7 +3050,7 @@ class VWSuite:
 
         text_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
 
-    def verificar_condiciones_carpeta(self):
+    def verify_queue_files(self):
         archivos = list(self.lista.get(0, tk.END))
         if not archivos:
             messagebox.showwarning("Sin archivos", "No hay archivos cargados")
@@ -3029,15 +3082,15 @@ class VWSuite:
                 pbar["value"] = i
                 progreso.update_idletasks()
 
-                res = self._validar_archivo_pre_verificacion(archivo, "procesar_cola", None)
+                res = self._validate_file_for_precheck(archivo, "procesar_cola", None)
                 resultados.append(res)
 
             progreso.destroy()
-            self.root.after(0, lambda: self._mostrar_resultados_verificacion(resultados))
+            self.root.after(0, lambda: self._show_verification_results(resultados))
 
         threading.Thread(target=worker, daemon=True).start()
 
-    def _mostrar_resultados_verificacion(self, resultados):
+    def _show_verification_results(self, resultados):
         t = get_theme(self.theme_var.get())
         win = tk.Toplevel(self.root)
         win.title("Diagnóstico de la cola - VW")
@@ -3197,7 +3250,7 @@ class VWSuite:
 
         _poblar_tabla("todos")
 
-    def _eliminar_metadatos_archivo(self, video_file, errores=None):
+    def _strip_file_metadata(self, video_file, errores=None):
         video_file = Path(video_file)
         temp_output = video_file.parent / f"temp_{video_file.name}"
         info = self._ffprobe_info(video_file)
@@ -3267,7 +3320,7 @@ class VWSuite:
             if temp_output.exists():
                 video_file.unlink()
                 ext = video_file.suffix
-                self._invalidar_cache_archivo(video_file)
+                self._invalidate_file_cache(video_file)
                 if ext != ext.lower():
                     temp_output.rename(video_file.with_suffix(ext.lower()))
                 else:
@@ -3287,7 +3340,7 @@ class VWSuite:
                 except Exception:
                     pass
 
-    def _thread_eliminar_metadatos(self, archivos):
+    def _strip_metadata_worker(self, archivos):
         self.procesando = True
         self.cancelar_procesamiento = False
 
@@ -3295,20 +3348,20 @@ class VWSuite:
         fail = 0
         total = len(archivos)
         errores = []
-        self._enviar_mensaje("===== INICIO ELIMINACIÓN METADATOS =====")
+        self._log_message("===== INICIO ELIMINACIÓN METADATOS =====")
 
         fue_cancelado = False
         archivos_exitosos = []
         for i, archivo in enumerate(archivos, 1):
             if self.cancelar_procesamiento:
-                self._enviar_mensaje("Cancelado por usuario")
+                self._log_message("Cancelado por usuario")
                 fue_cancelado = True
                 break
             self.msg_queue.put(("PROGRESO", i, total))
             nombre_archivo = os.path.basename(archivo)
-            self._enviar_mensaje(f"Eliminando metadatos {i}/{total}: {nombre_archivo}")
-            self._registrar_actividad("procesando", nombre_archivo, "Eliminar meta", "Limpiando metadatos...", item_key=f"meta:{archivo}")
-            result = self._eliminar_metadatos_archivo(archivo, errores)
+            self._log_message(f"Eliminando metadatos {i}/{total}: {nombre_archivo}")
+            self._record_activity("procesando", nombre_archivo, "Eliminar meta", "Limpiando metadatos...", item_key=f"meta:{archivo}")
+            result = self._strip_file_metadata(archivo, errores)
 
             if self.cancelar_procesamiento:
                 fue_cancelado = True
@@ -3317,19 +3370,19 @@ class VWSuite:
 
             if result:
                 archivos_exitosos.append(archivo)
-                self._registrar_actividad("exito", nombre_archivo, "Eliminar meta", "Metadatos eliminados", item_key=f"meta:{archivo}")
+                self._record_activity("exito", nombre_archivo, "Eliminar meta", "Metadatos eliminados", item_key=f"meta:{archivo}")
                 ok += 1
             else:
                 err_txt = next((e[1] for e in reversed(errores) if e[0] == archivo), "Error al limpiar metadatos")
-                self._registrar_actividad("error", nombre_archivo, "Eliminar meta", err_txt, item_key=f"meta:{archivo}")
+                self._record_activity("error", nombre_archivo, "Eliminar meta", err_txt, item_key=f"meta:{archivo}")
                 fail += 1
 
-        self._enviar_mensaje("===== FIN ELIMINACIÓN METADATOS =====")
+        self._log_message("===== FIN ELIMINACIÓN METADATOS =====")
         self.msg_queue.put(("FINALIZADO", ok, fail, errores, fue_cancelado, archivos_exitosos))
         self.procesando = False
         self.cancelar_procesamiento = False
 
-    def eliminar_metadatos(self):
+    def strip_metadata(self):
         if self.procesando:
             messagebox.showwarning("En curso", "Ya hay un proceso activo")
             return
@@ -3350,12 +3403,12 @@ class VWSuite:
             self.archivos_en_proceso = list(archivos_validos)
             self._clear_log_and_progress("Preparando eliminación de metadatos...")
             self._set_running_state(True)
-            threading.Thread(target=self._thread_eliminar_metadatos, args=(archivos_validos,), daemon=True).start()
-            self._actualizar_ui()
+            threading.Thread(target=self._strip_metadata_worker, args=(archivos_validos,), daemon=True).start()
+            self._poll_ui_queue()
 
-        self.pre_verificar_cola("eliminar_metadatos", archivos, None, callback_iniciar)
+        self.precheck_queue("eliminar_metadatos", archivos, None, callback_iniciar)
 
-    def _eliminar_subtitulos_archivo(self, video_file, errores=None):
+    def _strip_file_subtitles(self, video_file, errores=None):
         video_file = Path(video_file)
         info = self._ffprobe_info(video_file)
         if info is None:
@@ -3365,7 +3418,7 @@ class VWSuite:
 
         subtitle_streams = [s for s in info.get("streams", []) if s.get("codec_type") == "subtitle" and not s.get("is_external")]
         if not subtitle_streams:
-            self._enviar_mensaje("  -> El archivo no contiene subtítulos internos. Saltando.")
+            self._log_message("  -> El archivo no contiene subtítulos internos. Saltando.")
             return True
 
         temp_output = video_file.parent / f"temp_{video_file.name}"
@@ -3408,7 +3461,7 @@ class VWSuite:
             if temp_output.exists():
                 video_file.unlink()
                 ext = video_file.suffix
-                self._invalidar_cache_archivo(video_file)
+                self._invalidate_file_cache(video_file)
                 if ext != ext.lower():
                     temp_output.rename(video_file.with_suffix(ext.lower()))
                 else:
@@ -3428,7 +3481,7 @@ class VWSuite:
                 except Exception:
                     pass
 
-    def _thread_eliminar_subtitulos(self, archivos):
+    def _strip_subtitles_worker(self, archivos):
         self.procesando = True
         self.cancelar_procesamiento = False
 
@@ -3436,20 +3489,20 @@ class VWSuite:
         fail = 0
         total = len(archivos)
         errores = []
-        self._enviar_mensaje("===== INICIO ELIMINACIÓN DE SUBTÍTULOS =====")
+        self._log_message("===== INICIO ELIMINACIÓN DE SUBTÍTULOS =====")
 
         fue_cancelado = False
         archivos_exitosos = []
         for i, archivo in enumerate(archivos, 1):
             if self.cancelar_procesamiento:
-                self._enviar_mensaje("Cancelado por usuario")
+                self._log_message("Cancelado por usuario")
                 fue_cancelado = True
                 break
             self.msg_queue.put(("PROGRESO", i, total))
             nombre_archivo = os.path.basename(archivo)
-            self._enviar_mensaje(f"Eliminando subs {i}/{total}: {nombre_archivo}")
-            self._registrar_actividad("procesando", nombre_archivo, "Eliminar subs", "Eliminando subtítulos...", item_key=f"subs:{archivo}")
-            result = self._eliminar_subtitulos_archivo(archivo, errores)
+            self._log_message(f"Eliminando subs {i}/{total}: {nombre_archivo}")
+            self._record_activity("procesando", nombre_archivo, "Eliminar subs", "Eliminando subtítulos...", item_key=f"subs:{archivo}")
+            result = self._strip_file_subtitles(archivo, errores)
 
             if self.cancelar_procesamiento:
                 fue_cancelado = True
@@ -3458,19 +3511,19 @@ class VWSuite:
 
             if result:
                 archivos_exitosos.append(archivo)
-                self._registrar_actividad("exito", nombre_archivo, "Eliminar subs", "Subtítulos eliminados", item_key=f"subs:{archivo}")
+                self._record_activity("exito", nombre_archivo, "Eliminar subs", "Subtítulos eliminados", item_key=f"subs:{archivo}")
                 ok += 1
             else:
                 err_txt = next((e[1] for e in reversed(errores) if e[0] == archivo), "Error al eliminar subtítulos")
-                self._registrar_actividad("error", nombre_archivo, "Eliminar subs", err_txt, item_key=f"subs:{archivo}")
+                self._record_activity("error", nombre_archivo, "Eliminar subs", err_txt, item_key=f"subs:{archivo}")
                 fail += 1
 
-        self._enviar_mensaje("===== FIN ELIMINACIÓN DE SUBTÍTULOS =====")
+        self._log_message("===== FIN ELIMINACIÓN DE SUBTÍTULOS =====")
         self.msg_queue.put(("FINALIZADO", ok, fail, errores, fue_cancelado, archivos_exitosos))
         self.procesando = False
         self.cancelar_procesamiento = False
 
-    def eliminar_subtitulos(self):
+    def strip_subtitles(self):
         if self.procesando:
             messagebox.showwarning("En curso", "Ya hay un proceso activo")
             return
@@ -3491,12 +3544,12 @@ class VWSuite:
             self.archivos_en_proceso = list(archivos_validos)
             self._clear_log_and_progress("Preparando eliminación de subtítulos...")
             self._set_running_state(True)
-            threading.Thread(target=self._thread_eliminar_subtitulos, args=(archivos_validos,), daemon=True).start()
-            self._actualizar_ui()
+            threading.Thread(target=self._strip_subtitles_worker, args=(archivos_validos,), daemon=True).start()
+            self._poll_ui_queue()
 
-        self.pre_verificar_cola("eliminar_subtitulos", archivos, None, callback_iniciar)
+        self.precheck_queue("eliminar_subtitulos", archivos, None, callback_iniciar)
 
-    def _obtener_atributos_archivo(self, filepath):
+    def _get_file_attributes(self, filepath):
         info = self._ffprobe_info(filepath)
         attrs = {
             "resolution": "unknown",
@@ -3529,7 +3582,7 @@ class VWSuite:
                 attrs["codec_a"] = "none"
         return attrs
 
-    def abrir_renombrador(self):
+    def open_renamer(self):
         archivos = list(self.lista.get(0, tk.END))
         if not archivos:
             messagebox.showerror("Error", "Agrega al menos un video a la cola principal antes de renombrar.", parent=self.root)
@@ -3644,7 +3697,7 @@ class VWSuite:
             if "Options" not in self.config_ini:
                 self.config_ini["Options"] = {}
             self.config_ini["Options"]["rename_presets"] = json.dumps(curr)
-            self._guardar_configuracion()
+            self._save_config()
             
             nonlocal custom_rename_presets
             custom_rename_presets = curr
@@ -3673,7 +3726,7 @@ class VWSuite:
                 if "Options" not in self.config_ini:
                     self.config_ini["Options"] = {}
                 self.config_ini["Options"]["rename_presets"] = json.dumps(curr)
-                self._guardar_configuracion()
+                self._save_config()
                 
                 nonlocal custom_rename_presets
                 custom_rename_presets = curr
@@ -3883,7 +3936,7 @@ class VWSuite:
                 codec_a = "unknown"
 
                 if any(tag in patron for tag in ("{resolution}", "{codec_v}", "{codec_a}")):
-                    attrs = self._obtener_atributos_archivo(filepath)
+                    attrs = self._get_file_attributes(filepath)
                     resolution = attrs["resolution"]
                     codec_v = attrs["codec_v"]
                     codec_a = attrs["codec_a"]
@@ -3941,13 +3994,13 @@ class VWSuite:
         btn_container = tk.Frame(btm, bg="#F3F7FF")
         btn_container.pack(anchor=tk.CENTER)
 
-        btn_ok = tk.Button(btn_container, text="Aplicar Renombrado", command=lambda: self._ejecutar_renombrado(dialog, archivos, tree, item_to_path), bg="#27AE60", fg="white", width=22, relief=tk.FLAT, font=("Segoe UI", 10, "bold"), cursor="hand2")
+        btn_ok = tk.Button(btn_container, text="Aplicar Renombrado", command=lambda: self._execute_renaming(dialog, archivos, tree, item_to_path), bg="#27AE60", fg="white", width=22, relief=tk.FLAT, font=("Segoe UI", 10, "bold"), cursor="hand2")
         btn_ok.pack(side=tk.LEFT, padx=10)
 
         btn_cancel = tk.Button(btn_container, text="Cancelar", command=dialog.destroy, bg="#95A5A6", fg="white", width=12, relief=tk.FLAT, font=("Segoe UI", 10, "bold"), cursor="hand2")
         btn_cancel.pack(side=tk.LEFT, padx=10)
 
-    def _ejecutar_renombrado(self, dialog, archivos, tree, item_to_path=None):
+    def _execute_renaming(self, dialog, archivos, tree, item_to_path=None):
         if not archivos:
             messagebox.showwarning("Sin archivos", "No hay archivos en la cola para renombrar.", parent=dialog)
             return
@@ -3988,7 +4041,7 @@ class VWSuite:
                 return
 
         self._clear_log_and_progress("Renombrando archivos...")
-        self._enviar_mensaje("===== INICIO RENOMBRADO DE ARCHIVOS =====")
+        self._log_message("===== INICIO RENOMBRADO DE ARCHIVOS =====")
         ok_count = 0
         fail_count = 0
         mapping_renombres = {}
@@ -4010,14 +4063,14 @@ class VWSuite:
 
             try:
                 os.rename(original_path, new_path)
-                self._invalidar_cache_archivo(original_path)
-                self._enviar_mensaje(f"Renombrado con éxito:\n  De: {original_path}\n  A: {new_path}")
-                self._registrar_actividad("exito", os.path.basename(new_path), "Renombrado", f"Antes: {os.path.basename(original_path)}")
+                self._invalidate_file_cache(original_path)
+                self._log_message(f"Renombrado con éxito:\n  De: {original_path}\n  A: {new_path}")
+                self._record_activity("exito", os.path.basename(new_path), "Renombrado", f"Antes: {os.path.basename(original_path)}")
                 mapping_renombres[original_path] = new_path
                 ok_count += 1
             except Exception as exc:
-                self._enviar_mensaje(f"Error al renombrar {os.path.basename(original_path)}: {exc}")
-                self._registrar_actividad("error", os.path.basename(original_path), "Renombrado", str(exc))
+                self._log_message(f"Error al renombrar {os.path.basename(original_path)}: {exc}")
+                self._record_activity("error", os.path.basename(original_path), "Renombrado", str(exc))
                 mapping_renombres[original_path] = original_path
                 fail_count += 1
 
@@ -4029,10 +4082,10 @@ class VWSuite:
         for path in all_items:
             new_val = mapping_renombres.get(path, path)
             self.lista.insert(tk.END, os.path.normpath(new_val))
-        self._actualizar_contadores_colas()
+        self._update_queue_counters()
 
-        self._enviar_mensaje("===== FIN RENOMBRADO DE ARCHIVOS =====")
-        self._enviar_mensaje(f"Renombrados con éxito: {ok_count} | Errores: {fail_count}")
+        self._log_message("===== FIN RENOMBRADO DE ARCHIVOS =====")
+        self._log_message(f"Renombrados con éxito: {ok_count} | Errores: {fail_count}")
 
         dialog.destroy()
         messagebox.showinfo("Renombrado Finalizado", f"Se han renombrado {ok_count} archivos correctamente.\nErrores: {fail_count}")
@@ -4047,17 +4100,17 @@ class VWSuite:
         self.progress_label.config(text=status)
         if hasattr(self, "lbl_top_status"):
             self.lbl_top_status.config(text=status)
-        self._escribir_log_archivo(status, separador=True)
+        self._write_log_file(status, separador=True)
         if hasattr(self, "_views"):
-            self._mostrar_vista("actividad")
+            self._show_view("actividad")
 
-    def seleccionar_archivos(self):
+    def select_files(self):
         files = filedialog.askopenfilenames(title="Seleccionar videos", filetypes=[("Videos", "*.mp4 *.mkv *.mov *.avi *.flv *.webm *.ts *.m4v")])
         for f in files:
             self.lista.insert(tk.END, os.path.normpath(f))
-        self._actualizar_contadores_colas()
+        self._update_queue_counters()
 
-    def cargar_carpeta(self):
+    def load_folder(self):
         carpeta = filedialog.askdirectory(title="Seleccionar carpeta")
         if not carpeta:
             return
@@ -4076,37 +4129,37 @@ class VWSuite:
 
         for f in encontrados:
             self.lista.insert(tk.END, os.path.normpath(f))
-        self._actualizar_contadores_colas()
+        self._update_queue_counters()
 
         messagebox.showinfo("Carga finalizada", f"Se agregaron {len(encontrados)} archivo(s)")
 
-    def eliminar_seleccionados(self):
+    def remove_selected_files(self):
         sel = self.lista.curselection()
         if not sel:
             messagebox.showwarning("Sin seleccion", "Selecciona elementos")
             return
         for i in reversed(sel):
             self.lista.delete(i)
-        self._actualizar_contadores_colas()
-        self._limpiar_subgrupos()
+        self._update_queue_counters()
+        self._clear_subgroups()
 
-    def limpiar_lista(self):
+    def clear_queue(self):
         if self.lista.size() == 0:
             return
         if messagebox.askyesno("Confirmar", "Deseas limpiar toda la lista?"):
             self.lista.delete(0, tk.END)
-            self._actualizar_contadores_colas()
+            self._update_queue_counters()
             if hasattr(self, "ffprobe_cache"):
                 self.ffprobe_cache.clear()
-            self._limpiar_subgrupos()
+            self._clear_subgroups()
 
-    def seleccionar_directorio(self):
+    def select_output_directory(self):
         dir_inicial = self.salida_var.get().strip() or obtener_directorio_videos_defecto()
         carpeta = filedialog.askdirectory(title="Seleccionar salida", initialdir=dir_inicial)
         if carpeta:
             self.salida_var.set(carpeta)
 
-    def _resolver_patron_subcarpeta(self, filepath, info, label, audio_indices, sub_indices):
+    def _resolve_subfolder_pattern(self, filepath, info, label, audio_indices, sub_indices):
         return _resolver_patron_subcarpeta_helper(
             self.var_nombre_subcarpeta.get(),
             filepath,
@@ -4116,7 +4169,7 @@ class VWSuite:
             sub_indices,
         )
 
-    def _abrir_constructor_rutas(self):
+    def _open_path_builder(self):
         dialog = tk.Toplevel(self.root)
         dialog.title("Constructor de Ruta de Salida")
         dialog.geometry("750x660")
@@ -4172,7 +4225,7 @@ class VWSuite:
                 if "Options" not in self.config_ini:
                     self.config_ini["Options"] = {}
                 self.config_ini["Options"]["presets"] = json.dumps(curr)
-                self._guardar_configuracion()
+                self._save_config()
                 self.cb_nombre_subcarpeta["values"] = curr
                 cb_presets["values"] = curr
                 presets_var.set(nuevo)
@@ -4208,7 +4261,7 @@ class VWSuite:
                 if "Options" not in self.config_ini:
                     self.config_ini["Options"] = {}
                 self.config_ini["Options"]["presets"] = json.dumps(curr)
-                self._guardar_configuracion()
+                self._save_config()
                 self.cb_nombre_subcarpeta["values"] = curr
                 cb_presets["values"] = curr
                 if curr:
@@ -4315,7 +4368,7 @@ class VWSuite:
 
             old_val = self.var_nombre_subcarpeta.get()
             self.var_nombre_subcarpeta.set(patron)
-            resolved = self._resolver_patron_subcarpeta(f"C:/ruta/de/ejemplo/{video_name}.mp4", info, "ESP_subENG", audio_indices, sub_indices)
+            resolved = self._resolve_subfolder_pattern(f"C:/ruta/de/ejemplo/{video_name}.mp4", info, "ESP_subENG", audio_indices, sub_indices)
             self.var_nombre_subcarpeta.set(old_val)
 
             base_dir = self.salida_var.get().strip() or obtener_directorio_videos_defecto()
@@ -4332,20 +4385,20 @@ class VWSuite:
         tk.Button(btm, text="Guardar", command=aceptar, bg="#27AE60", fg="white", width=12, relief=tk.FLAT, font=("Segoe UI", 9, "bold")).pack(side=tk.LEFT, padx=6)
         tk.Button(btm, text="Cancelar", command=dialog.destroy, bg="#95A5A6", fg="white", width=12, relief=tk.FLAT, font=("Segoe UI", 9, "bold")).pack(side=tk.LEFT, padx=6)
 
-    def cancelar(self):
+    def cancel_processing(self):
         if not self.procesando:
             messagebox.showinfo("Sin proceso", "No hay procesamiento activo")
             return
         if messagebox.askyesno("Cancelar todo", "Deseas cancelar el procesamiento actual y detener toda la cola de videos?"):
             self.cancelar_procesamiento = True
-            self._limpiar_subgrupos()
+            self._clear_subgroups()
             if self.proceso_actual:
                 try:
                     self.proceso_actual.terminate()
                 except Exception:
                     pass
             self.btn_cancelar.config(state=tk.DISABLED)
-            self._enviar_mensaje("Solicitud de cancelacion enviada...")
+            self._log_message("Solicitud de cancelacion enviada...")
 
     def _run_subprocess_cancellable(self, cmd, stdout_devnull=False):
         startupinfo = None
@@ -4401,7 +4454,7 @@ class VWSuite:
 
             time.sleep(0.1)
 
-    def cambiar_ruta_ffmpeg(self):
+    def change_ffmpeg_path(self):
         archivo = filedialog.askopenfilename(
             title="Seleccionar ffmpeg.exe",
             filetypes=[("FFmpeg", "ffmpeg.exe"), ("Todos", "*.*")],
@@ -4417,10 +4470,10 @@ class VWSuite:
             messagebox.showinfo("Actualizado", f"FFmpeg y FFProbe actualizados\n\n{archivo}")
         else:
             messagebox.showinfo("Actualizado", f"FFmpeg actualizado\n\n{archivo}\n\nSelecciona FFProbe manualmente si hace falta")
-        self._actualizar_configuracion()
-        self._iniciar_deteccion_gpus()
+        self._update_config()
+        self._start_gpu_detection()
 
-    def cambiar_ruta_ffprobe(self):
+    def change_ffprobe_path(self):
         archivo = filedialog.askopenfilename(
             title="Seleccionar ffprobe.exe",
             filetypes=[("FFProbe", "ffprobe.exe"), ("Todos", "*.*")],
@@ -4428,16 +4481,16 @@ class VWSuite:
         )
         if archivo:
             self.ffprobe_path = archivo
-            self._actualizar_configuracion()
+            self._update_config()
             messagebox.showinfo("Actualizado", f"FFProbe actualizado\n\n{archivo}")
 
-    def ver_info_ffmpeg(self):
+    def show_ffmpeg_info(self):
         messagebox.showinfo(
             "Rutas configuradas",
             f"FFmpeg:\n{self.ffmpeg_path}\n\nFFProbe:\n{self.ffprobe_path}\n\nConfiguracion VW:\n{CONFIG_DIR}\n\nCarpeta Tools (Portatil):\n{os.path.join(obtener_ruta_base_app(), 'tools')}",
         )
 
-    def cambiar_preset(self):
+    def change_preset(self):
         gpu_acel = self.gpu_acel_var.get()
         if gpu_acel == "nvidia":
             presets = PRESETS_NVIDIA
@@ -4503,7 +4556,7 @@ class VWSuite:
         tk.Button(btm, text="Aceptar", command=aceptar, bg="#2D9CDB", fg="white", width=12).pack(side=tk.LEFT, padx=6)
         tk.Button(btm, text="Cancelar", command=dialog.destroy, bg="#95A5A6", fg="white", width=12).pack(side=tk.LEFT, padx=6)
 
-    def mostrar_acerca_de(self):
+    def show_about(self):
         import webbrowser
 
         dialog = tk.Toplevel(self.root)
@@ -4639,7 +4692,7 @@ class VWSuite:
         )
         btn_close.pack(side=tk.BOTTOM, pady=(0, 12))
 
-    def _mostrar_resumen_errores(self, errores):
+    def _show_error_summary(self, errores):
         dialog = tk.Toplevel(self.root)
         dialog.title("Resumen de Errores - VW")
         dialog.geometry("740x500")
@@ -4728,11 +4781,11 @@ class VWSuite:
         )
         btn_cerrar.pack(side=tk.RIGHT)
 
-    def salir_aplicacion(self):
+    def exit_application(self):
         if self.procesando and not messagebox.askyesno("Proceso activo", "Hay un proceso en curso. Salir de todos modos?"):
             return
 
-        cant_activos, cant_omitidos = self._actualizar_contadores_colas()
+        cant_activos, cant_omitidos = self._update_queue_counters()
         if cant_activos > 0 or cant_omitidos > 0:
             guardar = messagebox.askyesno(
                 "Guardar cola",
@@ -4767,7 +4820,7 @@ class VWSuite:
         if self.config_ini.has_section("Queue"):
             self.config_ini.remove_section("Queue")
 
-        self._actualizar_configuracion()
+        self._update_config()
         self.root.destroy()
 
     def run(self):
