@@ -26,6 +26,9 @@ class RoundedButton(tk.Canvas):
         pady=4,
         state=tk.NORMAL,
         cursor="hand2",
+        disabled_bg="#E2E8F0",
+        disabled_fg="#94A3B8",
+        align="center",
         **kwargs,
     ):
         self.master = master
@@ -33,6 +36,9 @@ class RoundedButton(tk.Canvas):
         self.command = command
         self.bg_color = bg
         self.fg_color = fg
+        self.disabled_bg = disabled_bg
+        self.disabled_fg = disabled_fg
+        self.align = align
         self.active_bg = activebackground if activebackground else self._adjust_brightness(bg, -15)
         self.active_fg = activeforeground
         self.font = font
@@ -151,11 +157,11 @@ class RoundedButton(tk.Canvas):
     def draw_button(self, fill_color=None):
         self.delete("all")
         if fill_color is None:
-            fill_color = "#E0E0E0" if self.state == tk.DISABLED else self.bg_color
+            fill_color = self.disabled_bg if self.state == tk.DISABLED else self.bg_color
 
         text_color = self.fg_color
         if self.state == tk.DISABLED:
-            text_color = "#A0A0A0"
+            text_color = self.disabled_fg
             self.config(cursor="")
         else:
             self.config(cursor="hand2")
@@ -163,20 +169,48 @@ class RoundedButton(tk.Canvas):
         r = min(6, self.width // 2, self.height // 2)
         points = self.get_rounded_rect_points(0, 0, self.width, self.height, r)
         self.rect_id = self.create_polygon(points, fill=fill_color, outline="", smooth=False)
-        self.text_id = self.create_text(
-            self.width / 2,
-            self.height / 2,
-            text=self.text,
-            fill=text_color,
-            font=self.font,
-            justify=tk.CENTER,
-        )
+        if self.align == "left":
+            self.text_id = self.create_text(
+                self.padx + 4,
+                self.height / 2,
+                text=self.text,
+                fill=text_color,
+                font=self.font,
+                anchor=tk.W,
+            )
+        else:
+            self.text_id = self.create_text(
+                self.width / 2,
+                self.height / 2,
+                text=self.text,
+                fill=text_color,
+                font=self.font,
+                justify=tk.CENTER,
+            )
 
     def config(self, cnf=None, **kw):
         if cnf is not None:
             kw.update(cnf)
 
         redraw = False
+        if "width" in kw:
+            new_w = kw.pop("width")
+            if new_w is not None:
+                f_obj = tkfont.Font(font=self.font)
+                text_w = f_obj.measure(self.text)
+                if new_w <= 40:
+                    self.width = max(text_w + 2 * self.padx + 12, new_w * 8)
+                else:
+                    self.width = max(text_w + 2 * self.padx, new_w)
+                self.fixed_width = True
+                super().config(width=self.width)
+                redraw = True
+        if "height" in kw:
+            new_h = kw.pop("height")
+            if new_h is not None:
+                self.height = new_h
+                super().config(height=self.height)
+                redraw = True
         if "state" in kw:
             self.state = kw.pop("state")
             redraw = True
@@ -196,6 +230,14 @@ class RoundedButton(tk.Canvas):
         if "fg" in kw or "foreground" in kw:
             self.fg_color = kw.pop("fg") if "fg" in kw else kw.pop("foreground")
             redraw = True
+        if "disabled_bg" in kw:
+            self.disabled_bg = kw.pop("disabled_bg")
+            redraw = True
+        if "disabled_fg" in kw:
+            self.disabled_fg = kw.pop("disabled_fg")
+            redraw = True
+        if "parent_bg" in kw:
+            super().config(bg=kw.pop("parent_bg"))
 
         kw.pop("activebackground", None)
         kw.pop("activeforeground", None)

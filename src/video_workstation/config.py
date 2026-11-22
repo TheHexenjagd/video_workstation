@@ -41,5 +41,6 @@ DEFAULT_CONFIG = {
         "preset": "medium",
         "eliminar_metadatos": "False",
         "buscar_subtitulos_externos": "True",
+        "tema": "light",
     },
 }

@@ -44,6 +44,7 @@ from video_workstation.media.subtitles import (
     ensure_external_subtitle_utf8 as asegurar_subtitulo_externo_utf8,
     find_external_subtitles as buscar_subtitulos_externos,
 )
+from video_workstation.ui.theme import get_theme
 from video_workstation.ui.widgets import RoundedButton
 from video_workstation.utils.binaries import (
     get_app_base_dir as obtener_ruta_base_app,
@@ -63,8 +64,12 @@ class VWSuite:
     def __init__(self):
         self.root = tk.Tk()
         self.root.title("Video Workstation (VW)")
-        self.root.geometry("1220x820")
+        win_w, win_h = 1220, 820
         self.root.minsize(1100, 740)
+        self.root.update_idletasks()
+        pos_x = max(0, (self.root.winfo_screenwidth() - win_w) // 2)
+        pos_y = max(0, (self.root.winfo_screenheight() - win_h) // 2)
+        self.root.geometry(f"{win_w}x{win_h}+{pos_x}+{pos_y}")
 
         self.gpus_status = {}
         self.gpu_availability = {}
@@ -97,10 +102,16 @@ class VWSuite:
         self.combinaciones_por_grupo = {}
 
         self.ffprobe_cache = {}
+        self.theme_var = tk.StringVar(
+            value=self.config_ini.get("Options", "tema", fallback="light").lower()
+        )
+        if self.theme_var.get() not in ("light", "dark"):
+            self.theme_var.set("light")
 
         self._crear_estilos()
         self._crear_menu()
         self._crear_ui()
+        self._aplicar_tema()
         self._verificar_ffmpeg_inicio()
         self._iniciar_deteccion_gpus()
 
@@ -162,6 +173,8 @@ class VWSuite:
             self.config_ini["Options"]["eliminar_metadatos"] = str(self.var_eliminar_metadatos.get())
             if hasattr(self, "var_buscar_subtitulos_externos"):
                 self.config_ini["Options"]["buscar_subtitulos_externos"] = str(self.var_buscar_subtitulos_externos.get())
+            if hasattr(self, "theme_var"):
+                self.config_ini["Options"]["tema"] = self.theme_var.get()
 
             self._guardar_configuracion()
         except Exception as exc:
@@ -173,17 +186,98 @@ class VWSuite:
             self.ffprobe_cache.clear()
         self._limpiar_subgrupos()
 
+    def _alternar_tema(self):
+        nuevo = "dark" if self.theme_var.get() == "light" else "light"
+        self.theme_var.set(nuevo)
+        self._actualizar_configuracion()
+        self._aplicar_tema()
+
     def _crear_estilos(self):
-        self.root.configure(bg="#F3F7FF")
+        t = get_theme(self.theme_var.get() if hasattr(self, "theme_var") else "light")
+        self.root.configure(bg=t["bg_app"])
         style = ttk.Style()
         style.theme_use("clam")
 
-        style.configure("VW.TFrame", background="#F3F7FF")
-        style.configure("Card.TFrame", background="#FFFFFF")
-        style.configure("Header.TLabel", background="#F3F7FF", foreground="#1F2A44", font=("Segoe UI", 19, "bold"))
-        style.configure("SubHeader.TLabel", background="#F3F7FF", foreground="#5C6B8A", font=("Segoe UI", 10))
-        style.configure("CardTitle.TLabel", background="#FFFFFF", foreground="#2B3A57", font=("Segoe UI", 10, "bold"))
-        style.configure("Modern.Horizontal.TProgressbar", troughcolor="#E5ECF9", background="#2D9CDB", bordercolor="#E5ECF9")
+        style.configure("VW.TFrame", background=t["bg_app"])
+        style.configure("Card.TFrame", background=t["bg_surface"])
+        style.configure("CardTitle.TLabel", background=t["bg_surface"], foreground=t["fg_primary"], font=("Segoe UI", 10, "bold"))
+        style.configure("Modern.Horizontal.TProgressbar", troughcolor=t["trough"], background=t["accent"], bordercolor=t["trough"], lightcolor=t["accent"], darkcolor=t["accent"])
+
+        style.configure("TNotebook", background=t["bg_surface"], borderwidth=0, tabmargins=(2, 2, 2, 0))
+        style.configure("TNotebook.Tab", background=t["bg_tab_inactive"], foreground=t["fg_secondary"], padding=(14, 6), font=("Segoe UI", 9, "bold"), borderwidth=0)
+        style.map(
+            "TNotebook.Tab",
+            background=[("selected", t["bg_surface"])],
+            foreground=[("selected", t["fg_primary"])],
+        )
+
+        style.configure(
+            "TCombobox",
+            fieldbackground=t["bg_input"],
+            background=t["bg_subtle"],
+            foreground=t["fg_primary"],
+            arrowcolor=t["fg_secondary"],
+            bordercolor=t["border"],
+            lightcolor=t["bg_input"],
+            darkcolor=t["bg_input"],
+        )
+        style.map(
+            "TCombobox",
+            fieldbackground=[("readonly", t["bg_input"])],
+            foreground=[("readonly", t["fg_primary"])],
+            selectbackground=[("readonly", t["bg_input"])],
+            selectforeground=[("readonly", t["fg_primary"])],
+        )
+        self.root.option_add("*TCombobox*Listbox.background", t["bg_input"])
+        self.root.option_add("*TCombobox*Listbox.foreground", t["fg_primary"])
+        self.root.option_add("*TCombobox*Listbox.selectBackground", t["accent"])
+        self.root.option_add("*TCombobox*Listbox.selectForeground", t["accent_fg"])
+        try:
+            for cb in (getattr(self, "cb_gpu", None), getattr(self, "cb_decod", None), getattr(self, "cb_nombre_subcarpeta", None)):
+                if cb is not None and cb.winfo_exists():
+                    popdown = cb.tk.eval(f"ttk::combobox::PopdownWindow {cb}")
+                    cb.tk.call(f"{popdown}.f.l", "configure", "-background", t["bg_input"], "-foreground", t["fg_primary"], "-selectbackground", t["accent"], "-selectforeground", t["accent_fg"])
+        except Exception:
+            pass
+
+        style.layout("Activity.Treeview", [("Activity.Treeview.treearea", {"sticky": "nswe"})])
+        style.configure(
+            "Activity.Treeview",
+            font=("Segoe UI", 9),
+            rowheight=28,
+            background=t["bg_surface"],
+            fieldbackground=t["bg_surface"],
+            foreground=t["fg_primary"],
+            borderwidth=0,
+            focusthickness=0,
+        )
+        style.configure(
+            "Activity.Treeview.Heading",
+            font=("Segoe UI", 9, "bold"),
+            background=t["heading_bg"],
+            foreground=t["heading_fg"],
+            bordercolor=t["border"],
+            relief="flat",
+        )
+        style.map(
+            "Activity.Treeview.Heading",
+            background=[("active", t["bg_input"]), ("pressed", t["bg_input"])],
+            foreground=[("active", t["fg_primary"]), ("pressed", t["fg_primary"])],
+        )
+        style.map(
+            "Activity.Treeview",
+            background=[("selected", t["tree_sel_bg"])],
+            foreground=[("selected", t["tree_sel_fg"])],
+        )
+
+        style.configure(
+            "Vertical.TScrollbar",
+            background=t["bg_subtle"],
+            troughcolor=t["bg_surface"],
+            arrowcolor=t["fg_muted"],
+            bordercolor=t["bg_surface"],
+            relief="flat",
+        )
 
     def _crear_menu(self):
         menubar = tk.Menu(self.root)
@@ -197,6 +291,8 @@ class VWSuite:
         config_menu.add_command(label="Cambiar ruta de FFmpeg...", command=self.cambiar_ruta_ffmpeg)
         config_menu.add_command(label="Cambiar ruta de FFProbe...", command=self.cambiar_ruta_ffprobe)
         config_menu.add_command(label="Preset de codificacion...", command=self.cambiar_preset)
+        config_menu.add_separator()
+        config_menu.add_command(label="Alternar tema claro / oscuro", command=self._alternar_tema)
         config_menu.add_separator()
         config_menu.add_command(label="Info de rutas FFmpeg/FFProbe", command=self.ver_info_ffmpeg)
         menubar.add_cascade(label="Configuracion", menu=config_menu)
@@ -243,150 +339,450 @@ class VWSuite:
         ]:
             var.trace_add("write", self._actualizar_configuracion)
 
-        main = ttk.Frame(self.root, style="VW.TFrame")
-        main.pack(fill=tk.BOTH, expand=True)
+        t = get_theme(self.theme_var.get())
+        self._themed_frames = []
+        self._themed_labels = []
+        self._themed_checks = []
+        self._themed_entries = []
+        self._themed_dividers = []
+        self._themed_buttons = []
+        self._current_view = "cola"
 
-        hero_card = tk.Frame(main, bg="#F4F8FF", highlightthickness=1, highlightbackground="#D1E2FF", bd=0)
-        hero_card.pack(fill=tk.X, padx=18, pady=(8, 4))
+        shell = tk.Frame(self.root, bg=t["bg_app"])
+        shell.pack(fill=tk.BOTH, expand=True)
+        self._themed_frames.append((shell, "bg_app", None))
 
-        accent_bar = tk.Frame(hero_card, width=4, bg="#2D9CDB")
-        accent_bar.pack(side=tk.LEFT, fill=tk.Y)
+        # --- BARRA LATERAL (SIDEBAR) ---
+        sidebar = tk.Frame(shell, width=230, bg=t["bg_sidebar"], highlightthickness=0, bd=0)
+        sidebar.pack(side=tk.LEFT, fill=tk.Y)
+        sidebar.pack_propagate(False)
+        self._themed_frames.append((sidebar, "bg_sidebar", None))
 
-        text_container = tk.Frame(hero_card, bg="#F4F8FF")
-        text_container.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=16, pady=6)
+        side_border = tk.Frame(shell, width=1, bg=t["border"])
+        side_border.pack(side=tk.LEFT, fill=tk.Y)
+        self._themed_dividers.append(side_border)
 
-        tk.Label(
-            text_container,
-            text="VW",
-            font=("Segoe UI", 12, "bold"),
-            fg="#1F2A44",
-            bg="#F4F8FF"
-        ).pack(side=tk.LEFT)
+        # Marca en sidebar
+        brand_box = tk.Frame(sidebar, bg=t["bg_sidebar"])
+        brand_box.pack(fill=tk.X, padx=16, pady=(18, 14))
+        self._themed_frames.append((brand_box, "bg_sidebar", None))
 
-        tk.Label(
-            text_container,
-            text="  |  Video Workstation - Procesamiento de vídeo, multiplexación y hardsub",
+        brand_row = tk.Frame(brand_box, bg=t["bg_sidebar"])
+        brand_row.pack(fill=tk.X)
+        self._themed_frames.append((brand_row, "bg_sidebar", None))
+
+        lbl_badge = tk.Label(brand_row, text="VW", font=("Segoe UI", 12, "bold"), bg=t["accent"], fg="#FFFFFF", padx=8, pady=3)
+        lbl_badge.pack(side=tk.LEFT)
+        self._lbl_brand_badge = lbl_badge
+
+        brand_txt = tk.Frame(brand_row, bg=t["bg_sidebar"])
+        brand_txt.pack(side=tk.LEFT, padx=(10, 0))
+        self._themed_frames.append((brand_txt, "bg_sidebar", None))
+
+        lbl_app_name = tk.Label(brand_txt, text="Video Workstation", font=("Segoe UI", 10, "bold"), bg=t["bg_sidebar"], fg=t["fg_primary"])
+        lbl_app_name.pack(anchor=tk.W)
+        self._themed_labels.append((lbl_app_name, "bg_sidebar", "fg_primary"))
+
+        lbl_app_ver = tk.Label(brand_txt, text=f"v{VERSION}", font=("Segoe UI", 8), bg=t["bg_sidebar"], fg=t["fg_muted"])
+        lbl_app_ver.pack(anchor=tk.W)
+        self._themed_labels.append((lbl_app_ver, "bg_sidebar", "fg_muted"))
+
+        div_nav_top = tk.Frame(sidebar, height=1, bg=t["border"])
+        div_nav_top.pack(fill=tk.X, padx=16, pady=(0, 12))
+        self._themed_dividers.append(div_nav_top)
+
+        lbl_nav_sec = tk.Label(sidebar, text="SECCIONES", font=("Segoe UI", 8, "bold"), bg=t["bg_sidebar"], fg=t["fg_muted"])
+        lbl_nav_sec.pack(anchor=tk.W, padx=18, pady=(0, 6))
+        self._themed_labels.append((lbl_nav_sec, "bg_sidebar", "fg_muted"))
+
+        self._nav_buttons = {}
+        nav_defs = [
+            ("cola", "Cola principal (0)"),
+            ("omitidos", "Omitidos / Errores (0)"),
+            ("actividad", "Actividad"),
+        ]
+        for key, label_txt in nav_defs:
+            btn_nav = tk.Button(
+                sidebar,
+                text=label_txt,
+                command=lambda k=key: self._mostrar_vista(k),
+                bg=t["bg_sidebar"],
+                fg=t["fg_secondary"],
+                relief=tk.FLAT,
+                width=198,
+                height=34,
+                align="left",
+                padx=12,
+                font=("Segoe UI", 9, "bold"),
+            )
+            btn_nav.pack(padx=16, pady=2)
+            self._nav_buttons[key] = btn_nav
+
+        div_mant = tk.Frame(sidebar, height=1, bg=t["border"])
+        div_mant.pack(fill=tk.X, padx=16, pady=(12, 10))
+        self._themed_dividers.append(div_mant)
+
+        lbl_mant_sec = tk.Label(sidebar, text="MANTENIMIENTO", font=("Segoe UI", 8, "bold"), bg=t["bg_sidebar"], fg=t["fg_muted"])
+        lbl_mant_sec.pack(anchor=tk.W, padx=18, pady=(0, 6))
+        self._themed_labels.append((lbl_mant_sec, "bg_sidebar", "fg_muted"))
+
+        self.btn_eliminar_meta = tk.Button(
+            sidebar,
+            text="Limpiar metadatos",
+            command=self.eliminar_metadatos,
+            bg=t["btn_secondary_bg"],
+            fg=t["btn_secondary_fg"],
+            width=198,
+            height=32,
+            align="left",
+            padx=12,
             font=("Segoe UI", 9),
-            fg="#5C6B8A",
-            bg="#F4F8FF"
-        ).pack(side=tk.LEFT, padx=(4, 0))
+        )
+        self.btn_eliminar_meta.pack(padx=16, pady=2)
 
-        top = ttk.Frame(main, style="VW.TFrame")
-        top.pack(fill=tk.BOTH, expand=False, padx=18, pady=6)
+        self.btn_eliminar_subs = tk.Button(
+            sidebar,
+            text="Quitar subtítulos",
+            command=self.eliminar_subtitulos,
+            bg=t["btn_secondary_bg"],
+            fg=t["btn_secondary_fg"],
+            width=198,
+            height=32,
+            align="left",
+            padx=12,
+            font=("Segoe UI", 9),
+        )
+        self.btn_eliminar_subs.pack(padx=16, pady=2)
 
-        left = ttk.Frame(top, style="Card.TFrame")
-        left.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 8), pady=4)
+        self.btn_renombrar = tk.Button(
+            sidebar,
+            text="Renombrar por lotes",
+            command=self.abrir_renombrador,
+            bg=t["btn_secondary_bg"],
+            fg=t["btn_secondary_fg"],
+            width=198,
+            height=32,
+            align="left",
+            padx=12,
+            font=("Segoe UI", 9),
+        )
+        self.btn_renombrar.pack(padx=16, pady=2)
 
-        self.queue_notebook = ttk.Notebook(left)
-        self.queue_notebook.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
+        self._themed_buttons.extend([
+            (self.btn_eliminar_meta, "btn_secondary_bg", "btn_secondary_fg", "bg_sidebar"),
+            (self.btn_eliminar_subs, "btn_secondary_bg", "btn_secondary_fg", "bg_sidebar"),
+            (self.btn_renombrar, "btn_secondary_bg", "btn_secondary_fg", "bg_sidebar"),
+        ])
 
-        self.tab_queue_active = ttk.Frame(self.queue_notebook, style="Card.TFrame")
-        self.queue_notebook.add(self.tab_queue_active, text="Cola principal")
+        # Controles persistentes en parte inferior del sidebar
+        side_bottom = tk.Frame(sidebar, bg=t["bg_sidebar"])
+        side_bottom.pack(side=tk.BOTTOM, fill=tk.X, padx=16, pady=(8, 16))
+        self._themed_frames.append((side_bottom, "bg_sidebar", None))
 
-        self.tab_queue_skipped = ttk.Frame(self.queue_notebook, style="Card.TFrame")
-        self.queue_notebook.add(self.tab_queue_skipped, text="Omitidos / Errores")
+        div_side_btm = tk.Frame(side_bottom, height=1, bg=t["border"])
+        div_side_btm.pack(fill=tk.X, pady=(0, 12))
+        self._themed_dividers.append(div_side_btm)
 
-        self.lista = tk.Listbox(self.tab_queue_active, selectmode=tk.EXTENDED, bg="#F9FBFF", fg="#1F2A44", selectbackground="#2D9CDB", selectforeground="#FFFFFF", relief=tk.FLAT, font=("Consolas", 10), height=12)
-        self.lista.pack(fill=tk.BOTH, expand=True, padx=12, pady=(8, 8))
+        lbl_exec_sec = tk.Label(side_bottom, text="EJECUCIÓN", font=("Segoe UI", 8, "bold"), bg=t["bg_sidebar"], fg=t["fg_muted"])
+        lbl_exec_sec.pack(anchor=tk.W, padx=2, pady=(0, 6))
+        self._themed_labels.append((lbl_exec_sec, "bg_sidebar", "fg_muted"))
 
-        acciones = tk.Frame(self.tab_queue_active, bg="#FFFFFF")
-        acciones.pack(fill=tk.X, padx=12, pady=(0, 10))
+        self.btn_procesar_cola = tk.Button(
+            side_bottom,
+            text="Procesar cola",
+            command=self.procesar_cola,
+            bg=t["btn_primary"],
+            fg="#FFFFFF",
+            width=196,
+            height=36,
+            font=("Segoe UI", 9, "bold"),
+        )
+        self.btn_procesar_cola.pack(pady=(0, 6))
 
-        self._btn(acciones, "Agregar", self.seleccionar_archivos, "#2F80ED").pack(side=tk.LEFT, padx=3)
-        self._btn(acciones, "Cargar carpeta", self.cargar_carpeta, "#2F80ED").pack(side=tk.LEFT, padx=3)
-        self._btn(acciones, "Quitar sel.", self.eliminar_seleccionados, "#F2994A").pack(side=tk.LEFT, padx=3)
-        self._btn(acciones, "Limpiar", self.limpiar_lista, "#EB5757").pack(side=tk.LEFT, padx=3)
-        tk.Checkbutton(acciones, text="Buscar recursivo", variable=self.var_recursivo, bg="#FFFFFF", fg="#2B3A57", activebackground="#FFFFFF", selectcolor="#FFFFFF").pack(side=tk.LEFT, padx=8)
+        self.btn_verificar = tk.Button(
+            side_bottom,
+            text="Verificar archivos",
+            command=self.verificar_condiciones_carpeta,
+            bg=t["btn_success"],
+            fg="#FFFFFF",
+            width=196,
+            height=32,
+            font=("Segoe UI", 9, "bold"),
+        )
+        self.btn_verificar.pack(pady=(0, 6))
 
-        self.lista_omitidos = tk.Listbox(self.tab_queue_skipped, selectmode=tk.EXTENDED, bg="#FFF9F9", fg="#8B0000", selectbackground="#EB5757", selectforeground="#FFFFFF", relief=tk.FLAT, font=("Consolas", 10), height=12)
-        self.lista_omitidos.pack(fill=tk.BOTH, expand=True, padx=12, pady=(8, 8))
+        self.btn_cancelar = tk.Button(
+            side_bottom,
+            text="Cancelar proceso",
+            command=self.cancelar,
+            bg=t["btn_danger"],
+            fg="#FFFFFF",
+            width=196,
+            height=32,
+            state=tk.DISABLED,
+            font=("Segoe UI", 9, "bold"),
+        )
+        self.btn_cancelar.pack(pady=(0, 12))
 
-        acciones_omitidos = tk.Frame(self.tab_queue_skipped, bg="#FFFFFF")
-        acciones_omitidos.pack(fill=tk.X, padx=12, pady=(0, 10))
+        self._themed_buttons.extend([
+            (self.btn_procesar_cola, "btn_primary", "accent_fg", "bg_sidebar"),
+            (self.btn_verificar, "btn_success", "accent_fg", "bg_sidebar"),
+            (self.btn_cancelar, "btn_danger", "accent_fg", "bg_sidebar"),
+        ])
 
-        self._btn(acciones_omitidos, "Reincorporar", self.reincorporar_omitidos, "#27AE60").pack(side=tk.LEFT, padx=3)
-        self._btn(acciones_omitidos, "Quitar sel.", self.eliminar_omitidos_seleccionados, "#F2994A").pack(side=tk.LEFT, padx=3)
-        self._btn(acciones_omitidos, "Limpiar", self.limpiar_omitidos, "#EB5757").pack(side=tk.LEFT, padx=3)
+        self.btn_theme = tk.Button(
+            side_bottom,
+            text="Tema: Oscuro" if self.theme_var.get() == "light" else "Tema: Claro",
+            command=self._alternar_tema,
+            bg=t["btn_secondary_bg"],
+            fg=t["btn_secondary_fg"],
+            width=196,
+            height=30,
+            font=("Segoe UI", 8, "bold"),
+        )
+        self.btn_theme.pack()
+        self._themed_buttons.append((self.btn_theme, "btn_secondary_bg", "btn_secondary_fg", "bg_sidebar"))
 
-        right = ttk.Frame(top, style="Card.TFrame")
-        right.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(8, 0), pady=4)
+        # --- ÁREA PRINCIPAL (DERECHA) ---
+        content_shell = tk.Frame(shell, bg=t["bg_app"])
+        content_shell.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self._themed_frames.append((content_shell, "bg_app", None))
 
-        ttk.Label(right, text="Opciones de Procesamiento", style="CardTitle.TLabel").pack(anchor=tk.W, padx=12, pady=(10, 6))
+        # Barra superior contextual
+        topbar = tk.Frame(content_shell, height=52, bg=t["bg_surface"], highlightthickness=0)
+        topbar.pack(fill=tk.X)
+        topbar.pack_propagate(False)
+        self._themed_frames.append((topbar, "bg_surface", None))
 
-        tab_divider = tk.Frame(right, height=1, bg="#E5ECF9")
-        tab_divider.pack(fill=tk.X, padx=12, pady=(0, 10))
+        top_border = tk.Frame(content_shell, height=1, bg=t["border"])
+        top_border.pack(fill=tk.X)
+        self._themed_dividers.append(top_border)
 
-        modules_container = tk.Frame(right, bg="#FFFFFF")
-        modules_container.pack(fill=tk.BOTH, expand=True, padx=12, pady=(0, 10))
+        self.lbl_view_title = tk.Label(topbar, text="Cola de Procesamiento", font=("Segoe UI", 12, "bold"), bg=t["bg_surface"], fg=t["fg_primary"])
+        self.lbl_view_title.pack(side=tk.LEFT, padx=20)
+        self._themed_labels.append((self.lbl_view_title, "bg_surface", "fg_primary"))
 
-        m1_frame = tk.LabelFrame(modules_container, text="Procesar Videos", font=("Segoe UI", 9, "bold"), bg="#FFFFFF", fg="#2B3A57", padx=12, pady=10)
-        m1_frame.pack(fill=tk.X, pady=(0, 12))
-        tk.Label(m1_frame, text="Procesa los videos de la cola aplicando combinaciones de pistas y formatos.", font=("Segoe UI", 9), bg="#FFFFFF", fg="#5C6B8A").pack(anchor=tk.W, pady=(0, 8))
-        m1_btns = tk.Frame(m1_frame, bg="#FFFFFF")
-        m1_btns.pack(anchor=tk.W)
-        self.btn_procesar_cola = self._btn(m1_btns, "Procesar cola", self.procesar_cola, "#2D9CDB")
-        self.btn_procesar_cola.pack(side=tk.LEFT, padx=(0, 8))
-        self.btn_verificar = self._btn(m1_btns, "Verificar cola", self.verificar_condiciones_carpeta, "#27AE60")
-        self.btn_verificar.pack(side=tk.LEFT)
+        self.lbl_queue_badge = tk.Label(topbar, text="Cola: 0  |  Omitidos: 0", font=("Segoe UI", 9), bg=t["bg_surface"], fg=t["fg_muted"])
+        self.lbl_queue_badge.pack(side=tk.RIGHT, padx=20)
+        self._themed_labels.append((self.lbl_queue_badge, "bg_surface", "fg_muted"))
 
-        m3_frame = tk.LabelFrame(modules_container, text="Mantenimiento", font=("Segoe UI", 9, "bold"), bg="#FFFFFF", fg="#2B3A57", padx=12, pady=10)
-        m3_frame.pack(fill=tk.X, pady=(0, 12))
-        tk.Label(m3_frame, text="Herramientas de modificación in-place para los archivos originales de la cola.", font=("Segoe UI", 9), bg="#FFFFFF", fg="#5C6B8A").pack(anchor=tk.W, pady=(0, 8))
-        m3_btns = tk.Frame(m3_frame, bg="#FFFFFF")
-        m3_btns.pack(anchor=tk.W)
-        self.btn_eliminar_meta = self._btn(m3_btns, "Eliminar meta", self.eliminar_metadatos, "#F2C94C")
-        self.btn_eliminar_meta.pack(side=tk.LEFT, padx=(0, 8))
-        self.btn_eliminar_subs = self._btn(m3_btns, "Eliminar subs", self.eliminar_subtitulos, "#F2994A")
-        self.btn_eliminar_subs.pack(side=tk.LEFT)
-        self.btn_renombrar = self._btn(m3_btns, "Renombrar", self.abrir_renombrador, "#2D9CDB")
-        self.btn_renombrar.pack(side=tk.LEFT, padx=(8, 0))
+        self.lbl_top_status = tk.Label(topbar, text="Listo", font=("Segoe UI", 9, "bold"), bg=t["bg_surface"], fg=t["accent"])
+        self.lbl_top_status.pack(side=tk.RIGHT, padx=(0, 14))
+        self._themed_labels.append((self.lbl_top_status, "bg_surface", "accent"))
 
-        cancel_frame = tk.Frame(modules_container, bg="#FFFFFF")
-        cancel_frame.pack(fill=tk.X, side=tk.BOTTOM, pady=(10, 0))
-        self.btn_cancelar = self._btn(cancel_frame, "Cancelar todo", self.cancelar, "#EB5757")
-        self.btn_cancelar.config(state=tk.DISABLED)
-        self.btn_cancelar.pack(anchor=tk.W)
+        # Contenedor de vistas
+        views_container = tk.Frame(content_shell, bg=t["bg_app"])
+        views_container.pack(fill=tk.BOTH, expand=True, padx=20, pady=16)
+        self._themed_frames.append((views_container, "bg_app", None))
 
-        opts_card = ttk.Frame(main, style="Card.TFrame")
-        opts_card.pack(fill=tk.X, padx=18, pady=(2, 4))
+        # === VISTA 1: COLA PRINCIPAL ===
+        view_cola = tk.Frame(views_container, bg=t["bg_app"])
+        self._themed_frames.append((view_cola, "bg_app", None))
 
-        row1 = tk.Frame(opts_card, bg="#FFFFFF")
-        row1.pack(fill=tk.X, padx=12, pady=(6, 2))
-        tk.Label(row1, text="1. Salida:", bg="#FFFFFF", fg="#2B3A57", font=("Segoe UI", 9, "bold")).pack(side=tk.LEFT, padx=(0, 6))
-        tk.Entry(row1, textvariable=self.salida_var, bg="#F4F8FF", fg="#1F2A44", relief=tk.FLAT).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 6))
-        self._btn(row1, "Seleccionar", self.seleccionar_directorio, "#4DA8DA").pack(side=tk.LEFT)
+        queue_card = tk.Frame(view_cola, bg=t["bg_surface"], highlightthickness=1, highlightbackground=t["border"])
+        queue_card.pack(fill=tk.BOTH, expand=True, pady=(0, 12))
+        self._themed_frames.append((queue_card, "bg_surface", "border"))
 
-        row2 = tk.Frame(opts_card, bg="#FFFFFF")
-        row2.pack(fill=tk.X, padx=12, pady=2)
-        tk.Label(row2, text="2. Subcarpeta:", bg="#FFFFFF", fg="#2B3A57", font=("Segoe UI", 9, "bold")).pack(side=tk.LEFT, padx=(0, 6))
-        tk.Checkbutton(row2, text="Crear", variable=self.var_subcarpeta, bg="#FFFFFF", fg="#2B3A57", activebackground="#FFFFFF", selectcolor="#FFFFFF").pack(side=tk.LEFT, padx=(0, 6))
+        q_header = tk.Frame(queue_card, bg=t["bg_surface"])
+        q_header.pack(fill=tk.X, padx=16, pady=(14, 8))
+        self._themed_frames.append((q_header, "bg_surface", None))
+        lbl_q_hdr = tk.Label(q_header, text="Archivos en cola", font=("Segoe UI", 10, "bold"), bg=t["bg_surface"], fg=t["fg_primary"])
+        lbl_q_hdr.pack(side=tk.LEFT)
+        self._themed_labels.append((lbl_q_hdr, "bg_surface", "fg_primary"))
+
+        lbl_q_sub = tk.Label(q_header, text="Agrega vídeos o carpetas para procesar por lotes.", font=("Segoe UI", 8), bg=t["bg_surface"], fg=t["fg_muted"])
+        lbl_q_sub.pack(side=tk.RIGHT)
+        self._themed_labels.append((lbl_q_sub, "bg_surface", "fg_muted"))
+
+        self.lista = tk.Listbox(
+            queue_card,
+            selectmode=tk.EXTENDED,
+            bg=t["bg_subtle"],
+            fg=t["fg_primary"],
+            selectbackground=t["accent"],
+            selectforeground=t["accent_fg"],
+            highlightthickness=1,
+            highlightbackground=t["border"],
+            relief=tk.FLAT,
+            font=("Consolas", 10),
+        )
+        self.lista.pack(fill=tk.BOTH, expand=True, padx=16, pady=(0, 10))
+
+        acciones = tk.Frame(queue_card, bg=t["bg_surface"])
+        acciones.pack(fill=tk.X, padx=16, pady=(0, 14))
+        self._themed_frames.append((acciones, "bg_surface", None))
+
+        b_add = self._btn(acciones, "Agregar archivos", self.seleccionar_archivos, t["btn_primary"])
+        b_add.pack(side=tk.LEFT, padx=(0, 6))
+        b_dir = self._btn(acciones, "Cargar carpeta", self.cargar_carpeta, t["btn_primary"])
+        b_dir.pack(side=tk.LEFT, padx=(0, 6))
+        b_rem = self._btn(acciones, "Quitar selección", self.eliminar_seleccionados, t["btn_warning"])
+        b_rem.pack(side=tk.LEFT, padx=(0, 6))
+        b_clr = self._btn(acciones, "Vaciar cola", self.limpiar_lista, t["btn_danger"])
+        b_clr.pack(side=tk.LEFT, padx=(0, 12))
+        self._themed_buttons.extend([
+            (b_add, "btn_primary", "accent_fg", "bg_surface"),
+            (b_dir, "btn_primary", "accent_fg", "bg_surface"),
+            (b_rem, "btn_warning", "accent_fg", "bg_surface"),
+            (b_clr, "btn_danger", "accent_fg", "bg_surface"),
+        ])
+
+        chk_rec = tk.Checkbutton(
+            acciones,
+            text="Buscar recursivo",
+            variable=self.var_recursivo,
+            bg=t["bg_surface"],
+            fg=t["fg_secondary"],
+            activebackground=t["bg_surface"],
+            activeforeground=t["fg_primary"],
+            selectcolor=t["bg_input"],
+        )
+        chk_rec.pack(side=tk.LEFT, padx=4)
+        self._themed_checks.append((chk_rec, "bg_surface", "fg_secondary"))
+
+        # Tarjeta inferior de Salida y Codificación (2 columnas limpias)
+        opts_card = tk.Frame(view_cola, bg=t["bg_surface"], highlightthickness=1, highlightbackground=t["border"])
+        opts_card.pack(fill=tk.X)
+        self._themed_frames.append((opts_card, "bg_surface", "border"))
+
+        opts_grid = tk.Frame(opts_card, bg=t["bg_surface"])
+        opts_grid.pack(fill=tk.X, padx=16, pady=12)
+        self._themed_frames.append((opts_grid, "bg_surface", None))
+
+        col_dest = tk.Frame(opts_grid, bg=t["bg_surface"])
+        col_dest.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 14))
+        self._themed_frames.append((col_dest, "bg_surface", None))
+
+        lbl_dest_hdr = tk.Label(col_dest, text="Destino y Organización", font=("Segoe UI", 9, "bold"), bg=t["bg_surface"], fg=t["fg_primary"])
+        lbl_dest_hdr.pack(anchor=tk.W, pady=(0, 8))
+        self._themed_labels.append((lbl_dest_hdr, "bg_surface", "fg_primary"))
+
+        r_out = tk.Frame(col_dest, bg=t["bg_surface"])
+        r_out.pack(fill=tk.X, pady=(0, 6))
+        self._themed_frames.append((r_out, "bg_surface", None))
+        lbl_out = tk.Label(r_out, text="Salida:", width=10, anchor=tk.W, bg=t["bg_surface"], fg=t["fg_secondary"], font=("Segoe UI", 9))
+        lbl_out.pack(side=tk.LEFT)
+        self._themed_labels.append((lbl_out, "bg_surface", "fg_secondary"))
+
+        ent_salida = tk.Entry(r_out, textvariable=self.salida_var, bg=t["bg_input"], fg=t["fg_primary"], insertbackground=t["fg_primary"], highlightthickness=1, highlightbackground=t["border"], relief=tk.FLAT)
+        ent_salida.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 8), ipady=3)
+        self._themed_entries.append(ent_salida)
+
+        b_sel = self._btn(r_out, "Seleccionar", self.seleccionar_directorio, t["btn_info"])
+        b_sel.config(width=12)
+        b_sel.pack(side=tk.LEFT)
+        self._themed_buttons.append((b_sel, "btn_info", "accent_fg", "bg_surface"))
+
+        r_sub = tk.Frame(col_dest, bg=t["bg_surface"])
+        r_sub.pack(fill=tk.X)
+        self._themed_frames.append((r_sub, "bg_surface", None))
+        chk_sub = tk.Checkbutton(r_sub, text="Subcarpeta:", variable=self.var_subcarpeta, bg=t["bg_surface"], fg=t["fg_secondary"], activebackground=t["bg_surface"], activeforeground=t["fg_primary"], selectcolor=t["bg_input"])
+        chk_sub.pack(side=tk.LEFT, padx=(0, 6))
+        self._themed_checks.append((chk_sub, "bg_surface", "fg_secondary"))
 
         try:
             presets_data = json.loads(self.config_ini.get("Options", "presets", fallback='[]'))
         except Exception:
             presets_data = []
-        self.cb_nombre_subcarpeta = ttk.Combobox(row2, textvariable=self.var_nombre_subcarpeta, values=presets_data, width=32)
-        self.cb_nombre_subcarpeta.pack(side=tk.LEFT, padx=(0, 6))
+        self.cb_nombre_subcarpeta = ttk.Combobox(r_sub, textvariable=self.var_nombre_subcarpeta, values=presets_data, width=24)
+        self.cb_nombre_subcarpeta.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 8))
 
-        btn_build = self._btn(row2, "Configurar", self._abrir_constructor_rutas, "#2D9CDB")
+        btn_build = self._btn(r_sub, "Configurar", self._abrir_constructor_rutas, t["btn_primary"])
+        btn_build.config(width=12)
         btn_build.pack(side=tk.LEFT)
+        self._themed_buttons.append((btn_build, "btn_primary", "accent_fg", "bg_surface"))
 
-        row3 = tk.Frame(opts_card, bg="#FFFFFF")
-        row3.pack(fill=tk.X, padx=12, pady=(2, 6))
+        div_cols = tk.Frame(opts_grid, width=1, bg=t["border"])
+        div_cols.pack(side=tk.LEFT, fill=tk.Y, padx=6)
+        self._themed_dividers.append(div_cols)
 
-        tk.Label(row3, text="3. Opciones:", bg="#FFFFFF", fg="#2B3A57", font=("Segoe UI", 9, "bold")).pack(side=tk.LEFT, padx=(0, 6))
+        col_enc = tk.Frame(opts_grid, bg=t["bg_surface"])
+        col_enc.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(14, 0))
+        self._themed_frames.append((col_enc, "bg_surface", None))
 
-        tk.Label(row3, text="GPU:", bg="#FFFFFF", fg="#2B3A57", font=("Segoe UI", 9, "bold")).pack(side=tk.LEFT, padx=(6, 2))
-        self.cb_gpu = ttk.Combobox(row3, values=["NVIDIA (NVENC)", "Intel (QSV)", "AMD (AMF)"], state="readonly", width=32)
-        self.cb_gpu.pack(side=tk.LEFT, padx=4)
+        lbl_enc_hdr = tk.Label(col_enc, text="Codificación y Reglas", font=("Segoe UI", 9, "bold"), bg=t["bg_surface"], fg=t["fg_primary"])
+        lbl_enc_hdr.pack(anchor=tk.W, pady=(0, 8))
+        self._themed_labels.append((lbl_enc_hdr, "bg_surface", "fg_primary"))
+
+        r_hw = tk.Frame(col_enc, bg=t["bg_surface"])
+        r_hw.pack(fill=tk.X, pady=(0, 8))
+        self._themed_frames.append((r_hw, "bg_surface", None))
+        lbl_gpu = tk.Label(r_hw, text="GPU:", bg=t["bg_surface"], fg=t["fg_secondary"], font=("Segoe UI", 9))
+        lbl_gpu.pack(side=tk.LEFT, padx=(0, 6))
+        self._themed_labels.append((lbl_gpu, "bg_surface", "fg_secondary"))
+        self.cb_gpu = ttk.Combobox(r_hw, values=["Detectando..."], state="readonly", width=18)
+        self.cb_gpu.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 12))
         self.cb_gpu.bind("<<ComboboxSelected>>", self._on_gpu_selected)
 
-        tk.Label(row3, text="Decod.:", bg="#FFFFFF", fg="#2B3A57", font=("Segoe UI", 9, "bold")).pack(side=tk.LEFT, padx=(6, 2))
-        self.cb_decod = ttk.Combobox(row3, values=["Software", "D3D11VA", "DXVA2"], state="readonly", textvariable=self.decod_hw_var, width=8)
-        self.cb_decod.pack(side=tk.LEFT, padx=4)
+        lbl_dec = tk.Label(r_hw, text="Decodificador:", bg=t["bg_surface"], fg=t["fg_secondary"], font=("Segoe UI", 9))
+        lbl_dec.pack(side=tk.LEFT, padx=(0, 6))
+        self._themed_labels.append((lbl_dec, "bg_surface", "fg_secondary"))
+        self.cb_decod = ttk.Combobox(r_hw, values=["Software", "D3D11VA", "DXVA2"], state="readonly", textvariable=self.decod_hw_var, width=10)
+        self.cb_decod.pack(side=tk.LEFT)
 
-        tk.Checkbutton(row3, text="Eliminar metadatos al finalizar", variable=self.var_eliminar_metadatos, bg="#FFFFFF", fg="#2B3A57", activebackground="#FFFFFF", selectcolor="#FFFFFF").pack(side=tk.LEFT, padx=6)
-        tk.Checkbutton(row3, text="Incluir subs externos (.srt)", variable=self.var_buscar_subtitulos_externos, bg="#FFFFFF", fg="#2B3A57", activebackground="#FFFFFF", selectcolor="#FFFFFF").pack(side=tk.LEFT, padx=6)
+        r_chk = tk.Frame(col_enc, bg=t["bg_surface"])
+        r_chk.pack(fill=tk.X, pady=(2, 0))
+        self._themed_frames.append((r_chk, "bg_surface", None))
+        chk_meta = tk.Checkbutton(r_chk, text="Limpiar metadatos al finalizar", variable=self.var_eliminar_metadatos, bg=t["bg_surface"], fg=t["fg_secondary"], activebackground=t["bg_surface"], activeforeground=t["fg_primary"], selectcolor=t["bg_input"])
+        chk_meta.pack(side=tk.LEFT, padx=(0, 14))
+        self._themed_checks.append((chk_meta, "bg_surface", "fg_secondary"))
+
+        chk_ext = tk.Checkbutton(r_chk, text="Incluir subs externos (.srt)", variable=self.var_buscar_subtitulos_externos, bg=t["bg_surface"], fg=t["fg_secondary"], activebackground=t["bg_surface"], activeforeground=t["fg_primary"], selectcolor=t["bg_input"])
+        chk_ext.pack(side=tk.LEFT)
+        self._themed_checks.append((chk_ext, "bg_surface", "fg_secondary"))
+
+        # === VISTA 2: OMITIDOS / ERRORES ===
+        view_omitidos = tk.Frame(views_container, bg=t["bg_app"])
+        self._themed_frames.append((view_omitidos, "bg_app", None))
+
+        skip_card = tk.Frame(view_omitidos, bg=t["bg_surface"], highlightthickness=1, highlightbackground=t["border"])
+        skip_card.pack(fill=tk.BOTH, expand=True)
+        self._themed_frames.append((skip_card, "bg_surface", "border"))
+
+        skip_hdr = tk.Frame(skip_card, bg=t["bg_surface"])
+        skip_hdr.pack(fill=tk.X, padx=16, pady=(14, 8))
+        self._themed_frames.append((skip_hdr, "bg_surface", None))
+        lbl_sh = tk.Label(skip_hdr, text="Archivos Omitidos o con Errores", font=("Segoe UI", 10, "bold"), bg=t["bg_surface"], fg=t["fg_primary"])
+        lbl_sh.pack(side=tk.LEFT)
+        self._themed_labels.append((lbl_sh, "bg_surface", "fg_primary"))
+
+        lbl_sd = tk.Label(skip_hdr, text="Puedes reincorporarlos a la cola principal tras corregir el origen.", font=("Segoe UI", 8), bg=t["bg_surface"], fg=t["fg_muted"])
+        lbl_sd.pack(side=tk.RIGHT)
+        self._themed_labels.append((lbl_sd, "bg_surface", "fg_muted"))
+
+        self.lista_omitidos = tk.Listbox(
+            skip_card,
+            selectmode=tk.EXTENDED,
+            bg=t["skipped_bg"],
+            fg=t["skipped_fg"],
+            selectbackground=t["btn_danger"],
+            selectforeground="#FFFFFF",
+            highlightthickness=1,
+            highlightbackground=t["border"],
+            relief=tk.FLAT,
+            font=("Consolas", 10),
+        )
+        self.lista_omitidos.pack(fill=tk.BOTH, expand=True, padx=16, pady=(0, 10))
+
+        acciones_omitidos = tk.Frame(skip_card, bg=t["bg_surface"])
+        acciones_omitidos.pack(fill=tk.X, padx=16, pady=(0, 14))
+        self._themed_frames.append((acciones_omitidos, "bg_surface", None))
+
+        b_reinc = self._btn(acciones_omitidos, "Reincorporar", self.reincorporar_omitidos, t["btn_success"])
+        b_reinc.pack(side=tk.LEFT, padx=(0, 6))
+        b_orem = self._btn(acciones_omitidos, "Quitar selección", self.eliminar_omitidos_seleccionados, t["btn_warning"])
+        b_orem.pack(side=tk.LEFT, padx=(0, 6))
+        b_oclr = self._btn(acciones_omitidos, "Vaciar lista", self.limpiar_omitidos, t["btn_danger"])
+        b_oclr.pack(side=tk.LEFT)
+        self._themed_buttons.extend([
+            (b_reinc, "btn_success", "accent_fg", "bg_surface"),
+            (b_orem, "btn_warning", "accent_fg", "bg_surface"),
+            (b_oclr, "btn_danger", "accent_fg", "bg_surface"),
+        ])
+
+        # === VISTA 3: ACTIVIDAD ===
+        view_act = tk.Frame(views_container, bg=t["bg_app"])
+        self._themed_frames.append((view_act, "bg_app", None))
 
         self._log_lock = threading.Lock()
         self.daily_logger = DailyLogger(LOGS_DIR)
@@ -394,55 +790,57 @@ class VWSuite:
         self._act_ok = 0
         self._act_err = 0
 
-        activity_card = ttk.Frame(main, style="Card.TFrame")
-        activity_card.pack(fill=tk.BOTH, expand=True, padx=18, pady=(0, 14))
+        activity_card = tk.Frame(view_act, bg=t["bg_surface"], highlightthickness=1, highlightbackground=t["border"])
+        activity_card.pack(fill=tk.BOTH, expand=True)
+        self._themed_frames.append((activity_card, "bg_surface", "border"))
 
-        prog = tk.Frame(activity_card, bg="#FFFFFF")
-        prog.pack(fill=tk.X, padx=12, pady=(8, 4))
-        self.progress_label = tk.Label(prog, text="Listo", bg="#FFFFFF", fg="#5C6B8A", font=("Segoe UI", 9))
+        prog = tk.Frame(activity_card, bg=t["bg_surface"])
+        prog.pack(fill=tk.X, padx=16, pady=(14, 6))
+        self._themed_frames.append((prog, "bg_surface", None))
+        self.progress_label = tk.Label(prog, text="Listo", bg=t["bg_surface"], fg=t["fg_muted"], font=("Segoe UI", 9))
         self.progress_label.pack(anchor=tk.W)
+        self._themed_labels.append((self.progress_label, "bg_surface", "fg_muted"))
         self.progress = ttk.Progressbar(prog, style="Modern.Horizontal.TProgressbar", mode="determinate")
-        self.progress.pack(fill=tk.X, pady=(4, 0))
+        self.progress.pack(fill=tk.X, pady=(6, 0))
 
-        act_header = tk.Frame(activity_card, bg="#FFFFFF")
-        act_header.pack(fill=tk.X, padx=12, pady=(4, 0))
-        tk.Label(act_header, text="Actividad", bg="#FFFFFF", fg="#2B3A57", font=("Segoe UI", 10, "bold")).pack(side=tk.LEFT)
+        act_header = tk.Frame(activity_card, bg=t["bg_surface"])
+        act_header.pack(fill=tk.X, padx=16, pady=(8, 0))
+        self._themed_frames.append((act_header, "bg_surface", None))
+        lbl_act = tk.Label(act_header, text="Registro de Actividad", bg=t["bg_surface"], fg=t["fg_primary"], font=("Segoe UI", 10, "bold"))
+        lbl_act.pack(side=tk.LEFT)
+        self._themed_labels.append((lbl_act, "bg_surface", "fg_primary"))
 
-        tk.Button(
+        self.btn_ver_log = tk.Button(
             act_header,
             text="Ver log detallado",
             command=self._abrir_log_diario,
-            bg="#EEF3FB",
-            fg="#2B3A57",
-            activebackground="#DCE7F7",
-            activeforeground="#1F2A44",
+            bg=t["btn_secondary_bg"],
+            fg=t["btn_secondary_fg"],
             relief=tk.FLAT,
-            padx=10,
-            pady=2,
+            padx=12,
+            pady=3,
             cursor="hand2",
             font=("Segoe UI", 8, "bold"),
-        ).pack(side=tk.RIGHT)
+        )
+        self.btn_ver_log.pack(side=tk.RIGHT)
+        self._themed_buttons.append((self.btn_ver_log, "btn_secondary_bg", "btn_secondary_fg", "bg_surface"))
 
         self.activity_summary_label = tk.Label(
             act_header,
             text="Éxitos: 0  |  Errores: 0",
-            bg="#FFFFFF",
-            fg="#5C6B8A",
+            bg=t["bg_surface"],
+            fg=t["fg_muted"],
             font=("Segoe UI", 9),
         )
-        self.activity_summary_label.pack(side=tk.RIGHT, padx=(0, 12))
+        self.activity_summary_label.pack(side=tk.RIGHT, padx=(0, 14))
+        self._themed_labels.append((self.activity_summary_label, "bg_surface", "fg_muted"))
 
-        style = ttk.Style()
-        style.layout("Activity.Treeview", [("Activity.Treeview.treearea", {"sticky": "nswe"})])
-        style.configure("Activity.Treeview", font=("Segoe UI", 9), rowheight=28, background="#FFFFFF", fieldbackground="#FFFFFF", borderwidth=0, focusthickness=0)
-        style.configure("Activity.Treeview.Heading", font=("Segoe UI", 9, "bold"), foreground="#2B3A57")
-        style.map("Activity.Treeview", background=[("selected", "#E8F0FE")], foreground=[("selected", "#1F2A44")])
-
-        log_frame = tk.Frame(activity_card, bg="#FFFFFF", highlightthickness=1, highlightbackground="#E5ECF9", highlightcolor="#E5ECF9")
-        log_frame.pack(fill=tk.BOTH, expand=True, padx=12, pady=(6, 10))
+        log_frame = tk.Frame(activity_card, bg=t["bg_surface"], highlightthickness=1, highlightbackground=t["border"], highlightcolor=t["border"])
+        log_frame.pack(fill=tk.BOTH, expand=True, padx=16, pady=(8, 16))
+        self._themed_frames.append((log_frame, "bg_surface", "border"))
 
         cols = ("estado", "video", "accion", "detalle")
-        self.activity_tree = ttk.Treeview(log_frame, columns=cols, show="headings", style="Activity.Treeview", height=12, takefocus=False)
+        self.activity_tree = ttk.Treeview(log_frame, columns=cols, show="headings", style="Activity.Treeview", height=16, takefocus=False)
         self.activity_tree.bind("<FocusIn>", lambda e: self.root.focus_set())
         self.activity_tree.heading("estado", text="Estado")
         self.activity_tree.heading("video", text="Video")
@@ -454,11 +852,6 @@ class VWSuite:
         self.activity_tree.column("accion", width=175, minwidth=145, anchor=tk.CENTER, stretch=False)
         self.activity_tree.column("detalle", width=340, minwidth=200, anchor=tk.W, stretch=True)
 
-        self.activity_tree.tag_configure("exito", foreground="#1E8449", background="#F2FBF5")
-        self.activity_tree.tag_configure("error", foreground="#C0392B", background="#FDF2F2")
-        self.activity_tree.tag_configure("procesando", foreground="#1F618D", background="#F0F7FF")
-        self.activity_tree.tag_configure("aviso", foreground="#B9770E", background="#FEF9E7")
-
         def _limpiar_seleccion_actividad(event):
             if event.widget is self.activity_tree:
                 if not self.activity_tree.identify_row(event.y):
@@ -469,10 +862,30 @@ class VWSuite:
 
         self.root.bind("<Button-1>", _limpiar_seleccion_actividad, add="+")
 
+        def _al_mapear_toplevel(event):
+            w = event.widget
+            if isinstance(w, tk.Toplevel) and not getattr(w, "_vw_themed", False):
+                w._vw_themed = True
+                self._aplicar_tema_dialogo(w)
+
+        self.root.bind_class("Toplevel", "<Map>", _al_mapear_toplevel, add="+")
+
         self.activity_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        scr = ttk.Scrollbar(log_frame, orient="vertical", command=self.activity_tree.yview)
+        scr = ttk.Scrollbar(log_frame, orient="vertical", command=self.activity_tree.yview, style="Vertical.TScrollbar")
         scr.pack(side=tk.RIGHT, fill=tk.Y)
         self.activity_tree.configure(yscrollcommand=scr.set)
+
+        self._views = {
+            "cola": view_cola,
+            "omitidos": view_omitidos,
+            "actividad": view_act,
+        }
+        self._view_titles = {
+            "cola": "Cola de Procesamiento",
+            "omitidos": "Omitidos / Errores",
+            "actividad": "Actividad y Registro",
+        }
+        self._mostrar_vista("cola")
 
         try:
             if os.path.exists(QUEUE_FILE):
@@ -493,14 +906,229 @@ class VWSuite:
 
         self._actualizar_contadores_colas()
 
+    def _mostrar_vista(self, vista_key):
+        self._current_view = vista_key
+        for key, frame in self._views.items():
+            if key == vista_key:
+                frame.pack(fill=tk.BOTH, expand=True)
+            else:
+                frame.pack_forget()
+        if hasattr(self, "lbl_view_title"):
+            self.lbl_view_title.config(text=self._view_titles.get(vista_key, ""))
+        self._actualizar_nav_estilos()
+
+    def _actualizar_nav_estilos(self):
+        t = get_theme(self.theme_var.get())
+        if not hasattr(self, "_nav_buttons"):
+            return
+        for key, btn in self._nav_buttons.items():
+            activo = key == self._current_view
+            btn.config(
+                bg=t["accent"] if activo else t["bg_sidebar"],
+                fg="#FFFFFF" if activo else t["fg_secondary"],
+                parent_bg=t["bg_sidebar"],
+            )
+
+    def _aplicar_tema(self):
+        t = get_theme(self.theme_var.get())
+        self._crear_estilos()
+
+        if hasattr(self, "_lbl_brand_badge"):
+            self._lbl_brand_badge.config(bg=t["accent"], fg="#FFFFFF")
+
+        for frame, bg_key, border_key in self._themed_frames:
+            kw = {"bg": t[bg_key]}
+            if border_key:
+                kw["highlightbackground"] = t[border_key]
+                kw["highlightcolor"] = t[border_key]
+            frame.config(**kw)
+
+        for div in self._themed_dividers:
+            div.config(bg=t["border"])
+
+        for lbl, bg_key, fg_key in self._themed_labels:
+            lbl.config(bg=t[bg_key], fg=t[fg_key])
+
+        for chk, bg_key, fg_key in self._themed_checks:
+            chk.config(
+                bg=t[bg_key],
+                fg=t[fg_key],
+                activebackground=t[bg_key],
+                activeforeground=t["fg_primary"],
+                selectcolor=t["bg_input"],
+            )
+
+        for ent in self._themed_entries:
+            ent.config(
+                bg=t["bg_input"],
+                fg=t["fg_primary"],
+                insertbackground=t["fg_primary"],
+                highlightbackground=t["border"],
+                highlightcolor=t["accent"],
+            )
+
+        self.lista.config(
+            bg=t["bg_subtle"],
+            fg=t["fg_primary"],
+            selectbackground=t["accent"],
+            selectforeground=t["accent_fg"],
+            highlightbackground=t["border"],
+        )
+        self.lista_omitidos.config(
+            bg=t["skipped_bg"],
+            fg=t["skipped_fg"],
+            selectbackground=t["btn_danger"],
+            selectforeground="#FFFFFF",
+            highlightbackground=t["border"],
+        )
+
+        for btn, bg_key, fg_key, parent_bg_key in self._themed_buttons:
+            btn.config(
+                bg=t[bg_key],
+                fg=t[fg_key],
+                disabled_bg=t["btn_disabled_bg"],
+                disabled_fg=t["btn_disabled_fg"],
+                parent_bg=t[parent_bg_key],
+            )
+
+        if hasattr(self, "btn_theme"):
+            self.btn_theme.config(
+                text="Tema: Oscuro" if self.theme_var.get() == "light" else "Tema: Claro"
+            )
+
+        self.activity_tree.tag_configure("exito", foreground=t["success"], background=t["success_bg"])
+        self.activity_tree.tag_configure("error", foreground=t["danger"], background=t["danger_bg"])
+        self.activity_tree.tag_configure("procesando", foreground=t["info"], background=t["info_bg"])
+        self.activity_tree.tag_configure("aviso", foreground=t["warning"], background=t["warning_bg"])
+        self._actualizar_nav_estilos()
+
+    def _aplicar_tema_dialogo(self, win):
+        """Aplica la paleta activa (clara u oscura) de forma recursiva a cualquier ventana secundaria."""
+        if not win or not win.winfo_exists():
+            return
+        t = get_theme(self.theme_var.get())
+        win.configure(bg=t["bg_app"])
+
+        bg_superficie = {"#FFFFFF", "#F9FBFF"}
+        bg_sutil = {"#E5ECF9", "#EEF3FB", "#F4F8FF"}
+        bg_app = {"#F3F7FF", "SYSTEMBUTTONFACE", "WHITE"}
+        fg_oscuro_a_primario = {"#1F2A44", "#2B3A57", "#4F4F4F", "#000000", "BLACK", "SYSTEMWINDOWTEXT"}
+        fg_tenue_a_muted = {"#5C6B8A", "#7F8C8D", "#B0C4DE", "#95A5A6"}
+        fg_acento = {"#2D9CDB", "#2F80ED", "#4DA8DA"}
+
+        def _recorrer(widget, parent_bg):
+            for child in widget.winfo_children():
+                try:
+                    if isinstance(child, RoundedButton):
+                        child.config(
+                            parent_bg=parent_bg,
+                            disabled_bg=t["btn_disabled_bg"],
+                            disabled_fg=t["btn_disabled_fg"],
+                        )
+                        continue
+
+                    if isinstance(child, (tk.Frame, tk.LabelFrame)):
+                        cur_bg = str(child.cget("bg")).upper()
+                        if cur_bg in ("#1A2536", "#1C2541"):
+                            new_bg = t["bg_sidebar"]
+                        elif cur_bg in ("#2D9CDB", "#2563EB"):
+                            new_bg = t["accent"]
+                        elif cur_bg in ("#E5ECF9", "#D1E2FF") and str(child.cget("height")) == "1":
+                            new_bg = t["border"]
+                        elif cur_bg in bg_superficie:
+                            new_bg = t["bg_surface"]
+                        elif cur_bg in bg_sutil:
+                            new_bg = t["bg_subtle"]
+                        elif cur_bg in bg_app:
+                            new_bg = t["bg_app"]
+                        else:
+                            new_bg = parent_bg
+
+                        kw = {"bg": new_bg}
+                        if isinstance(child, tk.LabelFrame):
+                            kw["fg"] = t["fg_primary"]
+                        try:
+                            if int(str(child.cget("highlightthickness")) or 0) > 0:
+                                kw["highlightbackground"] = t["border"]
+                                kw["highlightcolor"] = t["border"]
+                        except Exception:
+                            pass
+                        child.config(**kw)
+                        _recorrer(child, new_bg)
+                    elif isinstance(child, tk.Label):
+                        cur_bg = str(child.cget("bg")).upper()
+                        cur_fg = str(child.cget("fg")).upper()
+                        if cur_bg in ("#2563EB", "#3B82F6", "#2D9CDB"):
+                            child.config(bg=t["accent"], fg="#FFFFFF")
+                            continue
+                        if cur_fg in fg_oscuro_a_primario:
+                            new_fg = t["fg_primary"]
+                        elif cur_fg in fg_tenue_a_muted:
+                            new_fg = t["fg_muted"]
+                        elif cur_fg in fg_acento:
+                            new_fg = t["accent"]
+                        elif cur_fg in ("#EB5757", "#E74C3C"):
+                            new_fg = t["danger"]
+                        elif cur_fg in ("#27AE60", "#1E8449"):
+                            new_fg = t["success"]
+                        elif cur_fg in ("#F2994A", "#F2C94C"):
+                            new_fg = t["warning"]
+                        else:
+                            new_fg = child.cget("fg")
+                        child.config(bg=parent_bg, fg=new_fg)
+                    elif isinstance(child, (tk.Checkbutton, tk.Radiobutton)):
+                        child.config(
+                            bg=parent_bg,
+                            fg=t["fg_primary"],
+                            activebackground=parent_bg,
+                            activeforeground=t["fg_primary"],
+                            selectcolor=t["bg_input"],
+                        )
+                    elif isinstance(child, (tk.Entry, tk.Spinbox)):
+                        kw_ent = {
+                            "bg": t["bg_input"],
+                            "fg": t["fg_primary"],
+                            "insertbackground": t["fg_primary"],
+                        }
+                        if isinstance(child, tk.Spinbox):
+                            kw_ent["buttonbackground"] = t["bg_subtle"]
+                        child.config(**kw_ent)
+                    elif isinstance(child, tk.Text):
+                        child.config(
+                            bg=t["bg_subtle"],
+                            fg=t["fg_primary"],
+                            insertbackground=t["fg_primary"],
+                        )
+                    elif isinstance(child, tk.Listbox):
+                        child.config(
+                            bg=t["bg_subtle"],
+                            fg=t["fg_primary"],
+                            selectbackground=t["accent"],
+                            selectforeground=t["accent_fg"],
+                        )
+                    elif isinstance(child, tk.Canvas):
+                        child.config(bg=parent_bg)
+                        _recorrer(child, parent_bg)
+                    else:
+                        _recorrer(child, parent_bg)
+                except Exception:
+                    try:
+                        _recorrer(child, parent_bg)
+                    except Exception:
+                        pass
+
+        _recorrer(win, t["bg_app"])
+
     def _actualizar_contadores_colas(self):
         cant_activos = len([f for f in self.lista.get(0, tk.END) if f and str(f).strip()])
         cant_omitidos = len([f for f in self.lista_omitidos.get(0, tk.END) if f and str(f).strip()])
-        try:
-            self.queue_notebook.tab(self.tab_queue_active, text=f"Cola principal ({cant_activos})")
-            self.queue_notebook.tab(self.tab_queue_skipped, text=f"Omitidos / Errores ({cant_omitidos})")
-        except Exception:
-            pass
+        if hasattr(self, "_nav_buttons"):
+            if "cola" in self._nav_buttons:
+                self._nav_buttons["cola"].config(text=f"Cola principal ({cant_activos})")
+            if "omitidos" in self._nav_buttons:
+                self._nav_buttons["omitidos"].config(text=f"Omitidos / Errores ({cant_omitidos})")
+        if hasattr(self, "lbl_queue_badge"):
+            self.lbl_queue_badge.config(text=f"Cola: {cant_activos}  |  Omitidos: {cant_omitidos}")
         return cant_activos, cant_omitidos
 
     def _btn(self, parent, text, cmd, bg):
@@ -593,7 +1221,10 @@ class VWSuite:
                         _, actual, total = msg
                         pct = (actual / total) * 100 if total else 0
                         self.progress["value"] = pct
-                        self.progress_label.config(text=f"Procesando {actual}/{total} ({pct:.1f}%)")
+                        estado_str = f"Procesando {actual}/{total} ({pct:.1f}%)"
+                        self.progress_label.config(text=estado_str)
+                        if hasattr(self, "lbl_top_status"):
+                            self.lbl_top_status.config(text=estado_str)
                     elif msg[0] == "FINALIZADO":
                         ok = msg[1]
                         fail = msg[2]
@@ -603,9 +1234,12 @@ class VWSuite:
 
                         self.progress["value"] = 100
                         if fue_cancelado:
-                            self.progress_label.config(text=f"Cancelado | Exitos: {ok} | Fallos: {fail}")
+                            fin_str = f"Cancelado | Éxitos: {ok} | Fallos: {fail}"
                         else:
-                            self.progress_label.config(text=f"Completado | Exitos: {ok} | Fallos: {fail}")
+                            fin_str = f"Completado | Éxitos: {ok} | Fallos: {fail}"
+                        self.progress_label.config(text=fin_str)
+                        if hasattr(self, "lbl_top_status"):
+                            self.lbl_top_status.config(text="Cancelado" if fue_cancelado else "Completado")
                         self._set_running_state(False)
 
                         if hasattr(self, "archivos_en_proceso") and self.archivos_en_proceso:
@@ -642,7 +1276,7 @@ class VWSuite:
                             self._actualizar_contadores_colas()
 
                             if failed_files_norm:
-                                self.queue_notebook.select(self.tab_queue_skipped)
+                                self._mostrar_vista("omitidos")
 
                         self._limpiar_subgrupos()
 
@@ -689,7 +1323,7 @@ class VWSuite:
                 self.lista_omitidos.insert(tk.END, f)
 
         self._actualizar_contadores_colas()
-        self.queue_notebook.select(self.tab_queue_skipped)
+        self._mostrar_vista("omitidos")
 
     def reincorporar_omitidos(self):
         sel = self.lista_omitidos.curselection()
@@ -709,7 +1343,7 @@ class VWSuite:
 
         self._actualizar_contadores_colas()
         self._limpiar_subgrupos()
-        self.queue_notebook.select(self.tab_queue_active)
+        self._mostrar_vista("cola")
 
     def eliminar_omitidos_seleccionados(self):
         sel = self.lista_omitidos.curselection()
@@ -933,18 +1567,24 @@ class VWSuite:
 
     def _actualizar_selector_gpus_ui(self):
         values = []
+        available_keys = []
         self.gpu_availability = {}
         for gpu_key, display_name in [("nvidia", "NVIDIA (NVENC)"), ("intel", "Intel (QSV)"), ("amd", "AMD (AMF)")]:
             is_ok = self.gpus_status.get(gpu_key, (False, ""))[0]
             self.gpu_availability[gpu_key] = is_ok
             if is_ok:
-                lbl = display_name
-            else:
-                lbl = f"{display_name} (No disponible)"
-            values.append(lbl)
-            self.gpu_map_display_to_val[lbl] = gpu_key
+                values.append(display_name)
+                available_keys.append(gpu_key)
+                self.gpu_map_display_to_val[display_name] = gpu_key
 
-        self.cb_gpu.config(values=values)
+        if not values:
+            self.cb_gpu.config(values=["Sin GPU disponible"], state="disabled")
+            self.cb_gpu.set("Sin GPU disponible")
+            return
+
+        self.cb_gpu.config(values=values, state="readonly")
+        if self.gpu_acel_var.get() not in available_keys:
+            self.gpu_acel_var.set(available_keys[0])
         self._sincronizar_combobox_con_variable()
 
     def _sincronizar_combobox_con_variable(self):
@@ -2398,74 +3038,164 @@ class VWSuite:
         threading.Thread(target=worker, daemon=True).start()
 
     def _mostrar_resultados_verificacion(self, resultados):
+        t = get_theme(self.theme_var.get())
         win = tk.Toplevel(self.root)
         win.title("Diagnóstico de la cola - VW")
-        win.geometry("980x700")
+        win.geometry("980x640")
+        win.minsize(820, 520)
         win.transient(self.root)
-        win.configure(bg="#F3F7FF")
+        win.configure(bg=t["bg_app"])
+        win._vw_themed = True
 
-        header = tk.Frame(win, bg="#1C2541")
-        header.pack(fill=tk.X)
-        tk.Label(header, text="Diagnóstico e Integridad de Videos", bg="#1C2541", fg="white", font=("Segoe UI", 14, "bold")).pack(pady=(12, 4))
-        tk.Label(header, text="Análisis de legibilidad, códecs, HDR y pistas de la cola activa.", bg="#1C2541", fg="#B0C4DE", font=("Segoe UI", 9)).pack(pady=(0, 12))
-
-        nb = ttk.Notebook(win)
-        nb.pack(fill=tk.BOTH, expand=True, padx=15, pady=15)
-
-        t_ok = tk.Frame(nb, bg="#FFFFFF")
-        t_warn = tk.Frame(nb, bg="#FFFFFF")
-        t_err = tk.Frame(nb, bg="#FFFFFF")
+        win.update_idletasks()
+        x = self.root.winfo_x() + max(0, (self.root.winfo_width() - 980) // 2)
+        y = self.root.winfo_y() + max(0, (self.root.winfo_height() - 640) // 2)
+        win.geometry(f"+{x}+{y}")
 
         saludables = [r for r in resultados if not r["has_error"] and not r["has_warning"]]
         advertencias = [r for r in resultados if r["has_warning"] and not r["has_error"]]
         errores = [r for r in resultados if r["has_error"]]
 
-        nb.add(t_ok, text=f"Saludables ({len(saludables)})")
-        nb.add(t_warn, text=f"Advertencias ({len(advertencias)})")
-        nb.add(t_err, text=f"Errores/Inaccesibles ({len(errores)})")
+        shell = tk.Frame(win, bg=t["bg_app"])
+        shell.pack(fill=tk.BOTH, expand=True)
 
-        tx1 = tk.Text(t_ok, font=("Consolas", 9), relief=tk.FLAT, padx=10, pady=10)
-        tx1.pack(fill=tk.BOTH, expand=True)
-        for r in saludables:
-            tx1.insert(tk.END, f"✅ {r['archivo']}\n")
-        tx1.config(state=tk.DISABLED)
+        sidebar = tk.Frame(shell, width=215, bg=t["bg_sidebar"])
+        sidebar.pack(side=tk.LEFT, fill=tk.Y)
+        sidebar.pack_propagate(False)
 
-        tx2 = tk.Text(t_warn, font=("Segoe UI", 9), relief=tk.FLAT, padx=10, pady=10)
-        tx2.pack(fill=tk.BOTH, expand=True)
-        tx2.tag_config("title", font=("Segoe UI", 9, "bold"), spacing1=6)
-        tx2.tag_config("detail", font=("Segoe UI", 9), foreground="#5C6B8A", lmargin1=15, lmargin2=15)
-        for r in advertencias:
-            tx2.insert(tk.END, f"⚠️ {r['basename']}\n", "title")
-            tx2.insert(tk.END, f"Ruta: {r['archivo']}\n", "detail")
-            for w in r["warnings"]:
-                tx2.insert(tk.END, f"• {w}\n", "detail")
-        tx2.config(state=tk.DISABLED)
+        tk.Frame(shell, width=1, bg=t["border"]).pack(side=tk.LEFT, fill=tk.Y)
 
-        tx3 = tk.Text(t_err, font=("Segoe UI", 9), relief=tk.FLAT, fg="#EB5757", padx=10, pady=10)
-        tx3.pack(fill=tk.BOTH, expand=True)
-        tx3.tag_config("title", font=("Segoe UI", 9, "bold"), foreground="#EB5757", spacing1=6)
-        tx3.tag_config("detail", font=("Segoe UI", 9), foreground="#7F8C8D", lmargin1=15, lmargin2=15)
-        for r in errores:
-            tx3.insert(tk.END, f"❌ {r['basename']}\n", "title")
-            tx3.insert(tk.END, f"Ruta: {r['archivo']}\n", "detail")
-            for e in r["errors"]:
-                tx3.insert(tk.END, f"• {e}\n", "detail")
-        tx3.config(state=tk.DISABLED)
+        brand_row = tk.Frame(sidebar, bg=t["bg_sidebar"])
+        brand_row.pack(fill=tk.X, padx=16, pady=(18, 14))
+        tk.Label(brand_row, text="VW", font=("Segoe UI", 11, "bold"), bg=t["accent"], fg="#FFFFFF", padx=8, pady=2).pack(side=tk.LEFT)
+        brand_txt = tk.Frame(brand_row, bg=t["bg_sidebar"])
+        brand_txt.pack(side=tk.LEFT, padx=(10, 0))
+        tk.Label(brand_txt, text="Diagnóstico", font=("Segoe UI", 10, "bold"), bg=t["bg_sidebar"], fg=t["fg_primary"]).pack(anchor=tk.W)
+        tk.Label(brand_txt, text="Integridad de cola", font=("Segoe UI", 8), bg=t["bg_sidebar"], fg=t["fg_muted"]).pack(anchor=tk.W)
 
-        btm = tk.Frame(win, bg="#F3F7FF")
-        btm.pack(fill=tk.X, padx=15, pady=(0, 15))
+        tk.Frame(sidebar, height=1, bg=t["border"]).pack(fill=tk.X, padx=16, pady=(0, 12))
+        tk.Label(sidebar, text="FILTROS", font=("Segoe UI", 8, "bold"), bg=t["bg_sidebar"], fg=t["fg_muted"]).pack(anchor=tk.W, padx=18, pady=(0, 6))
 
+        nav_btns = {}
+
+        def _poblar_tabla(clave):
+            for k, btn in nav_btns.items():
+                activo = k == clave
+                btn.config(
+                    bg=t["accent"] if activo else t["bg_sidebar"],
+                    fg="#FFFFFF" if activo else t["fg_secondary"],
+                    parent_bg=t["bg_sidebar"],
+                )
+
+            titulos = {
+                "todos": "Todos los archivos",
+                "saludables": "Archivos saludables",
+                "advertencias": "Archivos con advertencias",
+                "errores": "Errores o inaccesibles",
+            }
+            lbl_titulo.config(text=titulos.get(clave, "Diagnóstico"))
+            tree.delete(*tree.get_children())
+
+            if clave in ("todos", "saludables"):
+                for r in saludables:
+                    tree.insert("", tk.END, values=("Saludable", r["basename"], r["archivo"]), tags=("exito",))
+            if clave in ("todos", "advertencias"):
+                for r in advertencias:
+                    det = " | ".join(r["warnings"]) if r["warnings"] else r["archivo"]
+                    tree.insert("", tk.END, values=("Advertencia", r["basename"], det), tags=("aviso",))
+            if clave in ("todos", "errores"):
+                for r in errores:
+                    det = " | ".join(r["errors"]) if r["errors"] else r["archivo"]
+                    tree.insert("", tk.END, values=("Error", r["basename"], det), tags=("error",))
+
+        filtros = [
+            ("todos", f"Todos ({len(resultados)})"),
+            ("saludables", f"Saludables ({len(saludables)})"),
+            ("advertencias", f"Advertencias ({len(advertencias)})"),
+            ("errores", f"Errores ({len(errores)})"),
+        ]
+        for key, txt in filtros:
+            b = tk.Button(
+                sidebar,
+                text=txt,
+                command=lambda k=key: _poblar_tabla(k),
+                bg=t["bg_sidebar"],
+                fg=t["fg_secondary"],
+                width=183,
+                height=32,
+                align="left",
+                padx=12,
+                font=("Segoe UI", 9, "bold"),
+            )
+            b.pack(padx=16, pady=2)
+            nav_btns[key] = b
+
+        side_btm = tk.Frame(sidebar, bg=t["bg_sidebar"])
+        side_btm.pack(side=tk.BOTTOM, fill=tk.X, padx=16, pady=(8, 16))
+        tk.Frame(side_btm, height=1, bg=t["border"]).pack(fill=tk.X, pady=(0, 12))
         tk.Button(
-            btm,
+            side_btm,
             text="Cerrar",
             command=win.destroy,
-            bg="#2D9CDB",
-            fg="white",
-            relief=tk.FLAT,
-            padx=20,
-            pady=6,
-            font=("Segoe UI", 9, "bold")
-        ).pack(side=tk.RIGHT)
+            bg=t["btn_primary"],
+            fg="#FFFFFF",
+            width=183,
+            height=34,
+            font=("Segoe UI", 9, "bold"),
+        ).pack()
+
+        content = tk.Frame(shell, bg=t["bg_app"])
+        content.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        topbar = tk.Frame(content, height=52, bg=t["bg_surface"])
+        topbar.pack(fill=tk.X)
+        topbar.pack_propagate(False)
+        tk.Frame(content, height=1, bg=t["border"]).pack(fill=tk.X)
+
+        lbl_titulo = tk.Label(topbar, text="Todos los archivos", font=("Segoe UI", 11, "bold"), bg=t["bg_surface"], fg=t["fg_primary"])
+        lbl_titulo.pack(side=tk.LEFT, padx=20)
+        tk.Label(
+            topbar,
+            text=f"Saludables: {len(saludables)}  |  Advertencias: {len(advertencias)}  |  Errores: {len(errores)}",
+            font=("Segoe UI", 9),
+            bg=t["bg_surface"],
+            fg=t["fg_muted"],
+        ).pack(side=tk.RIGHT, padx=20)
+
+        card = tk.Frame(content, bg=t["bg_surface"], highlightthickness=1, highlightbackground=t["border"])
+        card.pack(fill=tk.BOTH, expand=True, padx=20, pady=16)
+
+        tree_frame = tk.Frame(card, bg=t["bg_surface"], highlightthickness=1, highlightbackground=t["border"], highlightcolor=t["border"])
+        tree_frame.pack(fill=tk.BOTH, expand=True, padx=16, pady=16)
+
+        tree = ttk.Treeview(tree_frame, columns=("estado", "archivo", "detalle"), show="headings", style="Activity.Treeview", takefocus=False)
+        tree.bind("<FocusIn>", lambda e: win.focus_set())
+        tree.heading("estado", text="Estado")
+        tree.heading("archivo", text="Archivo")
+        tree.heading("detalle", text="Ruta / Detalle")
+        tree.column("estado", width=105, minwidth=95, anchor=tk.CENTER, stretch=False)
+        tree.column("archivo", width=260, minwidth=160, anchor=tk.W, stretch=True)
+        tree.column("detalle", width=360, minwidth=200, anchor=tk.W, stretch=True)
+
+        tree.tag_configure("exito", foreground=t["success"], background=t["success_bg"])
+        tree.tag_configure("aviso", foreground=t["warning"], background=t["warning_bg"])
+        tree.tag_configure("error", foreground=t["danger"], background=t["danger_bg"])
+
+        def _limpiar_sel(event):
+            if event.widget is tree:
+                if not tree.identify_row(event.y):
+                    tree.selection_remove(tree.selection())
+            elif tree.selection():
+                tree.selection_remove(tree.selection())
+
+        win.bind("<Button-1>", _limpiar_sel, add="+")
+
+        tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scr = ttk.Scrollbar(tree_frame, orient="vertical", command=tree.yview, style="Vertical.TScrollbar")
+        scr.pack(side=tk.RIGHT, fill=tk.Y)
+        tree.configure(yscrollcommand=scr.set)
+
+        _poblar_tabla("todos")
 
     def _eliminar_metadatos_archivo(self, video_file, errores=None):
         video_file = Path(video_file)
@@ -3047,30 +3777,55 @@ class VWSuite:
         tree_container = tk.Frame(preview_frame, bg="#FFFFFF")
         tree_container.pack(fill=tk.BOTH, expand=True)
 
+        t_act = get_theme(self.theme_var.get())
         style = ttk.Style()
-        style.configure("Renamer.Treeview", background="#FFFFFF", foreground="#1F2A44", fieldbackground="#FFFFFF", rowheight=24, font=("Segoe UI", 9))
-        style.map("Renamer.Treeview", background=[("selected", "#2D9CDB")], foreground=[("selected", "#FFFFFF")])
-        style.configure("Renamer.Treeview.Heading", font=("Segoe UI", 9, "bold"))
+        style.layout("Renamer.Treeview", [("Renamer.Treeview.treearea", {"sticky": "nswe"})])
+        style.configure(
+            "Renamer.Treeview",
+            background=t_act["bg_surface"],
+            foreground=t_act["fg_primary"],
+            fieldbackground=t_act["bg_surface"],
+            rowheight=26,
+            borderwidth=0,
+            focusthickness=0,
+            font=("Segoe UI", 9),
+        )
+        style.map("Renamer.Treeview", background=[("selected", t_act["tree_sel_bg"])], foreground=[("selected", t_act["tree_sel_fg"])])
+        style.configure(
+            "Renamer.Treeview.Heading",
+            font=("Segoe UI", 9, "bold"),
+            background=t_act["heading_bg"],
+            foreground=t_act["heading_fg"],
+            relief="flat",
+        )
+        style.map(
+            "Renamer.Treeview.Heading",
+            background=[("active", t_act["bg_input"]), ("pressed", t_act["bg_input"])],
+            foreground=[("active", t_act["fg_primary"]), ("pressed", t_act["fg_primary"])],
+        )
 
-        tree = ttk.Treeview(tree_container, columns=("original", "nuevo", "status"), show="headings", style="Renamer.Treeview")
-        tree.heading("original", text="Ruta Original / Nombre")
+        tree = ttk.Treeview(tree_container, columns=("original", "nuevo", "status"), show="headings", style="Renamer.Treeview", takefocus=False)
+        tree.bind("<FocusIn>", lambda e: dialog.focus_set())
+        tree.heading("original", text="Nombre Actual")
         tree.heading("nuevo", text="Nombre Nuevo Propuesto")
         tree.heading("status", text="Estado / Alerta")
 
-        tree.column("original", width=340, anchor="w")
+        tree.column("original", width=320, anchor="w")
         tree.column("nuevo", width=340, anchor="w")
-        tree.column("status", width=160, anchor="w")
+        tree.column("status", width=170, anchor="w")
 
         tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        scrollbar = tk.Scrollbar(tree_container, command=tree.yview)
+        scrollbar = ttk.Scrollbar(tree_container, orient="vertical", command=tree.yview, style="Vertical.TScrollbar")
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         tree.config(yscrollcommand=scrollbar.set)
 
-        tree.tag_configure("ok", foreground="#27AE60")
-        tree.tag_configure("conflict", foreground="#F2994A", font=("Segoe UI", 9, "bold"))
-        tree.tag_configure("error", foreground="#EB5757", font=("Segoe UI", 9, "bold"))
-        tree.tag_configure("no_change", foreground="#7F8C8D")
+        tree.tag_configure("ok", foreground=t_act["success"])
+        tree.tag_configure("conflict", foreground=t_act["warning"], font=("Segoe UI", 9, "bold"))
+        tree.tag_configure("error", foreground=t_act["danger"], font=("Segoe UI", 9, "bold"))
+        tree.tag_configure("no_change", foreground=t_act["fg_muted"])
+
+        item_to_path = {}
 
         def _es_nombre_valido(nombre):
             if not nombre.strip():
@@ -3081,6 +3836,7 @@ class VWSuite:
         def actualizar_preview(*_):
             for item in tree.get_children():
                 tree.delete(item)
+            item_to_path.clear()
 
             patron = patron_var.get()
             try:
@@ -3167,7 +3923,8 @@ class VWSuite:
                     status = "Listo"
                     tag = "ok"
 
-                tree.insert("", tk.END, values=(filepath, new_name, status), tags=(tag,))
+                item_id = tree.insert("", tk.END, values=(os.path.basename(filepath), new_name, status), tags=(tag,))
+                item_to_path[item_id] = filepath
 
         patron_var.trace_add("write", actualizar_preview)
         inicio_var.trace_add("write", actualizar_preview)
@@ -3184,13 +3941,13 @@ class VWSuite:
         btn_container = tk.Frame(btm, bg="#F3F7FF")
         btn_container.pack(anchor=tk.CENTER)
 
-        btn_ok = tk.Button(btn_container, text="Aplicar Renombrado", command=lambda: self._ejecutar_renombrado(dialog, archivos, tree), bg="#27AE60", fg="white", width=22, relief=tk.FLAT, font=("Segoe UI", 10, "bold"), cursor="hand2")
+        btn_ok = tk.Button(btn_container, text="Aplicar Renombrado", command=lambda: self._ejecutar_renombrado(dialog, archivos, tree, item_to_path), bg="#27AE60", fg="white", width=22, relief=tk.FLAT, font=("Segoe UI", 10, "bold"), cursor="hand2")
         btn_ok.pack(side=tk.LEFT, padx=10)
 
         btn_cancel = tk.Button(btn_container, text="Cancelar", command=dialog.destroy, bg="#95A5A6", fg="white", width=12, relief=tk.FLAT, font=("Segoe UI", 10, "bold"), cursor="hand2")
         btn_cancel.pack(side=tk.LEFT, padx=10)
 
-    def _ejecutar_renombrado(self, dialog, archivos, tree):
+    def _ejecutar_renombrado(self, dialog, archivos, tree, item_to_path=None):
         if not archivos:
             messagebox.showwarning("Sin archivos", "No hay archivos en la cola para renombrar.", parent=dialog)
             return
@@ -3237,7 +3994,8 @@ class VWSuite:
         mapping_renombres = {}
 
         for item_id in items:
-            original_path, proposed_name, status = tree.item(item_id, "values")
+            _, proposed_name, status = tree.item(item_id, "values")
+            original_path = item_to_path.get(item_id) if item_to_path else _
 
             if status == "Sin cambios":
                 mapping_renombres[original_path] = original_path
@@ -3287,7 +4045,11 @@ class VWSuite:
         self.activity_summary_label.config(text="Éxitos: 0  |  Errores: 0")
         self.progress["value"] = 0
         self.progress_label.config(text=status)
+        if hasattr(self, "lbl_top_status"):
+            self.lbl_top_status.config(text=status)
         self._escribir_log_archivo(status, separador=True)
+        if hasattr(self, "_views"):
+            self._mostrar_vista("actividad")
 
     def seleccionar_archivos(self):
         files = filedialog.askopenfilenames(title="Seleccionar videos", filetypes=[("Videos", "*.mp4 *.mkv *.mov *.avi *.flv *.webm *.ts *.m4v")])
@@ -3759,38 +4521,38 @@ class VWSuite:
         y = self.root.winfo_y() + (self.root.winfo_height() - dialog.winfo_height()) // 2
         dialog.geometry(f"+{x}+{y}")
 
-        header_card = tk.Frame(dialog, bg="#F4F8FF", highlightthickness=1, highlightbackground="#D1E2FF", bd=0)
-        header_card.pack(fill=tk.X, padx=18, pady=(12, 6))
+        header_card = tk.Frame(dialog, bg="#FFFFFF", highlightthickness=1, highlightbackground="#E5ECF9", bd=0)
+        header_card.pack(fill=tk.X, padx=18, pady=(14, 8))
 
-        accent_bar = tk.Frame(header_card, width=4, bg="#2D9CDB")
-        accent_bar.pack(side=tk.LEFT, fill=tk.Y)
+        text_container = tk.Frame(header_card, bg="#FFFFFF")
+        text_container.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=14, pady=10)
 
-        text_container = tk.Frame(header_card, bg="#F4F8FF")
-        text_container.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=16, pady=8)
-
+        t_act = get_theme(self.theme_var.get())
         tk.Label(
             text_container,
             text="VW",
-            font=("Segoe UI", 12, "bold"),
-            fg="#1F2A44",
-            bg="#F4F8FF"
+            font=("Segoe UI", 11, "bold"),
+            fg="#FFFFFF",
+            bg=t_act["accent"],
+            padx=8,
+            pady=2,
         ).pack(side=tk.LEFT)
 
         tk.Label(
             text_container,
-            text="  |  Acerca de la herramienta",
-            font=("Segoe UI", 9),
-            fg="#5C6B8A",
-            bg="#F4F8FF"
-        ).pack(side=tk.LEFT, padx=(4, 0))
+            text="  Acerca de Video Workstation",
+            font=("Segoe UI", 10, "bold"),
+            fg="#1F2A44",
+            bg="#FFFFFF"
+        ).pack(side=tk.LEFT, padx=(6, 0))
 
         tk.Label(
             header_card,
             text=f"v{VERSION}",
             font=("Segoe UI", 9, "bold"),
-            bg="#F4F8FF",
+            bg="#FFFFFF",
             fg="#2D9CDB"
-        ).pack(side=tk.RIGHT, padx=16, pady=10)
+        ).pack(side=tk.RIGHT, padx=14, pady=10)
 
         content_card = tk.Frame(dialog, bg="#FFFFFF", highlightthickness=1, highlightbackground="#E5ECF9", bd=0)
         content_card.pack(fill=tk.BOTH, expand=True, padx=18, pady=(4, 10))
