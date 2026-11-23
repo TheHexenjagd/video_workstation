@@ -726,7 +726,7 @@ class MediaProcessorMixin:
                         subs_info = ", ".join(sub_langs) if sub_langs else "Ninguno"
                         carpeta_salida = output_path.parent.name or str(output_path.parent)
                         meta_txt = "Sin metadatos" if limpiar_meta else "Con metadatos"
-                        detalle_act = f"Carpeta: {carpeta_salida}/ | {meta_txt}"
+                        detalle_act = f"Carpeta: {carpeta_salida} | {meta_txt}"
                         if fallback_hw:
                             detalle_act += f" [Fallback Software ({decod_val.upper()})]"
 
@@ -907,7 +907,7 @@ class MediaProcessorMixin:
                         "exito",
                         os.path.basename(input_file),
                         f"Remux ({label})",
-                        f"Carpeta: {carpeta_salida}/ | {meta_txt}",
+                        f"Carpeta: {carpeta_salida} | {meta_txt}",
                         item_key=f"combo:{output_path}",
                         log_extra={
                             "Salida": ruta_completa,

@@ -893,10 +893,68 @@ class VWSuite(
         self.activity_tree.heading("accion", text="Proceso")
         self.activity_tree.heading("detalle", text="Detalle")
 
-        self.activity_tree.column("estado", width=105, minwidth=95, anchor=tk.CENTER, stretch=False)
-        self.activity_tree.column("video", width=290, minwidth=180, anchor=tk.W, stretch=True)
-        self.activity_tree.column("accion", width=175, minwidth=145, anchor=tk.CENTER, stretch=False)
-        self.activity_tree.column("detalle", width=340, minwidth=200, anchor=tk.W, stretch=True)
+        self.activity_tree.column("estado", width=90, minwidth=80, anchor=tk.CENTER, stretch=False)
+        self.activity_tree.column("video", width=480, minwidth=300, anchor=tk.W, stretch=True)
+        self.activity_tree.column("accion", width=140, minwidth=115, anchor=tk.CENTER, stretch=False)
+        self.activity_tree.column("detalle", width=250, minwidth=180, anchor=tk.W, stretch=True)
+
+        self._tree_tooltip = None
+
+        def _ocultar_tooltip(event=None):
+            if self._tree_tooltip:
+                try:
+                    self._tree_tooltip.destroy()
+                except Exception:
+                    pass
+                self._tree_tooltip = None
+
+        def _mostrar_tooltip(event):
+            row_id = self.activity_tree.identify_row(event.y)
+            col_id = self.activity_tree.identify_column(event.x)
+            if not row_id or not col_id:
+                _ocultar_tooltip()
+                return
+
+            try:
+                col_index = int(col_id.replace("#", "")) - 1
+            except ValueError:
+                _ocultar_tooltip()
+                return
+
+            vals = self.activity_tree.item(row_id, "values")
+            if not vals or col_index >= len(vals):
+                _ocultar_tooltip()
+                return
+
+            texto = str(vals[col_index])
+            if len(texto) < 25 and col_index != 1:
+                _ocultar_tooltip()
+                return
+
+            if self._tree_tooltip and getattr(self._tree_tooltip, "_current_text", None) == texto:
+                return
+
+            _ocultar_tooltip()
+            tip = tk.Toplevel(self.root)
+            tip.wm_overrideredirect(True)
+            tip._current_text = texto
+            tip.wm_geometry(f"+{event.x_root + 12}+{event.y_root + 16}")
+            t_curr = get_theme(self.theme_var.get())
+            tk.Label(
+                tip,
+                text=texto,
+                bg=t_curr["bg_surface"],
+                fg=t_curr["fg_primary"],
+                relief=tk.SOLID,
+                bd=1,
+                padx=8,
+                pady=4,
+                font=("Segoe UI", 9),
+            ).pack()
+            self._tree_tooltip = tip
+
+        self.activity_tree.bind("<Motion>", _mostrar_tooltip, add="+")
+        self.activity_tree.bind("<Leave>", _ocultar_tooltip, add="+")
 
         def _limpiar_seleccion_actividad(event):
             if event.widget is self.activity_tree:
