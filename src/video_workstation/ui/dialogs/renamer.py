@@ -63,7 +63,6 @@ class RenamerDialogMixin:
         dialog = tk.Toplevel(self.root)
         dialog.withdraw()
         dialog.title("Renombrar Archivos")
-        center_window(dialog, 1260, 740, self.root)
         dialog.transient(self.root)
         dialog.grab_set()
         self.root.attributes('-disabled', True)
@@ -464,6 +463,8 @@ class RenamerDialogMixin:
 
         btn_cancel = tk.Button(btn_container, text="Cancelar", command=dialog.destroy, bg="#95A5A6", fg="white", width=12, relief=tk.FLAT, font=("Segoe UI", 10, "bold"), cursor="hand2")
         btn_cancel.pack(side=tk.LEFT, padx=10)
+
+        center_window(dialog, 1260, 740, self.root)
 
     def _execute_renaming(self, dialog, archivos, tree, item_to_path=None):
         if not archivos:

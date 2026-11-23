@@ -31,7 +31,6 @@ class TrackSelectorDialogMixin:
         dialog = tk.Toplevel(self.root)
         dialog.withdraw()
         dialog.title(f"Seleccion de pistas - {os.path.basename(filename)}")
-        center_window(dialog, 740, 620, self.root)
         dialog.transient(self.root)
         dialog.grab_set()
         self.root.attributes('-disabled', True)
@@ -142,6 +141,7 @@ class TrackSelectorDialogMixin:
         tk.Button(btns, text="Aceptar", command=aceptar, bg="#2D9CDB", fg="white", width=14).pack(side=tk.LEFT, padx=6)
         tk.Button(btns, text="Cancelar", command=dialog.destroy, bg="#EB5757", fg="white", width=14).pack(side=tk.LEFT, padx=6)
 
+        center_window(dialog, 740, 620, self.root)
         dialog.wait_window()
         if not resultado["ok"]:
             if self.cancelar_procesamiento:
@@ -180,7 +180,6 @@ class TrackSelectorDialogMixin:
             # Mantener el título conciso para no desplazar el nombre del archivo
             sg_title = f" - {subgrupo_label.split(' | ')[0]}"
         dialog.title(f"Versiones a generar{sg_title} - {os.path.basename(filename)}")
-        center_window(dialog, 900, 620, self.root)
         dialog.transient(self.root)
         dialog.grab_set()
         self.root.attributes('-disabled', True)
@@ -484,6 +483,7 @@ class TrackSelectorDialogMixin:
         dialog.protocol("WM_DELETE_WINDOW", on_close)
         dialog.bind("<Return>", lambda e: aceptar() if (e.widget == dialog or not isinstance(e.widget, tk.Button)) else None)
 
+        center_window(dialog, 900, 620, self.root)
         dialog.wait_window()
         if not resultado["ok"]:
             if self.cancelar_procesamiento or modo_previo:

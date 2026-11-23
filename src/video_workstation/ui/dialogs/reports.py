@@ -19,7 +19,6 @@ class ReportsDialogMixin:
         dialog = tk.Toplevel(self.root)
         dialog.withdraw()
         dialog.title("Reporte de Pre-verificacion - VW")
-        center_window(dialog, 820, 600, self.root)
         dialog.transient(self.root)
         dialog.grab_set()
         self.root.attributes('-disabled', True)
@@ -211,13 +210,14 @@ class ReportsDialogMixin:
 
         text_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
 
+        center_window(dialog, 820, 600, self.root)
+
     def _show_verification_results(self, resultados):
         t = get_theme(self.theme_var.get())
         win = tk.Toplevel(self.root)
         win.withdraw()
         win.title("Diagnóstico de la cola - VW")
         win.minsize(820, 520)
-        center_window(win, 980, 640, self.root)
         win.transient(self.root)
         win.configure(bg=t["bg_app"])
         win._vw_themed = True
@@ -367,6 +367,8 @@ class ReportsDialogMixin:
 
         _poblar_tabla("todos")
 
+        center_window(win, 980, 640, self.root)
+
     def change_preset(self):
         t = get_theme(self.theme_var.get())
         gpu_acel = self.gpu_acel_var.get()
@@ -399,7 +401,6 @@ class ReportsDialogMixin:
         dialog = tk.Toplevel(self.root)
         dialog.withdraw()
         dialog.title("Preset de codificación - VW")
-        center_window(dialog, 540 if presets else 500, 430 if presets else 260, self.root)
         dialog.resizable(False, False)
         dialog.transient(self.root)
         dialog.grab_set()
@@ -672,6 +673,8 @@ class ReportsDialogMixin:
             width=12,
         ).pack(side=tk.RIGHT)
 
+        center_window(dialog, 540 if presets else 500, 430 if presets else 260, self.root)
+
     def show_about(self):
         import webbrowser
 
@@ -680,7 +683,6 @@ class ReportsDialogMixin:
         dialog = tk.Toplevel(self.root)
         dialog.withdraw()
         dialog.title("Acerca de Video Workstation (VW)")
-        center_window(dialog, 560, 400, self.root)
         dialog.resizable(False, False)
         dialog.configure(bg=t_act["bg_app"])
         dialog.transient(self.root)
@@ -819,11 +821,12 @@ class ReportsDialogMixin:
         dev2_lbl.pack(anchor=tk.W, pady=1)
         dev2_lbl.bind("<Button-1>", lambda e: webbrowser.open_new("https://github.com/Gatozo"))
 
+        center_window(dialog, 560, 400, self.root)
+
     def _show_error_summary(self, errores):
         dialog = tk.Toplevel(self.root)
         dialog.withdraw()
         dialog.title("Resumen de Errores - VW")
-        center_window(dialog, 740, 500, self.root)
         dialog.resizable(False, False)
         dialog.transient(self.root)
         dialog.grab_set()
@@ -903,4 +906,6 @@ class ReportsDialogMixin:
             font=("Segoe UI", 9, "bold")
         )
         btn_cerrar.pack(side=tk.RIGHT)
+
+        center_window(dialog, 740, 500, self.root)
 

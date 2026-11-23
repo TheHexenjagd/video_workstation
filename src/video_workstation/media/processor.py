@@ -164,7 +164,6 @@ class MediaProcessorMixin:
         dlg = tk.Toplevel(self.root)
         dlg.withdraw()
         dlg.title("Configuración inicial - Video Workstation")
-        center_window(dlg, 580, 400, self.root)
         dlg.resizable(False, False)
         dlg.transient(self.root)
         dlg.grab_set()
@@ -333,6 +332,8 @@ class MediaProcessorMixin:
 
         btn_manual = tk.Button(btns, text="Lo haré manualmente", command=dlg.destroy, bg=t["btn_secondary_bg"], fg=t["btn_secondary_fg"], padx=12, pady=5, font=("Segoe UI", 9), disabled_bg=t["btn_disabled_bg"], disabled_fg=t["btn_disabled_fg"])
         btn_manual.pack(side=tk.RIGHT)
+
+        center_window(dlg, 580, 400, self.root)
 
     def _on_gpu_change(self):
         nuevo = get_default_preset(self.gpu_acel_var.get())
@@ -1183,7 +1184,6 @@ class MediaProcessorMixin:
         progreso = tk.Toplevel(self.root)
         progreso.withdraw()
         progreso.title("Pre-verificando cola")
-        center_window(progreso, 500, 140, self.root)
         progreso.transient(self.root)
         progreso.grab_set()
         self.root.attributes('-disabled', True)
@@ -1195,6 +1195,8 @@ class MediaProcessorMixin:
         status.pack()
         pbar = ttk.Progressbar(progreso, mode="determinate", maximum=len(archivos), length=420)
         pbar.pack(pady=10)
+
+        center_window(progreso, 500, 140, self.root)
 
         resultados = []
 
@@ -1280,7 +1282,6 @@ class MediaProcessorMixin:
         progreso = tk.Toplevel(self.root)
         progreso.withdraw()
         progreso.title("Analizando cola")
-        center_window(progreso, 500, 140, self.root)
         progreso.transient(self.root)
         progreso.grab_set()
         self.root.attributes('-disabled', True)
@@ -1292,6 +1293,8 @@ class MediaProcessorMixin:
         status.pack()
         pbar = ttk.Progressbar(progreso, mode="determinate", maximum=len(archivos), length=420)
         pbar.pack(pady=10)
+
+        center_window(progreso, 500, 140, self.root)
 
         resultados = []
 
