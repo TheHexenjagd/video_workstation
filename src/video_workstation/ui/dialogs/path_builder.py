@@ -40,7 +40,7 @@ class PathBuilderDialogMixin:
         hdr_card.pack(fill=tk.X, padx=16, pady=(12, 10))
         hdr_in = tk.Frame(hdr_card, bg=t["bg_surface"])
         hdr_in.pack(fill=tk.X, padx=14, pady=10)
-        tk.Label(hdr_in, text="VW", font=("Segoe UI", 10, "bold"), bg=t["accent"], fg="#FFFFFF", padx=7, pady=2).pack(side=tk.LEFT)
+        tk.Label(hdr_in, text="VW", font=("Segoe UI", 12, "bold"), bg=t["accent"], fg="#FFFFFF", padx=10, anchor="center").pack(side=tk.LEFT, fill=tk.Y)
         hdr_txt = tk.Frame(hdr_in, bg=t["bg_surface"])
         hdr_txt.pack(side=tk.LEFT, padx=(10, 0), fill=tk.X, expand=True)
         tk.Label(hdr_txt, text="Constructor de Ruta de Salida", font=("Segoe UI", 11, "bold"), bg=t["bg_surface"], fg=t["fg_primary"]).pack(anchor=tk.W)

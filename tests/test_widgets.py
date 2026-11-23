@@ -1,5 +1,6 @@
 """Unit tests for UI widget helpers such as center_window."""
 
+import os
 import unittest
 
 from video_workstation.ui.widgets import (
@@ -120,6 +121,46 @@ class TestCenterWindow(unittest.TestCase):
             self.assertEqual(len(frames), 3)
             for f in frames:
                 self.assertEqual(f.cget("bg"), "#123456")
+        finally:
+            root.destroy()
+
+    def test_exit_application_terminates_ongoing_process(self):
+        import tkinter as tk
+        from unittest.mock import MagicMock, patch
+        from video_workstation.ui.app import VWSuite
+        mock_proc = MagicMock()
+        mock_proc.pid = 99999
+        root = tk.Tk()
+        root.withdraw()
+        try:
+            with patch("video_workstation.ui.app.VWSuite._create_styles"), \
+                 patch("video_workstation.ui.app.VWSuite._create_menu"), \
+                 patch("video_workstation.ui.app.VWSuite._create_ui"), \
+                 patch("video_workstation.ui.app.VWSuite._apply_theme"), \
+                 patch("video_workstation.ui.app.VWSuite._center_window"), \
+                 patch("video_workstation.ui.app.VWSuite._check_ffmpeg_on_startup"), \
+                 patch("video_workstation.ui.app.VWSuite._start_gpu_detection"), \
+                 patch("tkinter.messagebox.askyesno", return_value=True):
+                app = VWSuite()
+                app.procesando = True
+                app.proceso_actual = mock_proc
+                app.lista = MagicMock()
+                app.lista.get.return_value = []
+                app.lista_omitidos = MagicMock()
+                app.lista_omitidos.get.return_value = []
+                app.root = MagicMock()
+                import tempfile
+                with tempfile.NamedTemporaryFile(delete=False) as tf:
+                    temp_file = tf.name
+                app.archivo_salida_actual = temp_file
+                self.assertTrue(os.path.exists(temp_file))
+
+                app.exit_application()
+                self.assertTrue(app.cancelar_procesamiento)
+                self.assertFalse(app.procesando)
+                self.assertTrue(mock_proc.kill.called or mock_proc.terminate.called)
+                self.assertFalse(os.path.exists(temp_file))
+                self.assertIsNone(app.archivo_salida_actual)
         finally:
             root.destroy()
 

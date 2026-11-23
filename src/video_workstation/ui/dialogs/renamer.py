@@ -79,7 +79,7 @@ class RenamerDialogMixin:
         hdr_card.pack(fill=tk.X, padx=16, pady=(12, 10))
         hdr_in = tk.Frame(hdr_card, bg=t["bg_surface"])
         hdr_in.pack(fill=tk.X, padx=14, pady=10)
-        tk.Label(hdr_in, text="VW", font=("Segoe UI", 10, "bold"), bg=t["accent"], fg="#FFFFFF", padx=7, pady=2).pack(side=tk.LEFT)
+        tk.Label(hdr_in, text="VW", font=("Segoe UI", 12, "bold"), bg=t["accent"], fg="#FFFFFF", padx=10, anchor="center").pack(side=tk.LEFT, fill=tk.Y)
         hdr_txt = tk.Frame(hdr_in, bg=t["bg_surface"])
         hdr_txt.pack(side=tk.LEFT, padx=(10, 0), fill=tk.X, expand=True)
         tk.Label(hdr_txt, text="Renombrar Archivos de la Cola", font=("Segoe UI", 11, "bold"), fg=t["fg_primary"], bg=t["bg_surface"]).pack(anchor=tk.W)
@@ -345,9 +345,9 @@ class RenamerDialogMixin:
 
         tree = ttk.Treeview(tree_container, columns=("original", "nuevo", "status"), show="headings", style="Renamer.Treeview", takefocus=False)
         tree.bind("<FocusIn>", lambda e: dialog.focus_set())
-        tree.heading("original", text="Nombre Actual")
-        tree.heading("nuevo", text="Nombre Nuevo Propuesto")
-        tree.heading("status", text="Estado / Alerta")
+        tree.heading("original", text="Nombre Actual", anchor="w")
+        tree.heading("nuevo", text="Nombre Nuevo Propuesto", anchor="w")
+        tree.heading("status", text="Estado / Alerta", anchor="w")
 
         tree.column("original", width=320, anchor="w")
         tree.column("nuevo", width=340, anchor="w")

@@ -554,6 +554,7 @@ class MediaProcessorMixin:
             out_dir.mkdir(parents=True, exist_ok=True)
             output_path = out_dir / f"{video_stem}.mp4"
             self._invalidate_file_cache(output_path)
+            self.archivo_salida_actual = output_path
 
             usar_hardsub = bool(combo.get("hardsub"))
             if usar_hardsub:
@@ -748,6 +749,11 @@ class MediaProcessorMixin:
                             log_extra=extra_info,
                         )
                     else:
+                        if output_path.exists():
+                            try:
+                                output_path.unlink()
+                            except Exception:
+                                pass
                         err_detail = ""
                         if hasattr(result, "stderr") and result.stderr:
                             lines_err = [l.strip() for l in result.stderr.splitlines() if l.strip()]
@@ -917,6 +923,11 @@ class MediaProcessorMixin:
                         },
                     )
                 else:
+                    if output_path.exists():
+                        try:
+                            output_path.unlink()
+                        except Exception:
+                            pass
                     err_detail = ""
                     if hasattr(result, "stderr") and result.stderr:
                         lines = [l.strip() for l in result.stderr.splitlines() if l.strip()]
@@ -928,6 +939,9 @@ class MediaProcessorMixin:
                     errores.append((input_file, f"Versión '{label}': {err_msg}"))
                     fail += 1
 
+            self.archivo_salida_actual = None
+
+        self.archivo_salida_actual = None
         return ok, fail
 
     def _strip_tracks_processing(self, archivo, output_dir, errores):
@@ -1613,18 +1627,48 @@ class MediaProcessorMixin:
 
     def cancel_processing(self):
         if not self.procesando:
-            messagebox.showinfo("Sin proceso", "No hay procesamiento activo")
+            messagebox.showinfo("Sin proceso", "No hay procesamiento activo", parent=self.root)
             return
-        if messagebox.askyesno("Cancelar todo", "Deseas cancelar el procesamiento actual y detener toda la cola de videos?"):
+        if messagebox.askyesno("Cancelar todo", "¿Deseas cancelar el procesamiento actual y detener toda la cola de videos?", parent=self.root):
             self.cancelar_procesamiento = True
             self._clear_subgroups()
-            if self.proceso_actual:
+            proc = getattr(self, "proceso_actual", None)
+            if proc:
                 try:
-                    self.proceso_actual.terminate()
+                    if os.name == "nt" and proc.pid:
+                        subprocess.run(
+                            ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
+                            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                        )
                 except Exception:
                     pass
+                try:
+                    proc.kill()
+                except Exception:
+                    try:
+                        proc.terminate()
+                    except Exception:
+                        pass
+                try:
+                    proc.wait(timeout=1.0)
+                except Exception:
+                    pass
+
+            salida_actual = getattr(self, "archivo_salida_actual", None)
+            if salida_actual:
+                try:
+                    p = Path(salida_actual)
+                    if p.exists():
+                        p.unlink()
+                        self._log_message(f"Archivo incompleto eliminado: {p.name}")
+                except Exception:
+                    pass
+                self.archivo_salida_actual = None
+
             self.btn_cancelar.config(state=tk.DISABLED)
-            self._log_message("Solicitud de cancelacion enviada...")
+            self._log_message("Solicitud de cancelación enviada...")
 
     def _run_subprocess_cancellable(self, cmd, stdout_devnull=False):
         startupinfo = None
@@ -1661,6 +1705,16 @@ class MediaProcessorMixin:
         while True:
             if self.cancelar_procesamiento:
                 try:
+                    if os.name == "nt" and self.proceso_actual.pid:
+                        subprocess.run(
+                            ["taskkill", "/F", "/T", "/PID", str(self.proceso_actual.pid)],
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
+                            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                        )
+                except Exception:
+                    pass
+                try:
                     self.proceso_actual.terminate()
                     self.proceso_actual.wait(timeout=1.5)
                 except Exception:
@@ -1669,6 +1723,17 @@ class MediaProcessorMixin:
                     except Exception:
                         pass
                 stderr_thread.join(timeout=0.5)
+
+                salida_actual = getattr(self, "archivo_salida_actual", None)
+                if salida_actual:
+                    try:
+                        p = Path(salida_actual)
+                        if p.exists():
+                            p.unlink()
+                    except Exception:
+                        pass
+                    self.archivo_salida_actual = None
+
                 return subprocess.CompletedProcess(cmd, returncode=-1, stdout="", stderr="".join(stderr_lines))
 
             ret = self.proceso_actual.poll()

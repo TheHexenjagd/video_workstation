@@ -111,6 +111,7 @@ class VWSuite(
         self.procesando = False
         self.cancelar_procesamiento = False
         self.proceso_actual = None
+        self.archivo_salida_actual = None
         self.nvenc_verificado = None
 
         self.pistas_config = {"audio_tag": None, "subtitle_tag": None, "aplicar_a_todos": False}
@@ -404,8 +405,8 @@ class VWSuite(
         brand_row.pack(fill=tk.X)
         self._themed_frames.append((brand_row, "bg_sidebar", None))
 
-        lbl_badge = tk.Label(brand_row, text="VW", font=("Segoe UI", 12, "bold"), bg=t["accent"], fg="#FFFFFF", padx=8, pady=3)
-        lbl_badge.pack(side=tk.LEFT)
+        lbl_badge = tk.Label(brand_row, text="VW", font=("Segoe UI", 12, "bold"), bg=t["accent"], fg="#FFFFFF", padx=10, anchor="center")
+        lbl_badge.pack(side=tk.LEFT, fill=tk.Y)
         self._lbl_brand_badge = lbl_badge
 
         brand_txt = tk.Frame(brand_row, bg=t["bg_sidebar"])
@@ -900,14 +901,14 @@ class VWSuite(
         cols = ("estado", "video", "accion", "detalle")
         self.activity_tree = ttk.Treeview(log_frame, columns=cols, show="headings", style="Activity.Treeview", height=16, takefocus=False)
         self.activity_tree.bind("<FocusIn>", lambda e: self.root.focus_set())
-        self.activity_tree.heading("estado", text="Estado")
-        self.activity_tree.heading("video", text="Video")
-        self.activity_tree.heading("accion", text="Proceso")
-        self.activity_tree.heading("detalle", text="Detalle")
+        self.activity_tree.heading("estado", text="Estado", anchor=tk.W)
+        self.activity_tree.heading("video", text="Video", anchor=tk.W)
+        self.activity_tree.heading("accion", text="Proceso", anchor=tk.W)
+        self.activity_tree.heading("detalle", text="Detalle", anchor=tk.W)
 
-        self.activity_tree.column("estado", width=90, minwidth=80, anchor=tk.CENTER, stretch=False)
+        self.activity_tree.column("estado", width=90, minwidth=80, anchor=tk.W, stretch=False)
         self.activity_tree.column("video", width=480, minwidth=300, anchor=tk.W, stretch=True)
-        self.activity_tree.column("accion", width=140, minwidth=115, anchor=tk.CENTER, stretch=False)
+        self.activity_tree.column("accion", width=140, minwidth=115, anchor=tk.W, stretch=False)
         self.activity_tree.column("detalle", width=250, minwidth=180, anchor=tk.W, stretch=True)
 
         self._activity_tree_update_dividers = attach_treeview_column_dividers(
@@ -1835,8 +1836,57 @@ class VWSuite(
         center_window(dlg, w, h, self.root)
 
     def exit_application(self):
-        if self.procesando and not messagebox.askyesno("Proceso activo", "Hay un proceso en curso. Salir de todos modos?"):
-            return
+        if self.procesando:
+            confirmar = messagebox.askyesno(
+                "Proceso activo",
+                "Hay un proceso en curso.\n¿Deseas cancelarlo y salir de todos modos?",
+                parent=self.root,
+            )
+            if not confirmar:
+                return
+
+            self.cancelar_procesamiento = True
+            if hasattr(self, "_clear_subgroups") and callable(self._clear_subgroups):
+                try:
+                    self._clear_subgroups()
+                except Exception:
+                    pass
+
+            proc = getattr(self, "proceso_actual", None)
+            if proc:
+                try:
+                    if os.name == "nt" and proc.pid:
+                        subprocess.run(
+                            ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
+                            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                        )
+                except Exception:
+                    pass
+                try:
+                    proc.kill()
+                except Exception:
+                    try:
+                        proc.terminate()
+                    except Exception:
+                        pass
+                try:
+                    proc.wait(timeout=1.0)
+                except Exception:
+                    pass
+
+            salida_actual = getattr(self, "archivo_salida_actual", None)
+            if salida_actual:
+                try:
+                    p = Path(salida_actual)
+                    if p.exists():
+                        p.unlink()
+                except Exception:
+                    pass
+                self.archivo_salida_actual = None
+
+            self.procesando = False
 
         cant_activos, cant_omitidos = self._update_queue_counters()
         if cant_activos > 0 or cant_omitidos > 0:
