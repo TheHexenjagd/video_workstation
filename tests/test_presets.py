@@ -110,6 +110,69 @@ class TestPresets(unittest.TestCase):
         proc._on_gpu_selected()
         self.assertEqual(proc.preset_var.get(), "quality")
 
+    def test_hardware_decoder_fallback_to_software(self):
+        import subprocess
+
+        class _ProcWithFallback(_DummyProcessor):
+            def __init__(self):
+                super().__init__("nvidia", "p4", {"nvidia": (True, "OK")})
+                self.decod_hw_var = _FakeVar("D3D11VA")
+                self.var_subcarpeta = _FakeVar(False)
+                self.var_eliminar_metadatos = _FakeVar(False)
+                self.cancelar_procesamiento = False
+                self.ffmpeg_path = "ffmpeg"
+                self.commands_run = []
+                self.logged_messages = []
+                self.recorded_activities = []
+
+            def _invalidate_file_cache(self, p):
+                pass
+
+            def _log_message(self, msg):
+                self.logged_messages.append(msg)
+
+            def _record_activity(self, estado, video, accion, detalle="", item_key=None, log_extra=None):
+                self.recorded_activities.append((estado, video, accion, detalle, log_extra))
+
+            def _run_subprocess_cancellable(self, cmd):
+                self.commands_run.append(list(cmd))
+                if "-hwaccel" in cmd:
+                    return subprocess.CompletedProcess(cmd, returncode=1, stdout="", stderr="Error: d3d11va decoder device failed")
+                return subprocess.CompletedProcess(cmd, returncode=0, stdout="", stderr="")
+
+        proc = _ProcWithFallback()
+        info = {
+            "streams": [
+                {"index": 0, "codec_type": "video", "codec_name": "h264"},
+                {"index": 1, "codec_type": "audio", "codec_name": "aac", "tags": {"language": "spa"}},
+            ]
+        }
+        combos = [
+            {
+                "audio_indices": [1],
+                "sub_indices": [],
+                "label": "DUAL",
+                "hardsub": True,
+            }
+        ]
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp_out:
+            errores = []
+            proc._build_combinations("sample_video.mkv", tmp_out, info, combos, errores)
+
+            self.assertEqual(len(errores), 0)
+            self.assertEqual(len(proc.commands_run), 2)
+            self.assertIn("-hwaccel", proc.commands_run[0])
+            self.assertNotIn("-hwaccel", proc.commands_run[1])
+            self.assertTrue(any("Fallo en decodificador D3D11VA" in m for m in proc.logged_messages))
+
+            success_acts = [a for a in proc.recorded_activities if a[0] == "exito"]
+            self.assertEqual(len(success_acts), 1)
+            detalle = success_acts[0][3]
+            log_extra = success_acts[0][4]
+            self.assertIn("[Fallback Software (D3D11VA)]", detalle)
+            self.assertIn("Software (Fallback", log_extra["Decodificador"])
+
 
 if __name__ == "__main__":
     unittest.main()

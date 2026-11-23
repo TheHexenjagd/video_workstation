@@ -630,46 +630,78 @@ class MediaProcessorMixin:
 
                     decod_val = self.decod_hw_var.get().lower()
                     hwaccel_opts = []
-                    if decod_val in ("d3d11va", "dxva2") and sub_idx is None:
+                    if decod_val in ("d3d11va", "dxva2"):
                         hwaccel_opts = ["-hwaccel", decod_val]
 
                     color_flags = ["-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709", "-color_range", "tv"]
 
-                    if gpu == "nvidia":
-                        cmd = [
-                            self.ffmpeg_path, *hwaccel_opts, "-i", input_file,
-                            "-map", "0:v:0", "-map", f"0:{audio_idx}",
-                            "-vf", video_filter,
-                            "-c:v", "h264_nvenc", "-preset", preset,
-                            "-profile:v", "high", "-rc", "vbr", "-cq", "23",
-                            "-b:v", "5M", "-maxrate", "8M", "-bufsize", "10M",
-                            *color_flags,
-                            *audio_settings, *meta_args, "-movflags", "+faststart", "-y", str(output_path)
-                        ]
-                    elif gpu == "intel":
-                        cmd = [
-                            self.ffmpeg_path, *hwaccel_opts, "-i", input_file,
-                            "-map", "0:v:0", "-map", f"0:{audio_idx}",
-                            "-vf", video_filter,
-                            "-c:v", "h264_qsv", "-preset", preset,
-                            "-global_quality", "23",
-                            "-b:v", "5M", "-maxrate", "8M", "-bufsize", "10M",
-                            *color_flags,
-                            *audio_settings, *meta_args, "-movflags", "+faststart", "-y", str(output_path)
-                        ]
-                    else:
-                        cmd = [
-                            self.ffmpeg_path, *hwaccel_opts, "-i", input_file,
-                            "-map", "0:v:0", "-map", f"0:{audio_idx}",
-                            "-vf", video_filter,
-                            "-c:v", "h264_amf", "-quality", preset,
-                            "-rc", "vbr_peak", "-b:v", "5M", "-maxrate", "8M", "-bufsize", "10M",
-                            *color_flags,
-                            *audio_settings, *meta_args, "-movflags", "+faststart", "-y", str(output_path)
-                        ]
+                    def _build_encode_cmd(hw_opts):
+                        if gpu == "nvidia":
+                            return [
+                                self.ffmpeg_path, *hw_opts, "-i", input_file,
+                                "-map", "0:v:0", "-map", f"0:{audio_idx}",
+                                "-vf", video_filter,
+                                "-c:v", "h264_nvenc", "-preset", preset,
+                                "-profile:v", "high", "-rc", "vbr", "-cq", "23",
+                                "-b:v", "5M", "-maxrate", "8M", "-bufsize", "10M",
+                                *color_flags,
+                                *audio_settings, *meta_args, "-movflags", "+faststart", "-y", str(output_path)
+                            ]
+                        elif gpu == "intel":
+                            return [
+                                self.ffmpeg_path, *hw_opts, "-i", input_file,
+                                "-map", "0:v:0", "-map", f"0:{audio_idx}",
+                                "-vf", video_filter,
+                                "-c:v", "h264_qsv", "-preset", preset,
+                                "-global_quality", "23",
+                                "-b:v", "5M", "-maxrate", "8M", "-bufsize", "10M",
+                                *color_flags,
+                                *audio_settings, *meta_args, "-movflags", "+faststart", "-y", str(output_path)
+                            ]
+                        else:
+                            return [
+                                self.ffmpeg_path, *hw_opts, "-i", input_file,
+                                "-map", "0:v:0", "-map", f"0:{audio_idx}",
+                                "-vf", video_filter,
+                                "-c:v", "h264_amf", "-quality", preset,
+                                "-rc", "vbr_peak", "-b:v", "5M", "-maxrate", "8M", "-bufsize", "10M",
+                                *color_flags,
+                                *audio_settings, *meta_args, "-movflags", "+faststart", "-y", str(output_path)
+                            ]
 
+                    cmd = _build_encode_cmd(hwaccel_opts)
                     self._record_activity("procesando", os.path.basename(input_file), f"Hardsub ({label})", "Incrustando subtítulos...", item_key=f"combo:{output_path}")
                     result = self._run_subprocess_cancellable(cmd)
+
+                    fallback_hw = False
+                    if result.returncode != 0 and hwaccel_opts and not self.cancelar_procesamiento:
+                        err_hw = ""
+                        if hasattr(result, "stderr") and result.stderr:
+                            lines_err = [l.strip() for l in result.stderr.splitlines() if l.strip()]
+                            if lines_err:
+                                err_hw = lines_err[-1]
+
+                        hw_label = decod_val.upper()
+                        detalle_hw = f" ({err_hw})" if err_hw else ""
+                        msg_fallback = f"Fallo en decodificador {hw_label}{detalle_hw}. Reintentando automáticamente con Software..."
+                        self._log_message(f"  -> Advertencia: {msg_fallback}")
+                        self._record_activity(
+                            "procesando",
+                            os.path.basename(input_file),
+                            f"Hardsub ({label})",
+                            f"Reintentando en Software (falló {hw_label})...",
+                            item_key=f"combo:{output_path}",
+                        )
+                        if output_path.exists():
+                            try:
+                                output_path.unlink()
+                            except Exception:
+                                pass
+
+                        cmd_fallback = _build_encode_cmd([])
+                        result = self._run_subprocess_cancellable(cmd_fallback)
+                        fallback_hw = True
+
                     if result.returncode == 0:
                         ok += 1
                         aud_langs = []
@@ -696,18 +728,26 @@ class MediaProcessorMixin:
                         subs_info = ", ".join(sub_langs) if sub_langs else "Ninguno"
                         carpeta_salida = output_path.parent.name or str(output_path.parent)
                         meta_txt = "Sin metadatos" if limpiar_meta else "Con metadatos"
+                        detalle_act = f"Carpeta: {carpeta_salida}/ | {meta_txt}"
+                        if fallback_hw:
+                            detalle_act += f" [Fallback Software ({decod_val.upper()})]"
+
+                        extra_info = {
+                            "Salida": ruta_completa,
+                            "Audios": audios_info,
+                            "Subtítulos": subs_info,
+                            "Metadatos": "Eliminados" if limpiar_meta else "Conservados",
+                        }
+                        if fallback_hw:
+                            extra_info["Decodificador"] = f"Software (Fallback automático desde {decod_val.upper()})"
+
                         self._record_activity(
                             "exito",
                             os.path.basename(input_file),
                             f"Hardsub ({label})",
-                            f"Carpeta: {carpeta_salida}/ | {meta_txt}",
+                            detalle_act,
                             item_key=f"combo:{output_path}",
-                            log_extra={
-                                "Salida": ruta_completa,
-                                "Audios": audios_info,
-                                "Subtítulos": subs_info,
-                                "Metadatos": "Eliminados" if limpiar_meta else "Conservados",
-                            },
+                            log_extra=extra_info,
                         )
                     else:
                         err_detail = ""
@@ -716,6 +756,8 @@ class MediaProcessorMixin:
                             if lines_err:
                                 err_detail = f" Detalle: {' '.join(lines_err[-2:])}"
                         err_msg = f"Error de FFmpeg al codificar la versión hardsub (código de salida: {result.returncode}).{err_detail}"
+                        if fallback_hw:
+                            err_msg += f" (También falló en fallback Software)"
                         self._log_message(err_msg)
                         self._record_activity("error", os.path.basename(input_file), f"Hardsub ({label})", err_msg, item_key=f"combo:{output_path}")
                         errores.append((input_file, f"Versión '{label}': {err_msg}"))
