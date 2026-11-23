@@ -6,6 +6,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from video_workstation.media.paths import resolve_subfolder_pattern as _resolver_patron_subcarpeta_helper
+from video_workstation.ui.widgets import center_window
 from video_workstation.utils.binaries import get_default_videos_dir as obtener_directorio_videos_defecto
 
 
@@ -25,8 +26,8 @@ class PathBuilderDialogMixin:
     def _open_path_builder(self):
         dialog = tk.Toplevel(self.root)
         dialog.title("Constructor de Ruta de Salida")
-        dialog.geometry("750x660")
         dialog.minsize(720, 620)
+        center_window(dialog, 750, 660, self.root)
         dialog.transient(self.root)
         dialog.grab_set()
         self.root.attributes('-disabled', True)

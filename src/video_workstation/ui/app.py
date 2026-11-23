@@ -55,7 +55,11 @@ from video_workstation.ui.dialogs.path_builder import PathBuilderDialogMixin
 from video_workstation.ui.dialogs.renamer import RenamerDialogMixin
 from video_workstation.ui.dialogs.reports import ReportsDialogMixin
 from video_workstation.ui.dialogs.selectors import TrackSelectorDialogMixin
-from video_workstation.ui.widgets import ModernCheckbutton, RoundedButton
+from video_workstation.ui.widgets import (
+    ModernCheckbutton,
+    RoundedButton,
+    center_window,
+)
 from video_workstation.utils.binaries import (
     get_binary_filename,
     get_default_videos_dir as obtener_directorio_videos_defecto,
@@ -132,13 +136,7 @@ class VWSuite(
         self.root.protocol("WM_DELETE_WINDOW", self.exit_application)
 
     def _center_window(self, width=1220, height=820):
-        self.root.update_idletasks()
-        screen_w = self.root.winfo_screenwidth()
-        screen_h = self.root.winfo_screenheight()
-        # Compensar barra de título + menú (~56px) y barra de tareas (~48px)
-        pos_x = max(0, (screen_w - width) // 2)
-        pos_y = max(0, (screen_h - 48 - (height + 56)) // 2)
-        self.root.geometry(f"{width}x{height}+{pos_x}+{pos_y}")
+        center_window(self.root, width, height)
 
     def _get_initial_gpu(self):
         val = self.config_ini.get("Options", "gpu_acel", fallback=None)
@@ -1613,9 +1611,7 @@ class VWSuite(
         dlg.update_idletasks()
         w = max(460, dlg.winfo_reqwidth())
         h = max(230, dlg.winfo_reqheight())
-        x = owner.winfo_x() + (owner.winfo_width() - w) // 2
-        y = owner.winfo_y() + (owner.winfo_height() - h) // 2
-        dlg.geometry(f"{w}x{h}+{max(0, x)}+{max(0, y)}")
+        center_window(dlg, w, h, owner)
 
         dlg.bind("<Return>", lambda _: dlg.destroy())
         dlg.bind("<Escape>", lambda _: dlg.destroy())
@@ -1625,7 +1621,7 @@ class VWSuite(
         t = get_theme(self.theme_var.get())
         dlg = tk.Toplevel(self.root)
         dlg.title("Rutas configuradas - VW")
-        dlg.geometry("600x430")
+        center_window(dlg, 600, 430, self.root)
         dlg.resizable(False, False)
         dlg.transient(self.root)
         dlg.grab_set()
@@ -1637,11 +1633,6 @@ class VWSuite(
             if (e.widget == dlg and self.root.winfo_exists())
             else None,
         )
-
-        dlg.update_idletasks()
-        x = self.root.winfo_x() + (self.root.winfo_width() - dlg.winfo_width()) // 2
-        y = self.root.winfo_y() + (self.root.winfo_height() - dlg.winfo_height()) // 2
-        dlg.geometry(f"+{max(0, x)}+{max(0, y)}")
 
         hdr = tk.Frame(dlg, bg=t["bg_surface"], padx=18, pady=14)
         hdr.pack(fill=tk.X)
@@ -1762,9 +1753,7 @@ class VWSuite(
         dlg.update_idletasks()
         w = max(600, dlg.winfo_reqwidth())
         h = max(440, dlg.winfo_reqheight())
-        x = self.root.winfo_x() + (self.root.winfo_width() - w) // 2
-        y = self.root.winfo_y() + (self.root.winfo_height() - h) // 2
-        dlg.geometry(f"{w}x{h}+{max(0, x)}+{max(0, y)}")
+        center_window(dlg, w, h, self.root)
 
     def exit_application(self):
         if self.procesando and not messagebox.askyesno("Proceso activo", "Hay un proceso en curso. Salir de todos modos?"):

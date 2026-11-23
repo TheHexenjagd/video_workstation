@@ -9,7 +9,7 @@ from video_workstation import VERSION
 from video_workstation.constants import PRESETS_AMD, PRESETS_NVIDIA, PRESETS_QSV
 from video_workstation.media.presets import get_valid_preset as obtener_preset_valido
 from video_workstation.ui.theme import get_theme
-from video_workstation.ui.widgets import RoundedButton
+from video_workstation.ui.widgets import RoundedButton, center_window
 
 
 class ReportsDialogMixin:
@@ -18,17 +18,12 @@ class ReportsDialogMixin:
     def _show_precheck_report(self, resultados, tipo_proceso, archivos, callback_exito):
         dialog = tk.Toplevel(self.root)
         dialog.title("Reporte de Pre-verificacion - VW")
-        dialog.geometry("820x600")
+        center_window(dialog, 820, 600, self.root)
         dialog.transient(self.root)
         dialog.grab_set()
         self.root.attributes('-disabled', True)
         dialog.bind("<Destroy>", lambda e: self.root.attributes('-disabled', False) if (e.widget == dialog and self.root.winfo_exists()) else None)
         dialog.configure(bg="#F3F7FF")
-
-        dialog.update_idletasks()
-        x = self.root.winfo_x() + (self.root.winfo_width() - dialog.winfo_width()) // 2
-        y = self.root.winfo_y() + (self.root.winfo_height() - dialog.winfo_height()) // 2
-        dialog.geometry(f"+{x}+{y}")
 
         header = tk.Frame(dialog, bg="#1A2536", height=70)
         header.pack(fill=tk.X)
@@ -219,16 +214,11 @@ class ReportsDialogMixin:
         t = get_theme(self.theme_var.get())
         win = tk.Toplevel(self.root)
         win.title("Diagnóstico de la cola - VW")
-        win.geometry("980x640")
         win.minsize(820, 520)
+        center_window(win, 980, 640, self.root)
         win.transient(self.root)
         win.configure(bg=t["bg_app"])
         win._vw_themed = True
-
-        win.update_idletasks()
-        x = self.root.winfo_x() + max(0, (self.root.winfo_width() - 980) // 2)
-        y = self.root.winfo_y() + max(0, (self.root.winfo_height() - 640) // 2)
-        win.geometry(f"+{x}+{y}")
 
         saludables = [r for r in resultados if not r["has_error"] and not r["has_warning"]]
         advertencias = [r for r in resultados if r["has_warning"] and not r["has_error"]]
@@ -406,7 +396,7 @@ class ReportsDialogMixin:
 
         dialog = tk.Toplevel(self.root)
         dialog.title("Preset de codificación - VW")
-        dialog.geometry("540x430" if presets else "500x260")
+        center_window(dialog, 540 if presets else 500, 430 if presets else 260, self.root)
         dialog.resizable(False, False)
         dialog.transient(self.root)
         dialog.grab_set()
@@ -418,11 +408,6 @@ class ReportsDialogMixin:
             if (e.widget == dialog and self.root.winfo_exists())
             else None,
         )
-
-        dialog.update_idletasks()
-        x = self.root.winfo_x() + (self.root.winfo_width() - dialog.winfo_width()) // 2
-        y = self.root.winfo_y() + (self.root.winfo_height() - dialog.winfo_height()) // 2
-        dialog.geometry(f"+{max(0, x)}+{max(0, y)}")
 
         # Header
         hdr = tk.Frame(dialog, bg=t["bg_surface"], padx=18, pady=14)
@@ -691,18 +676,13 @@ class ReportsDialogMixin:
 
         dialog = tk.Toplevel(self.root)
         dialog.title("Acerca de Video Workstation (VW)")
-        dialog.geometry("560x400")
+        center_window(dialog, 560, 400, self.root)
         dialog.resizable(False, False)
         dialog.configure(bg=t_act["bg_app"])
         dialog.transient(self.root)
         dialog.grab_set()
         self.root.attributes('-disabled', True)
         dialog.bind("<Destroy>", lambda e: self.root.attributes('-disabled', False) if (e.widget == dialog and self.root.winfo_exists()) else None)
-
-        dialog.update_idletasks()
-        x = self.root.winfo_x() + (self.root.winfo_width() - dialog.winfo_width()) // 2
-        y = self.root.winfo_y() + (self.root.winfo_height() - dialog.winfo_height()) // 2
-        dialog.geometry(f"+{x}+{y}")
 
         header_card = tk.Frame(dialog, bg=t_act["bg_surface"], highlightthickness=1, highlightbackground=t_act["border"], bd=0)
         header_card.pack(fill=tk.X, padx=18, pady=(14, 8))
@@ -838,18 +818,13 @@ class ReportsDialogMixin:
     def _show_error_summary(self, errores):
         dialog = tk.Toplevel(self.root)
         dialog.title("Resumen de Errores - VW")
-        dialog.geometry("740x500")
+        center_window(dialog, 740, 500, self.root)
         dialog.resizable(False, False)
         dialog.transient(self.root)
         dialog.grab_set()
         self.root.attributes('-disabled', True)
         dialog.bind("<Destroy>", lambda e: self.root.attributes('-disabled', False) if (e.widget == dialog and self.root.winfo_exists()) else None)
         dialog.configure(bg="#F3F7FF")
-
-        dialog.update_idletasks()
-        x = self.root.winfo_x() + (self.root.winfo_width() - dialog.winfo_width()) // 2
-        y = self.root.winfo_y() + (self.root.winfo_height() - dialog.winfo_height()) // 2
-        dialog.geometry(f"+{x}+{y}")
 
         header = tk.Frame(dialog, bg="#1A2536", height=70)
         header.pack(fill=tk.X)

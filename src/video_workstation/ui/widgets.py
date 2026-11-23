@@ -455,3 +455,46 @@ class ModernCheckbutton(tk.Canvas):
 
     def configure(self, cnf=None, **kw):
         self.config(cnf, **kw)
+
+
+def center_window(window, width=None, height=None, parent=None):
+    """
+    Center a Tk window or Toplevel dialog on screen or over its parent window.
+    Ensures titlebar and bottom action buttons remain fully visible on screen.
+    """
+    window.update_idletasks()
+
+    w = int(width or window.winfo_width())
+    if w <= 1:
+        w = int(window.winfo_reqwidth())
+    h = int(height or window.winfo_height())
+    if h <= 1:
+        h = int(window.winfo_reqheight())
+
+    sw = window.winfo_screenwidth()
+    sh = window.winfo_screenheight()
+
+    if parent and hasattr(parent, "winfo_ismapped") and parent.winfo_ismapped() and parent.winfo_width() > 100:
+        px = parent.winfo_rootx()
+        py = parent.winfo_rooty()
+        pw = parent.winfo_width()
+        ph = parent.winfo_height()
+        x = px + (pw - w) // 2
+        y = py + (ph - h) // 2
+    else:
+        x = (sw - w) // 2
+        y = (sh - 48 - (h + 56)) // 2
+
+    # Clamp bounds to screen so the title bar and bottom buttons are always reachable
+    if x < 0:
+        x = 0
+    elif x + w > sw:
+        x = max(0, sw - w)
+
+    if y < 0:
+        y = 0
+    elif y + h > sh - 48:
+        y = max(0, sh - 48 - h)
+
+    window.geometry(f"{w}x{h}+{x}+{y}")
+

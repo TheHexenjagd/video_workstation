@@ -7,6 +7,7 @@ import tkinter as tk
 from tkinter import messagebox, simpledialog, ttk
 
 from video_workstation.ui.theme import get_theme
+from video_workstation.ui.widgets import center_window
 
 
 class RenamerDialogMixin:
@@ -61,7 +62,7 @@ class RenamerDialogMixin:
 
         dialog = tk.Toplevel(self.root)
         dialog.title("Renombrar Archivos")
-        dialog.geometry("1260x740")
+        center_window(dialog, 1260, 740, self.root)
         dialog.transient(self.root)
         dialog.grab_set()
         self.root.attributes('-disabled', True)

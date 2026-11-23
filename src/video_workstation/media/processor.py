@@ -30,6 +30,7 @@ from video_workstation.media.subtitles import (
     find_external_subtitles as buscar_subtitulos_externos,
 )
 from video_workstation.ui.theme import get_theme
+from video_workstation.ui.widgets import center_window
 from video_workstation.utils.binaries import (
     get_binary_filename,
     resolve_binary_path,
@@ -162,17 +163,12 @@ class MediaProcessorMixin:
         t = get_theme(self.theme_var.get())
         dlg = tk.Toplevel(self.root)
         dlg.title("Configuración inicial - Video Workstation")
-        dlg.geometry("580x400")
+        center_window(dlg, 580, 400, self.root)
         dlg.resizable(False, False)
         dlg.transient(self.root)
         dlg.grab_set()
         dlg.configure(bg=t["bg_app"])
         dlg._vw_themed = True
-
-        dlg.update_idletasks()
-        px = self.root.winfo_x() + max(0, (self.root.winfo_width() - 580) // 2)
-        py = self.root.winfo_y() + max(0, (self.root.winfo_height() - 400) // 2)
-        dlg.geometry(f"+{px}+{py}")
 
         # Header
         hdr = tk.Frame(dlg, bg=t["bg_surface"], highlightthickness=1, highlightbackground=t["border"])
@@ -1185,16 +1181,11 @@ class MediaProcessorMixin:
 
         progreso = tk.Toplevel(self.root)
         progreso.title("Pre-verificando cola")
-        progreso.geometry("500x140")
+        center_window(progreso, 500, 140, self.root)
         progreso.transient(self.root)
         progreso.grab_set()
         self.root.attributes('-disabled', True)
         progreso.bind("<Destroy>", lambda e: self.root.attributes('-disabled', False) if (e.widget == progreso and self.root.winfo_exists()) else None)
-
-        progreso.update_idletasks()
-        x = self.root.winfo_x() + (self.root.winfo_width() - progreso.winfo_width()) // 2
-        y = self.root.winfo_y() + (self.root.winfo_height() - progreso.winfo_height()) // 2
-        progreso.geometry(f"+{x}+{y}")
 
         lbl = tk.Label(progreso, text="Pre-verificando archivos en la cola...", font=("Segoe UI", 10, "bold"))
         lbl.pack(pady=(18, 8))
@@ -1286,7 +1277,7 @@ class MediaProcessorMixin:
 
         progreso = tk.Toplevel(self.root)
         progreso.title("Analizando cola")
-        progreso.geometry("500x140")
+        center_window(progreso, 500, 140, self.root)
         progreso.transient(self.root)
         progreso.grab_set()
         self.root.attributes('-disabled', True)

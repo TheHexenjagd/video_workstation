@@ -10,7 +10,7 @@ from video_workstation.media.ffprobe import (
     is_hdr_video as _video_es_hdr,
 )
 from video_workstation.ui.theme import get_theme
-from video_workstation.ui.widgets import ModernCheckbutton
+from video_workstation.ui.widgets import ModernCheckbutton, center_window
 
 
 class TrackSelectorDialogMixin:
@@ -30,7 +30,7 @@ class TrackSelectorDialogMixin:
 
         dialog = tk.Toplevel(self.root)
         dialog.title(f"Seleccion de pistas - {os.path.basename(filename)}")
-        dialog.geometry("740x620")
+        center_window(dialog, 740, 620, self.root)
         dialog.transient(self.root)
         dialog.grab_set()
         self.root.attributes('-disabled', True)
@@ -178,19 +178,11 @@ class TrackSelectorDialogMixin:
             # Mantener el título conciso para no desplazar el nombre del archivo
             sg_title = f" - {subgrupo_label.split(' | ')[0]}"
         dialog.title(f"Versiones a generar{sg_title} - {os.path.basename(filename)}")
-        dialog.geometry("900x620")
+        center_window(dialog, 900, 620, self.root)
         dialog.transient(self.root)
         dialog.grab_set()
         self.root.attributes('-disabled', True)
         dialog.bind("<Destroy>", lambda e: self.root.attributes('-disabled', False) if (e.widget == dialog and self.root.winfo_exists()) else None)
-
-        dialog.update_idletasks()
-        try:
-            x = self.root.winfo_x() + max(0, (self.root.winfo_width() - 900) // 2)
-            y = self.root.winfo_y() + max(0, (self.root.winfo_height() - 620) // 2)
-            dialog.geometry(f"900x620+{x}+{y}")
-        except Exception:
-            pass
 
         t = get_theme(self.theme_var.get())
         dialog.configure(bg=t["bg_app"])
