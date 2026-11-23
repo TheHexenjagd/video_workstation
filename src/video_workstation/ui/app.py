@@ -58,6 +58,7 @@ from video_workstation.ui.dialogs.selectors import TrackSelectorDialogMixin
 from video_workstation.ui.widgets import (
     ModernCheckbutton,
     RoundedButton,
+    attach_treeview_column_dividers,
     center_window,
 )
 from video_workstation.utils.binaries import (
@@ -277,18 +278,14 @@ class VWSuite(
             font=("Segoe UI", 9, "bold"),
             background=t["heading_bg"],
             foreground=t["heading_fg"],
-            bordercolor=t["border_strong"],
-            relief="solid",
-            borderwidth=1,
+            relief="flat",
         )
         style.configure(
             "Activity.Treeview.Heading",
             font=("Segoe UI", 9, "bold"),
             background=t["heading_bg"],
             foreground=t["heading_fg"],
-            bordercolor=t["border_strong"],
-            relief="solid",
-            borderwidth=1,
+            relief="flat",
         )
         style.map(
             "Treeview.Heading",
@@ -913,6 +910,11 @@ class VWSuite(
         self.activity_tree.column("accion", width=140, minwidth=115, anchor=tk.CENTER, stretch=False)
         self.activity_tree.column("detalle", width=250, minwidth=180, anchor=tk.W, stretch=True)
 
+        self._activity_tree_update_dividers = attach_treeview_column_dividers(
+            self.activity_tree,
+            lambda: get_theme(self.theme_var.get())["border_strong"],
+        )
+
         self._tree_tooltip = None
 
         def _ocultar_tooltip(event=None):
@@ -1239,6 +1241,9 @@ class VWSuite(
                         pass
 
         _recorrer(win, t["bg_app"])
+
+        if hasattr(self, "_activity_tree_update_dividers") and callable(self._activity_tree_update_dividers):
+            self._activity_tree_update_dividers()
 
     def _update_queue_counters(self):
         cant_activos = len([f for f in self.lista.get(0, tk.END) if f and str(f).strip()])

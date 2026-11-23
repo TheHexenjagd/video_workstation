@@ -7,7 +7,12 @@ import tkinter as tk
 from tkinter import messagebox, simpledialog, ttk
 
 from video_workstation.ui.theme import get_theme
-from video_workstation.ui.widgets import ModernCheckbutton, RoundedButton, center_window
+from video_workstation.ui.widgets import (
+    ModernCheckbutton,
+    RoundedButton,
+    attach_treeview_column_dividers,
+    center_window,
+)
 
 
 class RenamerDialogMixin:
@@ -330,9 +335,7 @@ class RenamerDialogMixin:
             font=("Segoe UI", 9, "bold"),
             background=t["heading_bg"],
             foreground=t["heading_fg"],
-            bordercolor=t["border_strong"],
-            relief="solid",
-            borderwidth=1,
+            relief="flat",
         )
         style.map(
             "Renamer.Treeview.Heading",
@@ -349,6 +352,11 @@ class RenamerDialogMixin:
         tree.column("original", width=320, anchor="w")
         tree.column("nuevo", width=340, anchor="w")
         tree.column("status", width=170, anchor="w")
+
+        attach_treeview_column_dividers(
+            tree,
+            lambda: get_theme(self.theme_var.get())["border_strong"],
+        )
 
         tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 

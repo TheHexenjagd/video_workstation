@@ -509,3 +509,71 @@ def center_window(window, width=None, height=None, parent=None):
     except Exception:
         pass
 
+
+def attach_treeview_column_dividers(tree, get_color_fn=None):
+    """Attach dynamic 1px vertical column divider lines and a 1px header bottom divider
+    to a ttk.Treeview so all grid lines are thin, clean, and consistent (1px).
+
+    The divider lines:
+    - Span continuously through headers and the body with a single 1px width.
+    - Include a 1px horizontal separator line below the column headers.
+    - Reposition automatically on <Configure>, column resize (<ButtonRelease-1>, <B1-Motion>).
+    - Adapt dynamically to the theme border color.
+    - Transparently forward mouse clicks to the underlying Treeview row selection.
+
+    Returns a callable update function to refresh divider positions and colors.
+    """
+    dividers = []
+    h_divider = [None]
+
+    def _forward_click(event):
+        try:
+            tree.focus_set()
+            row_id = tree.identify_row(event.y)
+            if row_id:
+                tree.selection_set(row_id)
+        except Exception:
+            pass
+
+    def update_dividers(event=None):
+        try:
+            if not tree.winfo_exists():
+                return
+            color = get_color_fn() if callable(get_color_fn) else (get_color_fn or "#CBD5E1")
+            display_cols = tree["displaycolumns"]
+            if display_cols == ("#all",) or not display_cols:
+                cols = list(tree["columns"])
+            else:
+                cols = list(display_cols)
+
+            needed = max(0, len(cols) - 1)
+            while len(dividers) < needed:
+                div = tk.Frame(tree, width=1, bg=color)
+                div.bind("<Button-1>", _forward_click)
+                dividers.append(div)
+            while len(dividers) > needed:
+                dividers.pop().destroy()
+
+            if h_divider[0] is None or not h_divider[0].winfo_exists():
+                h_divider[0] = tk.Frame(tree, height=1, bg=color)
+            h_divider[0].configure(bg=color)
+            h_divider[0].place(x=0, y=26, relwidth=1.0)
+
+            cum_x = 0
+            for i in range(needed):
+                col_name = cols[i]
+                col_w = tree.column(col_name, "width")
+                cum_x += col_w
+                dividers[i].configure(bg=color)
+                dividers[i].place(x=cum_x - 1, y=0, relheight=1.0)
+        except Exception:
+            pass
+
+    tree.bind("<Configure>", update_dividers, add="+")
+    tree.bind("<ButtonRelease-1>", update_dividers, add="+")
+    tree.bind("<B1-Motion>", update_dividers, add="+")
+    tree.after(50, update_dividers)
+
+    return update_dividers
+
+

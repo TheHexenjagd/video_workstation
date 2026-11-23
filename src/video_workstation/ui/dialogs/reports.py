@@ -9,7 +9,11 @@ from video_workstation import VERSION
 from video_workstation.constants import PRESETS_AMD, PRESETS_NVIDIA, PRESETS_QSV
 from video_workstation.media.presets import get_valid_preset as obtener_preset_valido
 from video_workstation.ui.theme import get_theme
-from video_workstation.ui.widgets import RoundedButton, center_window
+from video_workstation.ui.widgets import (
+    RoundedButton,
+    attach_treeview_column_dividers,
+    center_window,
+)
 
 
 class ReportsDialogMixin:
@@ -330,6 +334,11 @@ class ReportsDialogMixin:
         tree.column("estado", width=105, minwidth=95, anchor=tk.CENTER, stretch=False)
         tree.column("archivo", width=260, minwidth=160, anchor=tk.W, stretch=True)
         tree.column("detalle", width=360, minwidth=200, anchor=tk.W, stretch=True)
+
+        attach_treeview_column_dividers(
+            tree,
+            lambda: get_theme(self.theme_var.get())["border_strong"],
+        )
 
         tree.tag_configure("exito", foreground=t["success"], background=t["success_bg"])
         tree.tag_configure("aviso", foreground=t["warning"], background=t["warning_bg"])

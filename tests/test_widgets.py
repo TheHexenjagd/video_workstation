@@ -2,7 +2,10 @@
 
 import unittest
 
-from video_workstation.ui.widgets import center_window
+from video_workstation.ui.widgets import (
+    attach_treeview_column_dividers,
+    center_window,
+)
 
 
 class _FakeParent:
@@ -100,6 +103,25 @@ class TestCenterWindow(unittest.TestCase):
         self.assertLessEqual(x + 700, 800)
         self.assertGreaterEqual(y, 0)
         self.assertLessEqual(y + 500, 600 - 48)
+
+    def test_attach_treeview_column_dividers(self):
+        import tkinter as tk
+        import tkinter.ttk as ttk
+        root = tk.Tk()
+        root.withdraw()
+        try:
+            tv = ttk.Treeview(root, columns=("col1", "col2", "col3"), show="headings")
+            tv.pack()
+            update_fn = attach_treeview_column_dividers(tv, lambda: "#123456")
+            self.assertTrue(callable(update_fn))
+            update_fn()
+            # Must create len(cols) - 1 vertical dividers + 1 horizontal divider
+            frames = [c for c in tv.winfo_children() if isinstance(c, tk.Frame)]
+            self.assertEqual(len(frames), 3)
+            for f in frames:
+                self.assertEqual(f.cget("bg"), "#123456")
+        finally:
+            root.destroy()
 
 
 if __name__ == "__main__":
