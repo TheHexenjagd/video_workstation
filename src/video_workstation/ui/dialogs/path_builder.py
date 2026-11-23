@@ -25,9 +25,9 @@ class PathBuilderDialogMixin:
 
     def _open_path_builder(self):
         dialog = tk.Toplevel(self.root)
+        dialog.withdraw()
         dialog.title("Constructor de Ruta de Salida")
         dialog.minsize(720, 620)
-        center_window(dialog, 750, 660, self.root)
         dialog.transient(self.root)
         dialog.grab_set()
         self.root.attributes('-disabled', True)
@@ -238,4 +238,6 @@ class PathBuilderDialogMixin:
 
         tk.Button(btm, text="Guardar", command=aceptar, bg="#27AE60", fg="white", width=12, relief=tk.FLAT, font=("Segoe UI", 9, "bold")).pack(side=tk.LEFT, padx=6)
         tk.Button(btm, text="Cancelar", command=dialog.destroy, bg="#95A5A6", fg="white", width=12, relief=tk.FLAT, font=("Segoe UI", 9, "bold")).pack(side=tk.LEFT, padx=6)
+
+        center_window(dialog, 750, 660, self.root)
 

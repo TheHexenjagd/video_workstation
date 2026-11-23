@@ -1539,6 +1539,7 @@ class VWSuite(
         badge_txt = "!" if kind in ("error", "warning") else "VW"
 
         dlg = tk.Toplevel(owner)
+        dlg.withdraw()
         dlg.title(f"{title} - VW")
         dlg.resizable(False, False)
         dlg.transient(owner)
@@ -1620,8 +1621,8 @@ class VWSuite(
     def show_ffmpeg_info(self):
         t = get_theme(self.theme_var.get())
         dlg = tk.Toplevel(self.root)
+        dlg.withdraw()
         dlg.title("Rutas configuradas - VW")
-        center_window(dlg, 600, 430, self.root)
         dlg.resizable(False, False)
         dlg.transient(self.root)
         dlg.grab_set()

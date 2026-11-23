@@ -34,6 +34,14 @@ class _FakeWindow:
         self._sw = sw
         self._sh = sh
         self.geo = ""
+        self.withdrawn = False
+        self.deiconified = False
+
+    def withdraw(self):
+        self.withdrawn = True
+
+    def deiconify(self):
+        self.deiconified = True
 
     def update_idletasks(self):
         pass
@@ -67,6 +75,8 @@ class TestCenterWindow(unittest.TestCase):
         expected_x = (1920 - 750) // 2
         expected_y = (1080 - 48 - (660 + 56)) // 2
         self.assertEqual(win.geo, f"750x660+{expected_x}+{expected_y}")
+        self.assertTrue(win.withdrawn)
+        self.assertTrue(win.deiconified)
 
     def test_center_over_parent_window(self):
         win = _FakeWindow(1920, 1080)
@@ -75,6 +85,8 @@ class TestCenterWindow(unittest.TestCase):
         expected_x = 200 + (1280 - 750) // 2
         expected_y = 100 + (800 - 660) // 2
         self.assertEqual(win.geo, f"750x660+{expected_x}+{expected_y}")
+        self.assertTrue(win.withdrawn)
+        self.assertTrue(win.deiconified)
 
     def test_clamping_to_screen_bounds(self):
         win = _FakeWindow(800, 600)

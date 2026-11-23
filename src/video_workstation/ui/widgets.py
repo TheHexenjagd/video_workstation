@@ -461,7 +461,13 @@ def center_window(window, width=None, height=None, parent=None):
     """
     Center a Tk window or Toplevel dialog on screen or over its parent window.
     Ensures titlebar and bottom action buttons remain fully visible on screen.
+    Eliminates corner flash by keeping the window hidden until geometry is applied.
     """
+    try:
+        window.withdraw()
+    except Exception:
+        pass
+
     window.update_idletasks()
 
     w = int(width or window.winfo_width())
@@ -497,4 +503,9 @@ def center_window(window, width=None, height=None, parent=None):
         y = max(0, sh - 48 - h)
 
     window.geometry(f"{w}x{h}+{x}+{y}")
+
+    try:
+        window.deiconify()
+    except Exception:
+        pass
 

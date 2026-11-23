@@ -29,6 +29,7 @@ class TrackSelectorDialogMixin:
             }
 
         dialog = tk.Toplevel(self.root)
+        dialog.withdraw()
         dialog.title(f"Seleccion de pistas - {os.path.basename(filename)}")
         center_window(dialog, 740, 620, self.root)
         dialog.transient(self.root)
@@ -173,6 +174,7 @@ class TrackSelectorDialogMixin:
             return {"ok": True, "combinaciones": [], "aplicar_todos": True if modo_previo else False}
 
         dialog = tk.Toplevel(self.root)
+        dialog.withdraw()
         sg_title = ""
         if subgrupo_label:
             # Mantener el título conciso para no desplazar el nombre del archivo

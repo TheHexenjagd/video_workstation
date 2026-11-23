@@ -162,6 +162,7 @@ class MediaProcessorMixin:
     def _show_ffmpeg_setup_dialog(self, ffmpeg_bin, ffprobe_bin):
         t = get_theme(self.theme_var.get())
         dlg = tk.Toplevel(self.root)
+        dlg.withdraw()
         dlg.title("Configuración inicial - Video Workstation")
         center_window(dlg, 580, 400, self.root)
         dlg.resizable(False, False)
@@ -1180,6 +1181,7 @@ class MediaProcessorMixin:
                 return
 
         progreso = tk.Toplevel(self.root)
+        progreso.withdraw()
         progreso.title("Pre-verificando cola")
         center_window(progreso, 500, 140, self.root)
         progreso.transient(self.root)
@@ -1276,6 +1278,7 @@ class MediaProcessorMixin:
             self.ffprobe_cache.clear()
 
         progreso = tk.Toplevel(self.root)
+        progreso.withdraw()
         progreso.title("Analizando cola")
         center_window(progreso, 500, 140, self.root)
         progreso.transient(self.root)

@@ -61,6 +61,7 @@ class RenamerDialogMixin:
         usar_regex_var = tk.BooleanVar(value=True)
 
         dialog = tk.Toplevel(self.root)
+        dialog.withdraw()
         dialog.title("Renombrar Archivos")
         center_window(dialog, 1260, 740, self.root)
         dialog.transient(self.root)

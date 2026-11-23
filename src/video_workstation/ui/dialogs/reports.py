@@ -17,6 +17,7 @@ class ReportsDialogMixin:
 
     def _show_precheck_report(self, resultados, tipo_proceso, archivos, callback_exito):
         dialog = tk.Toplevel(self.root)
+        dialog.withdraw()
         dialog.title("Reporte de Pre-verificacion - VW")
         center_window(dialog, 820, 600, self.root)
         dialog.transient(self.root)
@@ -213,6 +214,7 @@ class ReportsDialogMixin:
     def _show_verification_results(self, resultados):
         t = get_theme(self.theme_var.get())
         win = tk.Toplevel(self.root)
+        win.withdraw()
         win.title("Diagnóstico de la cola - VW")
         win.minsize(820, 520)
         center_window(win, 980, 640, self.root)
@@ -395,6 +397,7 @@ class ReportsDialogMixin:
             orden_presets = []
 
         dialog = tk.Toplevel(self.root)
+        dialog.withdraw()
         dialog.title("Preset de codificación - VW")
         center_window(dialog, 540 if presets else 500, 430 if presets else 260, self.root)
         dialog.resizable(False, False)
@@ -675,6 +678,7 @@ class ReportsDialogMixin:
         t_act = get_theme(self.theme_var.get())
 
         dialog = tk.Toplevel(self.root)
+        dialog.withdraw()
         dialog.title("Acerca de Video Workstation (VW)")
         center_window(dialog, 560, 400, self.root)
         dialog.resizable(False, False)
@@ -817,6 +821,7 @@ class ReportsDialogMixin:
 
     def _show_error_summary(self, errores):
         dialog = tk.Toplevel(self.root)
+        dialog.withdraw()
         dialog.title("Resumen de Errores - VW")
         center_window(dialog, 740, 500, self.root)
         dialog.resizable(False, False)
