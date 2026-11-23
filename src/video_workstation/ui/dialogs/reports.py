@@ -23,27 +23,18 @@ class ReportsDialogMixin:
         dialog.grab_set()
         self.root.attributes('-disabled', True)
         dialog.bind("<Destroy>", lambda e: self.root.attributes('-disabled', False) if (e.widget == dialog and self.root.winfo_exists()) else None)
-        dialog.configure(bg="#F3F7FF")
+        t = get_theme(self.theme_var.get())
+        dialog.configure(bg=t["bg_app"])
 
-        header = tk.Frame(dialog, bg="#1A2536", height=70)
-        header.pack(fill=tk.X)
-        header.pack_propagate(False)
-
-        tk.Label(
-            header,
-            text="Pre-verificacion de Archivos",
-            font=("Segoe UI", 14, "bold"),
-            bg="#1A2536",
-            fg="#FFFFFF"
-        ).pack(anchor=tk.W, padx=20, pady=(10, 2))
-
-        tk.Label(
-            header,
-            text="Se han detectado posibles problemas. Elige cómo deseas proceder con la cola de procesamiento.",
-            font=("Segoe UI", 9),
-            bg="#1A2536",
-            fg="#B0C4DE"
-        ).pack(anchor=tk.W, padx=20)
+        hdr_card = tk.Frame(dialog, bg=t["bg_surface"], highlightthickness=1, highlightbackground=t["border"])
+        hdr_card.pack(fill=tk.X, padx=16, pady=(12, 10))
+        hdr_in = tk.Frame(hdr_card, bg=t["bg_surface"])
+        hdr_in.pack(fill=tk.X, padx=14, pady=10)
+        tk.Label(hdr_in, text="VW", font=("Segoe UI", 10, "bold"), bg=t["warning"], fg="#FFFFFF", padx=7, pady=2).pack(side=tk.LEFT)
+        hdr_txt = tk.Frame(hdr_in, bg=t["bg_surface"])
+        hdr_txt.pack(side=tk.LEFT, padx=(10, 0), fill=tk.X, expand=True)
+        tk.Label(hdr_txt, text="Pre-verificación de Archivos", font=("Segoe UI", 11, "bold"), bg=t["bg_surface"], fg=t["fg_primary"]).pack(anchor=tk.W)
+        tk.Label(hdr_txt, text="Se han detectado posibles problemas. Elige cómo deseas proceder con la cola de procesamiento.", font=("Segoe UI", 9), bg=t["bg_surface"], fg=t["fg_muted"]).pack(anchor=tk.W, pady=(2, 0))
 
         num_errors = 0
         num_warnings = 0
@@ -53,8 +44,8 @@ class ReportsDialogMixin:
             if r["has_warning"]:
                 num_warnings += len(r["warnings"])
 
-        btm = tk.Frame(dialog, bg="#F3F7FF")
-        btm.pack(side=tk.BOTTOM, fill=tk.X, padx=20, pady=(5, 15))
+        btm = tk.Frame(dialog, bg=t["bg_app"])
+        btm.pack(side=tk.BOTTOM, fill=tk.X, padx=16, pady=(4, 14))
 
         def cmd_continuar():
             filtrados = [r["archivo"] for r in resultados if not r["has_error"]]
@@ -86,67 +77,60 @@ class ReportsDialogMixin:
             self._clear_subgroups()
             dialog.destroy()
 
-        btn_cancelar = tk.Button(
+        btn_cancelar = RoundedButton(
             btm,
             text="Cancelar",
             command=cmd_cancelar,
-            bg="#95A5A6",
-            fg="white",
-            activebackground="#7F8C8D",
-            activeforeground="white",
-            relief=tk.FLAT,
-            padx=15,
-            pady=6,
-            cursor="hand2",
-            font=("Segoe UI", 9, "bold")
+            bg=t["btn_secondary_bg"],
+            fg=t["btn_secondary_fg"],
+            font=("Segoe UI", 9, "bold"),
+            width=100,
+            height=34,
         )
         btn_cancelar.pack(side=tk.RIGHT, padx=5)
 
         if num_warnings > 0 or num_errors > 0:
-            btn_omitir = tk.Button(
+            btn_omitir = RoundedButton(
                 btm,
-                text="Omitir archivos con problemas",
+                text="Omitir problemas",
                 command=cmd_omitir_problemas,
-                bg="#F2994A",
-                fg="white",
-                activebackground="#D35400",
-                activeforeground="white",
-                relief=tk.FLAT,
-                padx=15,
-                pady=6,
-                cursor="hand2",
-                font=("Segoe UI", 9, "bold")
+                bg=t["btn_warning"],
+                fg="#FFFFFF",
+                font=("Segoe UI", 9, "bold"),
+                width=140,
+                height=34,
             )
             btn_omitir.pack(side=tk.RIGHT, padx=5)
 
         archivos_sin_errores = [r for r in resultados if not r["has_error"]]
         if archivos_sin_errores:
-            btn_continuar = tk.Button(
+            btn_continuar = RoundedButton(
                 btm,
                 text="Agregar de todos modos",
                 command=cmd_continuar,
-                bg="#27AE60",
-                fg="white",
-                activebackground="#219653",
-                activeforeground="white",
-                relief=tk.FLAT,
-                padx=15,
-                pady=6,
-                cursor="hand2",
-                font=("Segoe UI", 9, "bold")
+                bg=t["btn_success"],
+                fg="#FFFFFF",
+                font=("Segoe UI", 9, "bold"),
+                width=175,
+                height=34,
             )
             btn_continuar.pack(side=tk.RIGHT, padx=5)
 
-        body = tk.Frame(dialog, bg="#F3F7FF", padx=20, pady=15)
+        body = tk.Frame(dialog, bg=t["bg_app"], padx=16)
         body.pack(fill=tk.BOTH, expand=True)
 
-        text_frame = tk.Frame(body, bg="#FFFFFF", highlightthickness=1, highlightbackground="#E5ECF9")
+        card = tk.Frame(body, bg=t["bg_surface"], highlightthickness=1, highlightbackground=t["border"])
+        card.pack(fill=tk.BOTH, expand=True, pady=(0, 8))
+
+        text_frame = tk.Frame(card, bg=t["bg_surface"])
+        text_frame.pack(fill=tk.BOTH, expand=True, padx=12, pady=12)
 
         log_text = tk.Text(
             text_frame,
             wrap=tk.WORD,
-            bg="#FFFFFF",
-            fg="#1F2A44",
+            bg=t["bg_input"],
+            fg=t["fg_primary"],
+            insertbackground=t["fg_primary"],
             font=("Segoe UI", 9),
             relief=tk.FLAT,
             padx=10,
@@ -154,14 +138,14 @@ class ReportsDialogMixin:
         )
         log_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        scrollbar = tk.Scrollbar(text_frame, command=log_text.yview)
+        scrollbar = ttk.Scrollbar(text_frame, command=log_text.yview, style="Vertical.TScrollbar")
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         log_text.config(yscrollcommand=scrollbar.set)
 
-        log_text.tag_config("title", font=("Segoe UI", 10, "bold"), spacing1=8, spacing3=2)
-        log_text.tag_config("error_lbl", font=("Segoe UI", 9, "bold"), foreground="#EB5757")
-        log_text.tag_config("warn_lbl", font=("Segoe UI", 9, "bold"), foreground="#F2994A")
-        log_text.tag_config("detail", font=("Segoe UI", 9), foreground="#4F4F4F", lmargin1=25, lmargin2=25, spacing3=4)
+        log_text.tag_config("title", font=("Segoe UI", 10, "bold"), spacing1=8, spacing3=2, foreground=t["fg_primary"])
+        log_text.tag_config("error_lbl", font=("Segoe UI", 9, "bold"), foreground=t["danger"])
+        log_text.tag_config("warn_lbl", font=("Segoe UI", 9, "bold"), foreground=t["warning"])
+        log_text.tag_config("detail", font=("Segoe UI", 9), foreground=t["fg_secondary"], lmargin1=25, lmargin2=25, spacing3=4)
 
         for r in resultados:
             if not r["has_error"] and not r["has_warning"]:
@@ -179,34 +163,34 @@ class ReportsDialogMixin:
 
         log_text.config(state=tk.DISABLED)
 
-        summary_text = f"Resumen: {num_errors} error(es) critico(s) y {num_warnings} advertencia(s) encontrada(s)."
-        lbl_summary = tk.Label(body, text=summary_text, font=("Segoe UI", 9, "bold"), bg="#F3F7FF", fg="#1F2A44", anchor=tk.W)
+        summary_text = f"Resumen: {num_errors} error(es) crítico(s) y {num_warnings} advertencia(s) encontrada(s)."
+        lbl_summary = tk.Label(body, text=summary_text, font=("Segoe UI", 9, "bold"), bg=t["bg_app"], fg=t["fg_primary"], anchor=tk.W)
 
         if num_errors > 0:
             lbl_err_note = tk.Label(
                 body,
-                text="* Los archivos con errores criticos no podran ser procesados y seran excluidos si decide continuar.",
+                text="* Los archivos con errores críticos no podrán ser procesados y serán excluidos si decide continuar.",
                 font=("Segoe UI", 8, "italic"),
-                bg="#F3F7FF",
-                fg="#EB5757",
+                bg=t["bg_app"],
+                fg=t["danger"],
                 anchor=tk.W
             )
 
         lbl_legend = tk.Label(
             body,
             text="• Agregar de todos modos: Procesa todos los archivos (incluyendo los que tienen advertencias).\n"
-                 "• Omitir archivos con problemas: Excluye los archivos con advertencias o errores y procesa el resto.",
+                 "• Omitir problemas: Excluye los archivos con advertencias o errores y procesa el resto.",
             font=("Segoe UI", 9, "italic"),
-            bg="#F3F7FF",
-            fg="#4F4F4F",
+            bg=t["bg_app"],
+            fg=t["fg_muted"],
             justify=tk.LEFT,
             anchor=tk.W
         )
 
-        lbl_legend.pack(side=tk.BOTTOM, fill=tk.X, pady=(5, 10))
+        lbl_legend.pack(side=tk.BOTTOM, fill=tk.X, pady=(2, 6))
         if num_errors > 0:
-            lbl_err_note.pack(side=tk.BOTTOM, fill=tk.X, pady=(0, 5))
-        lbl_summary.pack(side=tk.BOTTOM, fill=tk.X, pady=(10, 5))
+            lbl_err_note.pack(side=tk.BOTTOM, fill=tk.X, pady=(0, 4))
+        lbl_summary.pack(side=tk.BOTTOM, fill=tk.X, pady=(6, 4))
 
         text_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
 
@@ -832,39 +816,34 @@ class ReportsDialogMixin:
         dialog.grab_set()
         self.root.attributes('-disabled', True)
         dialog.bind("<Destroy>", lambda e: self.root.attributes('-disabled', False) if (e.widget == dialog and self.root.winfo_exists()) else None)
-        dialog.configure(bg="#F3F7FF")
+        t = get_theme(self.theme_var.get())
+        dialog.configure(bg=t["bg_app"])
 
-        header = tk.Frame(dialog, bg="#1A2536", height=70)
-        header.pack(fill=tk.X)
-        header.pack_propagate(False)
+        hdr_card = tk.Frame(dialog, bg=t["bg_surface"], highlightthickness=1, highlightbackground=t["border"])
+        hdr_card.pack(fill=tk.X, padx=16, pady=(12, 10))
+        hdr_in = tk.Frame(hdr_card, bg=t["bg_surface"])
+        hdr_in.pack(fill=tk.X, padx=14, pady=10)
+        tk.Label(hdr_in, text="VW", font=("Segoe UI", 10, "bold"), bg=t["danger"], fg="#FFFFFF", padx=7, pady=2).pack(side=tk.LEFT)
+        hdr_txt = tk.Frame(hdr_in, bg=t["bg_surface"])
+        hdr_txt.pack(side=tk.LEFT, padx=(10, 0), fill=tk.X, expand=True)
+        tk.Label(hdr_txt, text="Resumen de Errores de Procesamiento", font=("Segoe UI", 11, "bold"), bg=t["bg_surface"], fg=t["fg_primary"]).pack(anchor=tk.W)
+        tk.Label(hdr_txt, text="Los siguientes problemas ocurrieron al procesar los archivos de la cola:", font=("Segoe UI", 9), bg=t["bg_surface"], fg=t["fg_muted"]).pack(anchor=tk.W, pady=(2, 0))
 
-        tk.Label(
-            header,
-            text="Resumen de Errores de Procesamiento",
-            font=("Segoe UI", 14, "bold"),
-            bg="#1A2536",
-            fg="#FFFFFF"
-        ).pack(anchor=tk.W, padx=20, pady=(10, 2))
-
-        tk.Label(
-            header,
-            text="Los siguientes problemas ocurrieron al procesar los archivos de la cola:",
-            font=("Segoe UI", 9),
-            bg="#1A2536",
-            fg="#B0C4DE"
-        ).pack(anchor=tk.W, padx=20)
-
-        body = tk.Frame(dialog, bg="#F3F7FF", padx=20, pady=15)
+        body = tk.Frame(dialog, bg=t["bg_app"], padx=16)
         body.pack(fill=tk.BOTH, expand=True)
 
-        text_frame = tk.Frame(body, bg="#FFFFFF", highlightthickness=1, highlightbackground="#E5ECF9")
-        text_frame.pack(fill=tk.BOTH, expand=True)
+        card = tk.Frame(body, bg=t["bg_surface"], highlightthickness=1, highlightbackground=t["border"])
+        card.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+
+        text_frame = tk.Frame(card, bg=t["bg_surface"])
+        text_frame.pack(fill=tk.BOTH, expand=True, padx=12, pady=12)
 
         log_text = tk.Text(
             text_frame,
             wrap=tk.WORD,
-            bg="#FFFFFF",
-            fg="#1F2A44",
+            bg=t["bg_input"],
+            fg=t["fg_primary"],
+            insertbackground=t["fg_primary"],
             font=("Segoe UI", 9),
             relief=tk.FLAT,
             padx=10,
@@ -872,13 +851,13 @@ class ReportsDialogMixin:
         )
         log_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        scrollbar = tk.Scrollbar(text_frame, command=log_text.yview)
+        scrollbar = ttk.Scrollbar(text_frame, command=log_text.yview, style="Vertical.TScrollbar")
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         log_text.config(yscrollcommand=scrollbar.set)
 
-        log_text.tag_config("file_title", font=("Segoe UI", 10, "bold"), spacing1=8, spacing3=2)
-        log_text.tag_config("error_lbl", font=("Segoe UI", 9, "bold"), foreground="#EB5757")
-        log_text.tag_config("detail", font=("Segoe UI", 9), foreground="#4F4F4F", lmargin1=25, lmargin2=25, spacing3=4)
+        log_text.tag_config("file_title", font=("Segoe UI", 10, "bold"), spacing1=8, spacing3=2, foreground=t["fg_primary"])
+        log_text.tag_config("error_lbl", font=("Segoe UI", 9, "bold"), foreground=t["danger"])
+        log_text.tag_config("detail", font=("Segoe UI", 9), foreground=t["fg_secondary"], lmargin1=25, lmargin2=25, spacing3=4)
 
         for archivo, err_desc in errores:
             basename = os.path.basename(archivo) if archivo != "General" else "General"
@@ -888,24 +867,19 @@ class ReportsDialogMixin:
 
         log_text.config(state=tk.DISABLED)
 
-        btm = tk.Frame(dialog, bg="#F3F7FF")
-        btm.pack(side=tk.BOTTOM, fill=tk.X, padx=20, pady=(5, 15))
+        btm = tk.Frame(dialog, bg=t["bg_app"])
+        btm.pack(side=tk.BOTTOM, fill=tk.X, padx=16, pady=(4, 14))
 
-        btn_cerrar = tk.Button(
+        RoundedButton(
             btm,
             text="Cerrar",
             command=dialog.destroy,
-            bg="#2D9CDB",
-            fg="white",
-            activebackground="#2185C5",
-            activeforeground="white",
-            relief=tk.FLAT,
-            padx=20,
-            pady=6,
-            cursor="hand2",
-            font=("Segoe UI", 9, "bold")
-        )
-        btn_cerrar.pack(side=tk.RIGHT)
+            bg=t["btn_primary"],
+            fg="#FFFFFF",
+            font=("Segoe UI", 9, "bold"),
+            width=110,
+            height=34,
+        ).pack(side=tk.RIGHT)
 
         center_window(dialog, 740, 500, self.root)
 

@@ -273,12 +273,27 @@ class VWSuite(
             focusthickness=0,
         )
         style.configure(
+            "Treeview.Heading",
+            font=("Segoe UI", 9, "bold"),
+            background=t["heading_bg"],
+            foreground=t["heading_fg"],
+            bordercolor=t["border_strong"],
+            relief="solid",
+            borderwidth=1,
+        )
+        style.configure(
             "Activity.Treeview.Heading",
             font=("Segoe UI", 9, "bold"),
             background=t["heading_bg"],
             foreground=t["heading_fg"],
-            bordercolor=t["border"],
-            relief="flat",
+            bordercolor=t["border_strong"],
+            relief="solid",
+            borderwidth=1,
+        )
+        style.map(
+            "Treeview.Heading",
+            background=[("active", t["bg_input"]), ("pressed", t["bg_input"])],
+            foreground=[("active", t["fg_primary"]), ("pressed", t["fg_primary"])],
         )
         style.map(
             "Activity.Treeview.Heading",

@@ -7,7 +7,7 @@ import tkinter as tk
 from tkinter import messagebox, simpledialog, ttk
 
 from video_workstation.ui.theme import get_theme
-from video_workstation.ui.widgets import center_window
+from video_workstation.ui.widgets import ModernCheckbutton, RoundedButton, center_window
 
 
 class RenamerDialogMixin:
@@ -67,33 +67,43 @@ class RenamerDialogMixin:
         dialog.grab_set()
         self.root.attributes('-disabled', True)
         dialog.bind("<Destroy>", lambda e: self.root.attributes('-disabled', False) if (e.widget == dialog and self.root.winfo_exists()) else None)
-        dialog.configure(bg="#F3F7FF")
+        t = get_theme(self.theme_var.get())
+        dialog.configure(bg=t["bg_app"])
 
-        header_frame = tk.Frame(dialog, bg="#F4F8FF", highlightthickness=1, highlightbackground="#D1E2FF")
-        header_frame.pack(fill=tk.X, padx=18, pady=(12, 6))
-        accent_bar = tk.Frame(header_frame, width=4, bg="#2D9CDB")
-        accent_bar.pack(side=tk.LEFT, fill=tk.Y)
-        text_container = tk.Frame(header_frame, bg="#F4F8FF", padx=16, pady=8)
-        text_container.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        tk.Label(text_container, text="Renombrar Archivos de la Cola", font=("Segoe UI", 12, "bold"), fg="#1F2A44", bg="#F4F8FF").pack(anchor=tk.W)
-        tk.Label(text_container, text="Configura un patrón de nombre para renombrar todos los archivos de la lista principal.", font=("Segoe UI", 9), fg="#5C6B8A", bg="#F4F8FF").pack(anchor=tk.W, pady=(2, 0))
+        hdr_card = tk.Frame(dialog, bg=t["bg_surface"], highlightthickness=1, highlightbackground=t["border"])
+        hdr_card.pack(fill=tk.X, padx=16, pady=(12, 10))
+        hdr_in = tk.Frame(hdr_card, bg=t["bg_surface"])
+        hdr_in.pack(fill=tk.X, padx=14, pady=10)
+        tk.Label(hdr_in, text="VW", font=("Segoe UI", 10, "bold"), bg=t["accent"], fg="#FFFFFF", padx=7, pady=2).pack(side=tk.LEFT)
+        hdr_txt = tk.Frame(hdr_in, bg=t["bg_surface"])
+        hdr_txt.pack(side=tk.LEFT, padx=(10, 0), fill=tk.X, expand=True)
+        tk.Label(hdr_txt, text="Renombrar Archivos de la Cola", font=("Segoe UI", 11, "bold"), fg=t["fg_primary"], bg=t["bg_surface"]).pack(anchor=tk.W)
+        tk.Label(hdr_txt, text="Configura un patrón de nombre para renombrar todos los archivos de la lista principal.", font=("Segoe UI", 9), fg=t["fg_muted"], bg=t["bg_surface"]).pack(anchor=tk.W, pady=(2, 0))
 
-        content = tk.Frame(dialog, bg="#F3F7FF", padx=18)
+        content = tk.Frame(dialog, bg=t["bg_app"], padx=16)
         content.pack(fill=tk.BOTH, expand=True)
 
-        left_col = tk.Frame(content, bg="#F3F7FF")
-        left_col.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 10))
+        left_col = tk.Frame(content, bg=t["bg_app"])
+        left_col.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 8))
 
-        right_col = tk.Frame(content, bg="#F3F7FF")
-        right_col.pack(side=tk.RIGHT, fill=tk.BOTH, expand=False, padx=(10, 0))
+        right_col = tk.Frame(content, bg=t["bg_app"])
+        right_col.pack(side=tk.RIGHT, fill=tk.BOTH, expand=False, padx=(8, 0))
 
-        config_frame = tk.LabelFrame(left_col, text="Configuración del Patrón", font=("Segoe UI", 9, "bold"), bg="#FFFFFF", fg="#2B3A57", padx=12, pady=10, relief=tk.GROOVE)
-        config_frame.pack(fill=tk.X, pady=(4, 6))
+        config_card = tk.Frame(left_col, bg=t["bg_surface"], highlightthickness=1, highlightbackground=t["border"])
+        config_card.pack(fill=tk.X, pady=(0, 10))
+
+        cfg_hdr = tk.Frame(config_card, bg=t["bg_surface"])
+        cfg_hdr.pack(fill=tk.X, padx=14, pady=(10, 6))
+        tk.Label(cfg_hdr, text="Configuración del Patrón", font=("Segoe UI", 10, "bold"), bg=t["bg_surface"], fg=t["fg_primary"]).pack(anchor=tk.W)
+        tk.Frame(config_card, height=1, bg=t["border"]).pack(fill=tk.X, padx=14, pady=(0, 10))
+
+        cfg_body = tk.Frame(config_card, bg=t["bg_surface"])
+        cfg_body.pack(fill=tk.X, padx=14, pady=(0, 12))
 
         # Fila de Presets
-        row_presets = tk.Frame(config_frame, bg="#FFFFFF")
+        row_presets = tk.Frame(cfg_body, bg=t["bg_surface"])
         row_presets.pack(fill=tk.X, pady=4)
-        tk.Label(row_presets, text="Ajuste predefinido:", font=("Segoe UI", 9, "bold"), bg="#FFFFFF", fg="#2B3A57").pack(side=tk.LEFT, padx=(0, 6))
+        tk.Label(row_presets, text="Ajuste predefinido:", font=("Segoe UI", 9, "bold"), bg=t["bg_surface"], fg=t["fg_primary"]).pack(side=tk.LEFT, padx=(0, 6))
 
         PRESET_RENAME_TEMPLATES = {
             "Numeración Simple (01.mp4, 02.mp4...)": {
@@ -199,44 +209,44 @@ class RenamerDialogMixin:
                 cb_presets.set("")
                 messagebox.showinfo("Eliminado", f"Preset '{sel}' eliminado con éxito.", parent=dialog)
 
-        tk.Button(row_presets, text="Guardar actual", command=guardar_preset_actual, bg="#27AE60", fg="white", activebackground="#27AE60", activeforeground="white", relief=tk.FLAT, font=("Segoe UI", 9, "bold"), padx=6, cursor="hand2").pack(side=tk.LEFT, padx=3)
-        tk.Button(row_presets, text="Eliminar", command=eliminar_preset_seleccionado, bg="#EB5757", fg="white", activebackground="#EB5757", activeforeground="white", relief=tk.FLAT, font=("Segoe UI", 9, "bold"), padx=6, cursor="hand2").pack(side=tk.LEFT, padx=3)
+        RoundedButton(row_presets, text="Guardar actual", command=guardar_preset_actual, bg=t["btn_success"], fg="#FFFFFF", font=("Segoe UI", 8, "bold"), width=110, height=26).pack(side=tk.LEFT, padx=3)
+        RoundedButton(row_presets, text="Eliminar", command=eliminar_preset_seleccionado, bg=t["btn_danger"], fg="#FFFFFF", font=("Segoe UI", 8, "bold"), width=75, height=26).pack(side=tk.LEFT, padx=3)
 
-        row_patron = tk.Frame(config_frame, bg="#FFFFFF")
+        row_patron = tk.Frame(cfg_body, bg=t["bg_surface"])
         row_patron.pack(fill=tk.X, pady=4)
-        tk.Label(row_patron, text="Patrón de nombre:", font=("Segoe UI", 9, "bold"), bg="#FFFFFF", fg="#2B3A57").pack(side=tk.LEFT, padx=(0, 6))
+        tk.Label(row_patron, text="Patrón de nombre:", font=("Segoe UI", 9, "bold"), bg=t["bg_surface"], fg=t["fg_primary"]).pack(side=tk.LEFT, padx=(0, 6))
 
-        entry_patron = tk.Entry(row_patron, textvariable=patron_var, font=("Consolas", 10), bg="#F4F8FF", fg="#1F2A44", relief=tk.SOLID, bd=1)
+        entry_patron = tk.Entry(row_patron, textvariable=patron_var, font=("Consolas", 10), bg=t["bg_input"], fg=t["fg_primary"], insertbackground=t["fg_primary"], highlightthickness=1, highlightbackground=t["border"], relief=tk.FLAT)
         entry_patron.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 10))
 
-        row_opts = tk.Frame(config_frame, bg="#FFFFFF")
+        row_opts = tk.Frame(cfg_body, bg=t["bg_surface"])
         row_opts.pack(fill=tk.X, pady=4)
 
-        tk.Label(row_opts, text="Inicio de número:", font=("Segoe UI", 9, "bold"), bg="#FFFFFF", fg="#2B3A57").pack(side=tk.LEFT, padx=(0, 4))
-        sp_inicio = tk.Spinbox(row_opts, from_=0, to=999999, textvariable=inicio_var, width=6, font=("Segoe UI", 9), relief=tk.SOLID, bd=1)
+        tk.Label(row_opts, text="Inicio de número:", font=("Segoe UI", 9, "bold"), bg=t["bg_surface"], fg=t["fg_primary"]).pack(side=tk.LEFT, padx=(0, 4))
+        sp_inicio = tk.Spinbox(row_opts, from_=0, to=999999, textvariable=inicio_var, width=6, font=("Segoe UI", 9), bg=t["bg_input"], fg=t["fg_primary"], buttonbackground=t["bg_subtle"], highlightthickness=1, highlightbackground=t["border"], relief=tk.FLAT)
         sp_inicio.pack(side=tk.LEFT, padx=(0, 15))
 
-        tk.Label(row_opts, text="Dígitos de relleno:", font=("Segoe UI", 9, "bold"), bg="#FFFFFF", fg="#2B3A57").pack(side=tk.LEFT, padx=(0, 4))
-        sp_digitos = tk.Spinbox(row_opts, from_=1, to=10, textvariable=digitos_var, width=4, font=("Segoe UI", 9), relief=tk.SOLID, bd=1)
+        tk.Label(row_opts, text="Dígitos de relleno:", font=("Segoe UI", 9, "bold"), bg=t["bg_surface"], fg=t["fg_primary"]).pack(side=tk.LEFT, padx=(0, 4))
+        sp_digitos = tk.Spinbox(row_opts, from_=1, to=10, textvariable=digitos_var, width=4, font=("Segoe UI", 9), bg=t["bg_input"], fg=t["fg_primary"], buttonbackground=t["bg_subtle"], highlightthickness=1, highlightbackground=t["border"], relief=tk.FLAT)
         sp_digitos.pack(side=tk.LEFT, padx=(0, 15))
 
-        row_reemplazo = tk.Frame(config_frame, bg="#FFFFFF")
+        row_reemplazo = tk.Frame(cfg_body, bg=t["bg_surface"])
         row_reemplazo.pack(fill=tk.X, pady=4)
 
-        tk.Label(row_reemplazo, text="Buscar:", font=("Segoe UI", 9, "bold"), bg="#FFFFFF", fg="#2B3A57").pack(side=tk.LEFT, padx=(0, 4))
-        entry_buscar = tk.Entry(row_reemplazo, textvariable=buscar_var, font=("Consolas", 10), bg="#F4F8FF", fg="#1F2A44", relief=tk.SOLID, bd=1, width=24)
+        tk.Label(row_reemplazo, text="Buscar:", font=("Segoe UI", 9, "bold"), bg=t["bg_surface"], fg=t["fg_primary"]).pack(side=tk.LEFT, padx=(0, 4))
+        entry_buscar = tk.Entry(row_reemplazo, textvariable=buscar_var, font=("Consolas", 10), bg=t["bg_input"], fg=t["fg_primary"], insertbackground=t["fg_primary"], highlightthickness=1, highlightbackground=t["border"], relief=tk.FLAT, width=22)
         entry_buscar.pack(side=tk.LEFT, padx=(0, 12))
 
-        tk.Label(row_reemplazo, text="Reemplazar con:", font=("Segoe UI", 9, "bold"), bg="#FFFFFF", fg="#2B3A57").pack(side=tk.LEFT, padx=(0, 4))
-        entry_reemplazar = tk.Entry(row_reemplazo, textvariable=reemplazar_var, font=("Consolas", 10), bg="#F4F8FF", fg="#1F2A44", relief=tk.SOLID, bd=1, width=24)
+        tk.Label(row_reemplazo, text="Reemplazar con:", font=("Segoe UI", 9, "bold"), bg=t["bg_surface"], fg=t["fg_primary"]).pack(side=tk.LEFT, padx=(0, 4))
+        entry_reemplazar = tk.Entry(row_reemplazo, textvariable=reemplazar_var, font=("Consolas", 10), bg=t["bg_input"], fg=t["fg_primary"], insertbackground=t["fg_primary"], highlightthickness=1, highlightbackground=t["border"], relief=tk.FLAT, width=22)
         entry_reemplazar.pack(side=tk.LEFT, padx=(0, 12))
 
-        chk_regex = tk.Checkbutton(row_reemplazo, text="Usar Regex", variable=usar_regex_var, bg="#FFFFFF", fg="#2B3A57", activebackground="#FFFFFF", selectcolor="#FFFFFF", font=("Segoe UI", 9))
+        chk_regex = ModernCheckbutton(row_reemplazo, text="Usar Regex", variable=usar_regex_var, bg=t["bg_surface"], fg=t["fg_primary"], activeforeground=t["fg_primary"], selectcolor=t["bg_input"], accent=t["accent"], border=t["border_strong"], font=("Segoe UI", 9, "bold"))
         chk_regex.pack(side=tk.LEFT)
 
-        row_helpers = tk.Frame(config_frame, bg="#FFFFFF")
+        row_helpers = tk.Frame(cfg_body, bg=t["bg_surface"])
         row_helpers.pack(fill=tk.X, pady=(6, 0))
-        tk.Label(row_helpers, text="Insertar variable:", font=("Segoe UI", 8, "bold"), bg="#FFFFFF", fg="#5C6B8A").pack(side=tk.LEFT, padx=(0, 6))
+        tk.Label(row_helpers, text="Insertar variable:", font=("Segoe UI", 8, "bold"), bg=t["bg_surface"], fg=t["fg_muted"]).pack(side=tk.LEFT, padx=(0, 6))
 
         def insertar_variable(var_name):
             pos = entry_patron.index(tk.INSERT)
@@ -244,28 +254,36 @@ class RenamerDialogMixin:
             entry_patron.focus_set()
 
         for var_tag in ("{name}", "{num}", "{parent}"):
-            btn_h = tk.Button(
+            btn_h = RoundedButton(
                 row_helpers,
                 text=var_tag,
                 command=lambda v=var_tag: insertar_variable(v),
-                bg="#E5ECF9",
-                fg="#1F2A44",
-                activebackground="#2D9CDB",
-                activeforeground="white",
-                relief=tk.FLAT,
+                bg=t["accent_soft"],
+                fg=t["accent"],
+                activebackground=t["accent"],
+                activeforeground=t["accent_fg"],
                 font=("Consolas", 8, "bold"),
-                padx=6,
-                pady=1,
-                cursor="hand2"
+                width=68,
+                height=22,
             )
             btn_h.pack(side=tk.LEFT, padx=3)
 
-        preview_frame = tk.LabelFrame(left_col, text="Vista Previa de Renombrado", font=("Segoe UI", 9, "bold"), bg="#FFFFFF", fg="#2B3A57", padx=12, pady=10, relief=tk.GROOVE)
-        preview_frame.pack(fill=tk.BOTH, expand=True, pady=(4, 10))
+        preview_card = tk.Frame(left_col, bg=t["bg_surface"], highlightthickness=1, highlightbackground=t["border"])
+        preview_card.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
 
-        help_frame = tk.LabelFrame(right_col, text="Guía de Uso y Ejemplos", font=("Segoe UI", 9, "bold"), bg="#FFFFFF", fg="#2B3A57", padx=12, pady=10, relief=tk.GROOVE, width=360)
-        help_frame.pack(fill=tk.BOTH, expand=True, pady=(4, 10))
-        help_frame.pack_propagate(False)
+        prev_hdr = tk.Frame(preview_card, bg=t["bg_surface"])
+        prev_hdr.pack(fill=tk.X, padx=14, pady=(10, 6))
+        tk.Label(prev_hdr, text="Vista Previa de Renombrado", font=("Segoe UI", 10, "bold"), bg=t["bg_surface"], fg=t["fg_primary"]).pack(anchor=tk.W)
+        tk.Frame(preview_card, height=1, bg=t["border"]).pack(fill=tk.X, padx=14, pady=(0, 10))
+
+        help_card = tk.Frame(right_col, bg=t["bg_surface"], highlightthickness=1, highlightbackground=t["border"], width=340)
+        help_card.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+        help_card.pack_propagate(False)
+
+        help_hdr = tk.Frame(help_card, bg=t["bg_surface"])
+        help_hdr.pack(fill=tk.X, padx=14, pady=(10, 6))
+        tk.Label(help_hdr, text="Guía de Uso y Ejemplos", font=("Segoe UI", 10, "bold"), bg=t["bg_surface"], fg=t["fg_primary"]).pack(anchor=tk.W)
+        tk.Frame(help_card, height=1, bg=t["border"]).pack(fill=tk.X, padx=14, pady=(0, 10))
 
         help_text = (
             "Variables del Patrón:\n"
@@ -288,37 +306,38 @@ class RenamerDialogMixin:
             "2. Configura Inicio (1) y Dígitos (2)."
         )
 
-        lbl_help = tk.Label(help_frame, text=help_text, font=("Segoe UI", 9), bg="#FFFFFF", fg="#5C6B8A", justify=tk.LEFT, anchor=tk.NW, wraplength=330)
-        lbl_help.pack(fill=tk.BOTH, expand=True)
+        lbl_help = tk.Label(help_card, text=help_text, font=("Segoe UI", 9), bg=t["bg_surface"], fg=t["fg_secondary"], justify=tk.LEFT, anchor=tk.NW, wraplength=310)
+        lbl_help.pack(fill=tk.BOTH, expand=True, padx=14, pady=(0, 14))
 
-        tree_container = tk.Frame(preview_frame, bg="#FFFFFF")
-        tree_container.pack(fill=tk.BOTH, expand=True)
+        tree_container = tk.Frame(preview_card, bg=t["bg_surface"], highlightthickness=1, highlightbackground=t["border"], highlightcolor=t["border"])
+        tree_container.pack(fill=tk.BOTH, expand=True, padx=14, pady=(0, 14))
 
-        t_act = get_theme(self.theme_var.get())
         style = ttk.Style()
         style.layout("Renamer.Treeview", [("Renamer.Treeview.treearea", {"sticky": "nswe"})])
         style.configure(
             "Renamer.Treeview",
-            background=t_act["bg_surface"],
-            foreground=t_act["fg_primary"],
-            fieldbackground=t_act["bg_surface"],
+            background=t["bg_surface"],
+            foreground=t["fg_primary"],
+            fieldbackground=t["bg_surface"],
             rowheight=26,
             borderwidth=0,
             focusthickness=0,
             font=("Segoe UI", 9),
         )
-        style.map("Renamer.Treeview", background=[("selected", t_act["tree_sel_bg"])], foreground=[("selected", t_act["tree_sel_fg"])])
+        style.map("Renamer.Treeview", background=[("selected", t["tree_sel_bg"])], foreground=[("selected", t["tree_sel_fg"])])
         style.configure(
             "Renamer.Treeview.Heading",
             font=("Segoe UI", 9, "bold"),
-            background=t_act["heading_bg"],
-            foreground=t_act["heading_fg"],
-            relief="flat",
+            background=t["heading_bg"],
+            foreground=t["heading_fg"],
+            bordercolor=t["border_strong"],
+            relief="solid",
+            borderwidth=1,
         )
         style.map(
             "Renamer.Treeview.Heading",
-            background=[("active", t_act["bg_input"]), ("pressed", t_act["bg_input"])],
-            foreground=[("active", t_act["fg_primary"]), ("pressed", t_act["fg_primary"])],
+            background=[("active", t["bg_input"]), ("pressed", t["bg_input"])],
+            foreground=[("active", t["fg_primary"]), ("pressed", t["fg_primary"])],
         )
 
         tree = ttk.Treeview(tree_container, columns=("original", "nuevo", "status"), show="headings", style="Renamer.Treeview", takefocus=False)
@@ -337,10 +356,10 @@ class RenamerDialogMixin:
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         tree.config(yscrollcommand=scrollbar.set)
 
-        tree.tag_configure("ok", foreground=t_act["success"])
-        tree.tag_configure("conflict", foreground=t_act["warning"], font=("Segoe UI", 9, "bold"))
-        tree.tag_configure("error", foreground=t_act["danger"], font=("Segoe UI", 9, "bold"))
-        tree.tag_configure("no_change", foreground=t_act["fg_muted"])
+        tree.tag_configure("ok", foreground=t["success"])
+        tree.tag_configure("conflict", foreground=t["warning"], font=("Segoe UI", 9, "bold"))
+        tree.tag_configure("error", foreground=t["danger"], font=("Segoe UI", 9, "bold"))
+        tree.tag_configure("no_change", foreground=t["fg_muted"])
 
         item_to_path = {}
 
@@ -452,17 +471,14 @@ class RenamerDialogMixin:
         
         actualizar_preview()
 
-        btm = tk.Frame(dialog, bg="#F3F7FF")
+        btm = tk.Frame(dialog, bg=t["bg_app"])
         btm.pack(side=tk.BOTTOM, fill=tk.X, pady=(4, 16))
 
-        btn_container = tk.Frame(btm, bg="#F3F7FF")
+        btn_container = tk.Frame(btm, bg=t["bg_app"])
         btn_container.pack(anchor=tk.CENTER)
 
-        btn_ok = tk.Button(btn_container, text="Aplicar Renombrado", command=lambda: self._execute_renaming(dialog, archivos, tree, item_to_path), bg="#27AE60", fg="white", width=22, relief=tk.FLAT, font=("Segoe UI", 10, "bold"), cursor="hand2")
-        btn_ok.pack(side=tk.LEFT, padx=10)
-
-        btn_cancel = tk.Button(btn_container, text="Cancelar", command=dialog.destroy, bg="#95A5A6", fg="white", width=12, relief=tk.FLAT, font=("Segoe UI", 10, "bold"), cursor="hand2")
-        btn_cancel.pack(side=tk.LEFT, padx=10)
+        RoundedButton(btn_container, text="Aplicar Renombrado", command=lambda: self._execute_renaming(dialog, archivos, tree, item_to_path), bg=t["btn_success"], fg="#FFFFFF", font=("Segoe UI", 9, "bold"), width=160, height=34).pack(side=tk.LEFT, padx=10)
+        RoundedButton(btn_container, text="Cancelar", command=dialog.destroy, bg=t["btn_secondary_bg"], fg=t["btn_secondary_fg"], font=("Segoe UI", 9, "bold"), width=110, height=34).pack(side=tk.LEFT, padx=10)
 
         center_window(dialog, 1260, 740, self.root)
 

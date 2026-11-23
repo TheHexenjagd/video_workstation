@@ -6,7 +6,8 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from video_workstation.media.paths import resolve_subfolder_pattern as _resolver_patron_subcarpeta_helper
-from video_workstation.ui.widgets import center_window
+from video_workstation.ui.theme import get_theme
+from video_workstation.ui.widgets import RoundedButton, center_window
 from video_workstation.utils.binaries import get_default_videos_dir as obtener_directorio_videos_defecto
 
 
@@ -32,20 +33,31 @@ class PathBuilderDialogMixin:
         dialog.grab_set()
         self.root.attributes('-disabled', True)
         dialog.bind("<Destroy>", lambda e: self.root.attributes('-disabled', False) if (e.widget == dialog and self.root.winfo_exists()) else None)
-        dialog.configure(bg="#F3F7FF")
+        t = get_theme(self.theme_var.get())
+        dialog.configure(bg=t["bg_app"])
 
-        tk.Label(dialog, text="Constructor de Ruta de Salida", font=("Segoe UI", 12, "bold"), bg="#F3F7FF", fg="#1F2A44").pack(pady=(12, 6))
-        tk.Label(dialog, text="Haz clic en las banderas para agregarlas al patrón de subcarpeta:", font=("Segoe UI", 9), bg="#F3F7FF", fg="#5C6B8A").pack(pady=(0, 10))
+        hdr_card = tk.Frame(dialog, bg=t["bg_surface"], highlightthickness=1, highlightbackground=t["border"])
+        hdr_card.pack(fill=tk.X, padx=16, pady=(12, 10))
+        hdr_in = tk.Frame(hdr_card, bg=t["bg_surface"])
+        hdr_in.pack(fill=tk.X, padx=14, pady=10)
+        tk.Label(hdr_in, text="VW", font=("Segoe UI", 10, "bold"), bg=t["accent"], fg="#FFFFFF", padx=7, pady=2).pack(side=tk.LEFT)
+        hdr_txt = tk.Frame(hdr_in, bg=t["bg_surface"])
+        hdr_txt.pack(side=tk.LEFT, padx=(10, 0), fill=tk.X, expand=True)
+        tk.Label(hdr_txt, text="Constructor de Ruta de Salida", font=("Segoe UI", 11, "bold"), bg=t["bg_surface"], fg=t["fg_primary"]).pack(anchor=tk.W)
+        tk.Label(hdr_txt, text="Haz clic en las banderas para agregarlas al patrón de subcarpeta:", font=("Segoe UI", 9), bg=t["bg_surface"], fg=t["fg_muted"]).pack(anchor=tk.W, pady=(2, 0))
+
+        cfg_card = tk.Frame(dialog, bg=t["bg_surface"], highlightthickness=1, highlightbackground=t["border"])
+        cfg_card.pack(fill=tk.X, padx=16, pady=(0, 10))
 
         patron_var = tk.StringVar(value=self.var_nombre_subcarpeta.get())
-        entry = tk.Entry(dialog, textvariable=patron_var, font=("Consolas", 11), bg="#FFFFFF", fg="#1F2A44", relief=tk.SOLID, bd=1)
-        entry.pack(fill=tk.X, padx=20, pady=8)
+        entry = tk.Entry(cfg_card, textvariable=patron_var, font=("Consolas", 10), bg=t["bg_input"], fg=t["fg_primary"], insertbackground=t["fg_primary"], highlightthickness=1, highlightbackground=t["border"], relief=tk.FLAT)
+        entry.pack(fill=tk.X, padx=14, pady=(12, 8))
         entry.focus_set()
 
-        presets_frame = tk.Frame(dialog, bg="#F3F7FF")
-        presets_frame.pack(fill=tk.X, padx=20, pady=(4, 8))
+        presets_frame = tk.Frame(cfg_card, bg=t["bg_surface"])
+        presets_frame.pack(fill=tk.X, padx=14, pady=(0, 12))
 
-        tk.Label(presets_frame, text="Presets:", font=("Segoe UI", 9, "bold"), bg="#F3F7FF", fg="#2B3A57").pack(side=tk.LEFT, padx=(0, 6))
+        tk.Label(presets_frame, text="Presets:", font=("Segoe UI", 9, "bold"), bg=t["bg_surface"], fg=t["fg_primary"]).pack(side=tk.LEFT, padx=(0, 6))
 
         try:
             presets_data = json.loads(self.config_ini.get("Options", "presets", fallback='[]'))
@@ -85,21 +97,17 @@ class PathBuilderDialogMixin:
                 presets_var.set(nuevo)
                 messagebox.showinfo("Preset Guardado", f"Se ha guardado el preset:\n{nuevo}", parent=dialog)
 
-        btn_add_preset = tk.Button(
+        btn_add_preset = RoundedButton(
             presets_frame,
             text="Guardar actual",
             command=guardar_nuevo_preset,
-            bg="#27AE60",
-            fg="white",
-            activebackground="#27AE60",
-            activeforeground="white",
-            relief=tk.FLAT,
-            padx=8,
-            pady=2,
-            cursor="hand2",
-            font=("Segoe UI", 9, "bold")
+            bg=t["btn_success"],
+            fg="#FFFFFF",
+            font=("Segoe UI", 8, "bold"),
+            width=105,
+            height=26,
         )
-        btn_add_preset.pack(side=tk.LEFT, padx=6)
+        btn_add_preset.pack(side=tk.LEFT, padx=3)
 
         def eliminar_preset_seleccionado():
             seleccionado = cb_presets.get()
@@ -126,25 +134,28 @@ class PathBuilderDialogMixin:
                     patron_var.set("")
                 messagebox.showinfo("Preset Eliminado", "El preset seleccionado ha sido eliminado.", parent=dialog)
 
-        btn_del_preset = tk.Button(
+        btn_del_preset = RoundedButton(
             presets_frame,
             text="Eliminar",
             command=eliminar_preset_seleccionado,
-            bg="#EB5757",
-            fg="white",
-            activebackground="#EB5757",
-            activeforeground="white",
-            relief=tk.FLAT,
-            padx=8,
-            pady=2,
-            cursor="hand2",
-            font=("Segoe UI", 9, "bold")
+            bg=t["btn_danger"],
+            fg="#FFFFFF",
+            font=("Segoe UI", 8, "bold"),
+            width=75,
+            height=26,
         )
-        btn_del_preset.pack(side=tk.LEFT, padx=6)
+        btn_del_preset.pack(side=tk.LEFT, padx=3)
 
-        flags_frame = tk.LabelFrame(dialog, text="Banderas Disponibles", font=("Segoe UI", 9, "bold"), bg="#FFFFFF", fg="#2B3A57", padx=10, pady=10)
-        flags_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=(4, 10))
-        flags_frame.configure(relief=tk.GROOVE)
+        flags_card = tk.Frame(dialog, bg=t["bg_surface"], highlightthickness=1, highlightbackground=t["border"])
+        flags_card.pack(fill=tk.BOTH, expand=True, padx=16, pady=(0, 10))
+
+        flags_hdr = tk.Frame(flags_card, bg=t["bg_surface"])
+        flags_hdr.pack(fill=tk.X, padx=14, pady=(10, 6))
+        tk.Label(flags_hdr, text="Banderas Disponibles", font=("Segoe UI", 10, "bold"), bg=t["bg_surface"], fg=t["fg_primary"]).pack(anchor=tk.W)
+        tk.Frame(flags_card, height=1, bg=t["border"]).pack(fill=tk.X, padx=14, pady=(0, 8))
+
+        flags_body = tk.Frame(flags_card, bg=t["bg_surface"])
+        flags_body.pack(fill=tk.BOTH, expand=True, padx=14, pady=(0, 10))
 
         flags = [
             ("{name}", "Nombre original del video"),
@@ -164,35 +175,29 @@ class PathBuilderDialogMixin:
             actualizar_preview()
 
         for i, (flag, desc) in enumerate(flags):
-            row = tk.Frame(flags_frame, bg="#FFFFFF")
-            row.pack(fill=tk.X, pady=3)
+            row = tk.Frame(flags_body, bg=t["bg_surface"])
+            row.pack(fill=tk.X, pady=2)
 
-            btn = tk.Button(
+            btn = RoundedButton(
                 row,
                 text=flag,
                 command=lambda f=flag: insertar_flag(f),
-                bg="#2D9CDB",
-                fg="white",
-                activebackground="#2D9CDB",
-                activeforeground="white",
-                relief=tk.FLAT,
-                width=16,
+                bg=t["accent"],
+                fg="#FFFFFF",
                 font=("Consolas", 9, "bold"),
-                cursor="hand2"
+                width=135,
+                height=24,
             )
             btn.pack(side=tk.LEFT, padx=(0, 10))
 
-            tk.Label(row, text=desc, font=("Segoe UI", 9), bg="#FFFFFF", fg="#5C6B8A").pack(side=tk.LEFT)
+            tk.Label(row, text=desc, font=("Segoe UI", 9), bg=t["bg_surface"], fg=t["fg_secondary"]).pack(side=tk.LEFT)
 
-        preview_frame = tk.Frame(dialog, bg="#E5ECF9", padx=10, pady=10)
-        btm = tk.Frame(dialog, bg="#F3F7FF")
+        preview_card = tk.Frame(dialog, bg=t["bg_surface"], highlightthickness=1, highlightbackground=t["border"])
+        preview_card.pack(fill=tk.X, padx=16, pady=(0, 10))
 
-        btm.pack(side=tk.BOTTOM, pady=(5, 12))
-        preview_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=20, pady=10)
-
-        tk.Label(preview_frame, text="Vista previa de ruta resuelta:", font=("Segoe UI", 9, "bold"), bg="#E5ECF9", fg="#2B3A57").pack(anchor=tk.W)
-        preview_lbl = tk.Label(preview_frame, text="", font=("Consolas", 9), bg="#E5ECF9", fg="#1F2A44", wraplength=680, justify=tk.LEFT)
-        preview_lbl.pack(anchor=tk.W, pady=(4, 0))
+        tk.Label(preview_card, text="Vista previa de ruta resuelta:", font=("Segoe UI", 9, "bold"), bg=t["bg_surface"], fg=t["fg_primary"]).pack(anchor=tk.W, padx=14, pady=(8, 2))
+        preview_lbl = tk.Label(preview_card, text="", font=("Consolas", 9), bg=t["bg_surface"], fg=t["accent"], wraplength=680, justify=tk.LEFT)
+        preview_lbl.pack(anchor=tk.W, padx=14, pady=(0, 8))
 
         def actualizar_preview(*_):
             archivos = list(self.lista.get(0, tk.END))
@@ -232,12 +237,18 @@ class PathBuilderDialogMixin:
         patron_var.trace_add("write", actualizar_preview)
         actualizar_preview()
 
+        btm = tk.Frame(dialog, bg=t["bg_app"])
+        btm.pack(side=tk.BOTTOM, fill=tk.X, pady=(0, 14))
+
+        btn_container = tk.Frame(btm, bg=t["bg_app"])
+        btn_container.pack(anchor=tk.CENTER)
+
         def aceptar():
             self.var_nombre_subcarpeta.set(patron_var.get())
             dialog.destroy()
 
-        tk.Button(btm, text="Guardar", command=aceptar, bg="#27AE60", fg="white", width=12, relief=tk.FLAT, font=("Segoe UI", 9, "bold")).pack(side=tk.LEFT, padx=6)
-        tk.Button(btm, text="Cancelar", command=dialog.destroy, bg="#95A5A6", fg="white", width=12, relief=tk.FLAT, font=("Segoe UI", 9, "bold")).pack(side=tk.LEFT, padx=6)
+        RoundedButton(btn_container, text="Guardar", command=aceptar, bg=t["btn_success"], fg="#FFFFFF", font=("Segoe UI", 9, "bold"), width=110, height=34).pack(side=tk.LEFT, padx=8)
+        RoundedButton(btn_container, text="Cancelar", command=dialog.destroy, bg=t["btn_secondary_bg"], fg=t["btn_secondary_fg"], font=("Segoe UI", 9, "bold"), width=100, height=34).pack(side=tk.LEFT, padx=8)
 
         center_window(dialog, 750, 660, self.root)
 

@@ -10,7 +10,7 @@ from video_workstation.media.ffprobe import (
     is_hdr_video as _video_es_hdr,
 )
 from video_workstation.ui.theme import get_theme
-from video_workstation.ui.widgets import ModernCheckbutton, center_window
+from video_workstation.ui.widgets import ModernCheckbutton, RoundedButton, center_window
 
 
 class TrackSelectorDialogMixin:
@@ -38,34 +38,44 @@ class TrackSelectorDialogMixin:
 
         resultado = {"ok": False, "audio": None, "subtitle": "NINGUNO", "aplicar_todos": False}
 
-        tk.Label(dialog, text=f"Archivo: {os.path.basename(filename)}", font=("Segoe UI", 10, "bold")).pack(pady=(10, 6))
+        t = get_theme(self.theme_var.get())
+        dialog.configure(bg=t["bg_app"])
 
-        btns = tk.Frame(dialog)
-        btns.pack(side=tk.BOTTOM, pady=10)
+        hdr_card = tk.Frame(dialog, bg=t["bg_surface"], highlightthickness=1, highlightbackground=t["border"])
+        hdr_card.pack(fill=tk.X, padx=16, pady=(12, 10))
+        hdr_in = tk.Frame(hdr_card, bg=t["bg_surface"])
+        hdr_in.pack(fill=tk.X, padx=14, pady=10)
+        tk.Label(hdr_in, text="VW", font=("Segoe UI", 10, "bold"), bg=t["accent"], fg="#FFFFFF", padx=7, pady=2).pack(side=tk.LEFT)
+        hdr_txt = tk.Frame(hdr_in, bg=t["bg_surface"])
+        hdr_txt.pack(side=tk.LEFT, padx=(10, 0), fill=tk.X, expand=True)
+        tk.Label(hdr_txt, text="Selección de pistas", font=("Segoe UI", 11, "bold"), bg=t["bg_surface"], fg=t["fg_primary"]).pack(anchor=tk.W)
+        tk.Label(hdr_txt, text=f"Archivo: {os.path.basename(filename)}", font=("Segoe UI", 9), bg=t["bg_surface"], fg=t["fg_muted"]).pack(anchor=tk.W, pady=(2, 0))
 
-        t_sel = get_theme(self.theme_var.get())
+        btns = tk.Frame(dialog, bg=t["bg_app"])
+        btns.pack(side=tk.BOTTOM, fill=tk.X, padx=16, pady=(4, 14))
+
         apply_all = tk.BooleanVar(value=False)
         ModernCheckbutton(
             dialog,
-            text="Aplicar seleccion a todos los archivos",
+            text="Aplicar selección a todos los archivos",
             variable=apply_all,
-            bg=dialog.cget("bg"),
-            fg=t_sel["fg_secondary"],
-            activeforeground=t_sel["fg_primary"],
-            selectcolor=t_sel["bg_input"],
-            accent=t_sel["accent"],
-            border=t_sel["border_strong"],
+            bg=t["bg_app"],
+            fg=t["fg_secondary"],
+            activeforeground=t["fg_primary"],
+            selectcolor=t["bg_input"],
+            accent=t["accent"],
+            border=t["border_strong"],
         ).pack(side=tk.BOTTOM, pady=6)
 
-        body_container = tk.Frame(dialog)
-        body_container.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=10)
+        body_container = tk.Frame(dialog, bg=t["bg_app"])
+        body_container.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=16)
 
-        canvas = tk.Canvas(body_container, highlightthickness=0)
-        scrollbar = ttk.Scrollbar(body_container, orient="vertical", command=canvas.yview)
+        canvas = tk.Canvas(body_container, bg=t["bg_app"], highlightthickness=0)
+        scrollbar = ttk.Scrollbar(body_container, orient="vertical", command=canvas.yview, style="Vertical.TScrollbar")
         canvas.configure(yscrollcommand=scrollbar.set)
         canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        body = tk.Frame(canvas)
+        body = tk.Frame(canvas, bg=t["bg_app"])
         canvas_window = canvas.create_window((0, 0), window=body, anchor="nw")
 
         def _actualizar_scroll_pistas(event=None):
@@ -110,24 +120,38 @@ class TrackSelectorDialogMixin:
         audio_var = tk.StringVar(value=obtener_identificador_pista(audio_streams[0]) if audio_streams else "")
         sub_var = tk.StringVar(value="NINGUNO")
 
-        lf_audio = tk.LabelFrame(body, text="Audio", font=("Segoe UI", 9, "bold"))
-        lf_audio.pack(fill=tk.BOTH, expand=True, pady=6)
+        card_audio = tk.Frame(body, bg=t["bg_surface"], highlightthickness=1, highlightbackground=t["border"])
+        card_audio.pack(fill=tk.X, pady=(0, 10))
+        ca_hdr = tk.Frame(card_audio, bg=t["bg_surface"])
+        ca_hdr.pack(fill=tk.X, padx=14, pady=(10, 6))
+        tk.Label(ca_hdr, text="Pistas de Audio", font=("Segoe UI", 10, "bold"), bg=t["bg_surface"], fg=t["fg_primary"]).pack(anchor=tk.W)
+        tk.Frame(card_audio, height=1, bg=t["border"]).pack(fill=tk.X, padx=14, pady=(0, 8))
+
+        ca_body = tk.Frame(card_audio, bg=t["bg_surface"])
+        ca_body.pack(fill=tk.X, padx=14, pady=(0, 10))
         for i, s in enumerate(audio_streams):
             tags = s.get("tags", {})
             title = tags.get("title") or f"Audio {i + 1}"
             lang = tags.get("language", "und")
             codec = s.get("codec_name", "unknown")
-            tk.Radiobutton(lf_audio, text=f"{title} ({lang}) - {codec}", variable=audio_var, value=obtener_identificador_pista(s), anchor=tk.W).pack(fill=tk.X, padx=6, pady=2)
+            tk.Radiobutton(ca_body, text=f"{title} ({lang}) - {codec}", variable=audio_var, value=obtener_identificador_pista(s), anchor=tk.W, bg=t["bg_surface"], fg=t["fg_primary"], selectcolor=t["bg_input"], activebackground=t["bg_surface"], activeforeground=t["fg_primary"]).pack(fill=tk.X, pady=2)
 
-        lf_sub = tk.LabelFrame(body, text="Subtitulos", font=("Segoe UI", 9, "bold"))
-        lf_sub.pack(fill=tk.BOTH, expand=True, pady=6)
-        tk.Radiobutton(lf_sub, text="Sin subtitulos", variable=sub_var, value="NINGUNO", anchor=tk.W).pack(fill=tk.X, padx=6, pady=2)
+        card_sub = tk.Frame(body, bg=t["bg_surface"], highlightthickness=1, highlightbackground=t["border"])
+        card_sub.pack(fill=tk.X, pady=(0, 10))
+        cs_hdr = tk.Frame(card_sub, bg=t["bg_surface"])
+        cs_hdr.pack(fill=tk.X, padx=14, pady=(10, 6))
+        tk.Label(cs_hdr, text="Pistas de Subtítulos", font=("Segoe UI", 10, "bold"), bg=t["bg_surface"], fg=t["fg_primary"]).pack(anchor=tk.W)
+        tk.Frame(card_sub, height=1, bg=t["border"]).pack(fill=tk.X, padx=14, pady=(0, 8))
+
+        cs_body = tk.Frame(card_sub, bg=t["bg_surface"])
+        cs_body.pack(fill=tk.X, padx=14, pady=(0, 10))
+        tk.Radiobutton(cs_body, text="Sin subtítulos", variable=sub_var, value="NINGUNO", anchor=tk.W, bg=t["bg_surface"], fg=t["fg_primary"], selectcolor=t["bg_input"], activebackground=t["bg_surface"], activeforeground=t["fg_primary"]).pack(fill=tk.X, pady=2)
         for i, s in enumerate(subtitle_streams):
             tags = s.get("tags", {})
-            title = tags.get("title") or f"Subtitulo {i + 1}"
+            title = tags.get("title") or f"Subtítulo {i + 1}"
             lang = tags.get("language", "und")
             codec = s.get("codec_name", "unknown")
-            tk.Radiobutton(lf_sub, text=f"{title} ({lang}) - {codec}", variable=sub_var, value=obtener_identificador_pista(s), anchor=tk.W).pack(fill=tk.X, padx=6, pady=2)
+            tk.Radiobutton(cs_body, text=f"{title} ({lang}) - {codec}", variable=sub_var, value=obtener_identificador_pista(s), anchor=tk.W, bg=t["bg_surface"], fg=t["fg_primary"], selectcolor=t["bg_input"], activebackground=t["bg_surface"], activeforeground=t["fg_primary"]).pack(fill=tk.X, pady=2)
 
         dialog.after(50, _actualizar_scroll_pistas)
 
@@ -138,8 +162,10 @@ class TrackSelectorDialogMixin:
             resultado["aplicar_todos"] = apply_all.get()
             dialog.destroy()
 
-        tk.Button(btns, text="Aceptar", command=aceptar, bg="#2D9CDB", fg="white", width=14).pack(side=tk.LEFT, padx=6)
-        tk.Button(btns, text="Cancelar", command=dialog.destroy, bg="#EB5757", fg="white", width=14).pack(side=tk.LEFT, padx=6)
+        btn_box = tk.Frame(btns, bg=t["bg_app"])
+        btn_box.pack(anchor=tk.CENTER)
+        RoundedButton(btn_box, text="Aceptar", command=aceptar, bg=t["btn_primary"], fg="#FFFFFF", font=("Segoe UI", 9, "bold"), width=110, height=34).pack(side=tk.LEFT, padx=6)
+        RoundedButton(btn_box, text="Cancelar", command=dialog.destroy, bg=t["btn_secondary_bg"], fg=t["btn_secondary_fg"], font=("Segoe UI", 9, "bold"), width=100, height=34).pack(side=tk.LEFT, padx=6)
 
         center_window(dialog, 740, 620, self.root)
         dialog.wait_window()
@@ -422,8 +448,8 @@ class TrackSelectorDialogMixin:
 
         bt = tk.Frame(right, bg=t["bg_surface"])
         bt.pack(side=tk.BOTTOM, fill=tk.X, padx=14, pady=(6, 12))
-        tk.Button(bt, text="Agregar versión adicional", command=agregar, bg=t["btn_success"], fg="white").pack(side=tk.LEFT, padx=(0, 6))
-        tk.Button(bt, text="Quitar", command=quitar, bg=t["btn_danger"], fg="white").pack(side=tk.LEFT)
+        RoundedButton(bt, text="Agregar versión adicional", command=agregar, bg=t["btn_success"], fg="#FFFFFF", font=("Segoe UI", 9, "bold"), width=165, height=28).pack(side=tk.LEFT, padx=(0, 6))
+        RoundedButton(bt, text="Quitar", command=quitar, bg=t["btn_danger"], fg="#FFFFFF", font=("Segoe UI", 9, "bold"), width=70, height=28).pack(side=tk.LEFT)
 
         lst = tk.Listbox(
             right,
@@ -453,8 +479,8 @@ class TrackSelectorDialogMixin:
             resultado["aplicar_todos"] = apply_all.get()
             dialog.destroy()
 
-        tk.Button(bottom, text="Aceptar", command=aceptar, bg="#2D9CDB", fg="white", width=14).pack(side=tk.LEFT, padx=6)
-        tk.Button(bottom, text="Cancelar", command=dialog.destroy, bg="#95A5A6", fg="white", width=14).pack(side=tk.LEFT, padx=6)
+        RoundedButton(bottom, text="Aceptar", command=aceptar, bg=t["btn_primary"], fg="#FFFFFF", font=("Segoe UI", 9, "bold"), width=110, height=34).pack(side=tk.LEFT, padx=6)
+        RoundedButton(bottom, text="Cancelar", command=dialog.destroy, bg=t["btn_secondary_bg"], fg=t["btn_secondary_fg"], font=("Segoe UI", 9, "bold"), width=100, height=34).pack(side=tk.LEFT, padx=6)
 
         def on_close():
             aud_sel = [s for var, s in audio_vars if var.get()]
