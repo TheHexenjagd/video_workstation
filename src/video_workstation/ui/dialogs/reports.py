@@ -37,8 +37,8 @@ class ReportsDialogMixin:
         tk.Label(hdr_in, text="VW", font=("Segoe UI", 12, "bold"), bg=t["warning"], fg="#FFFFFF", padx=10, anchor="center").pack(side=tk.LEFT, fill=tk.Y)
         hdr_txt = tk.Frame(hdr_in, bg=t["bg_surface"])
         hdr_txt.pack(side=tk.LEFT, padx=(10, 0), fill=tk.X, expand=True)
-        tk.Label(hdr_txt, text="Pre-verificación de Archivos", font=("Segoe UI", 11, "bold"), bg=t["bg_surface"], fg=t["fg_primary"]).pack(anchor=tk.W)
-        tk.Label(hdr_txt, text="Se han detectado posibles problemas. Elige cómo deseas proceder con la cola de procesamiento.", font=("Segoe UI", 9), bg=t["bg_surface"], fg=t["fg_muted"]).pack(anchor=tk.W, pady=(2, 0))
+        tk.Label(hdr_txt, text="Pre-verificación de Archivos", font=("Segoe UI", 10, "bold"), bg=t["bg_surface"], fg=t["fg_primary"]).pack(anchor=tk.W)
+        tk.Label(hdr_txt, text="Se han detectado posibles problemas. Elige cómo deseas proceder con la cola de procesamiento.", font=("Segoe UI", 8), bg=t["bg_surface"], fg=t["fg_muted"]).pack(anchor=tk.W, pady=(2, 0))
 
         num_errors = 0
         num_warnings = 0
@@ -412,20 +412,20 @@ class ReportsDialogMixin:
         badge = tk.Label(
             hdr,
             text="VW",
-            font=("Segoe UI", 10, "bold"),
+            font=("Segoe UI", 12, "bold"),
             bg=t["accent"],
-            fg=t["accent_fg"],
-            padx=8,
-            pady=4,
+            fg="#FFFFFF",
+            padx=10,
+            anchor="center",
         )
-        badge.pack(side=tk.LEFT, padx=(0, 12))
+        badge.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 10))
 
         hdr_txt = tk.Frame(hdr, bg=t["bg_surface"])
         hdr_txt.pack(side=tk.LEFT, fill=tk.X, expand=True)
         tk.Label(
             hdr_txt,
             text="Preset de codificación",
-            font=("Segoe UI", 12, "bold"),
+            font=("Segoe UI", 10, "bold"),
             bg=t["bg_surface"],
             fg=t["fg_primary"],
             anchor=tk.W,
@@ -433,9 +433,9 @@ class ReportsDialogMixin:
         tk.Label(
             hdr_txt,
             text=f"Aceleración activa: {gpu_name}",
-            font=("Segoe UI", 9),
+            font=("Segoe UI", 8),
             bg=t["bg_surface"],
-            fg=t["fg_secondary"],
+            fg=t["fg_muted"],
             anchor=tk.W,
         ).pack(fill=tk.X)
 
@@ -686,34 +686,37 @@ class ReportsDialogMixin:
         header_card = tk.Frame(dialog, bg=t_act["bg_surface"], highlightthickness=1, highlightbackground=t_act["border"], bd=0)
         header_card.pack(fill=tk.X, padx=18, pady=(14, 8))
 
-        text_container = tk.Frame(header_card, bg=t_act["bg_surface"])
-        text_container.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=14, pady=10)
+        hdr_in = tk.Frame(header_card, bg=t_act["bg_surface"])
+        hdr_in.pack(fill=tk.X, padx=14, pady=10)
 
         tk.Label(
-            text_container,
+            hdr_in,
             text="VW",
-            font=("Segoe UI", 11, "bold"),
-            fg=t_act["accent_fg"],
+            font=("Segoe UI", 12, "bold"),
+            fg="#FFFFFF",
             bg=t_act["accent"],
-            padx=8,
-            pady=2,
-        ).pack(side=tk.LEFT)
+            padx=10,
+            anchor="center",
+        ).pack(side=tk.LEFT, fill=tk.Y)
+
+        brand_txt = tk.Frame(hdr_in, bg=t_act["bg_surface"])
+        brand_txt.pack(side=tk.LEFT, padx=(10, 0))
 
         tk.Label(
-            text_container,
-            text="  Acerca de Video Workstation",
+            brand_txt,
+            text="Video Workstation",
             font=("Segoe UI", 10, "bold"),
+            bg=t_act["bg_surface"],
             fg=t_act["fg_primary"],
-            bg=t_act["bg_surface"]
-        ).pack(side=tk.LEFT, padx=(6, 0))
+        ).pack(anchor=tk.W)
 
         tk.Label(
-            header_card,
+            brand_txt,
             text=f"v{VERSION}",
-            font=("Segoe UI", 9, "bold"),
+            font=("Segoe UI", 8),
             bg=t_act["bg_surface"],
-            fg=t_act["accent"]
-        ).pack(side=tk.RIGHT, padx=14, pady=10)
+            fg=t_act["fg_muted"],
+        ).pack(anchor=tk.W)
 
         btm = tk.Frame(dialog, bg=t_act["bg_app"], padx=18, pady=10)
         btm.pack(side=tk.BOTTOM, fill=tk.X)
@@ -835,8 +838,8 @@ class ReportsDialogMixin:
         tk.Label(hdr_in, text="VW", font=("Segoe UI", 12, "bold"), bg=t["danger"], fg="#FFFFFF", padx=10, anchor="center").pack(side=tk.LEFT, fill=tk.Y)
         hdr_txt = tk.Frame(hdr_in, bg=t["bg_surface"])
         hdr_txt.pack(side=tk.LEFT, padx=(10, 0), fill=tk.X, expand=True)
-        tk.Label(hdr_txt, text="Resumen de Errores de Procesamiento", font=("Segoe UI", 11, "bold"), bg=t["bg_surface"], fg=t["fg_primary"]).pack(anchor=tk.W)
-        tk.Label(hdr_txt, text="Los siguientes problemas ocurrieron al procesar los archivos de la cola:", font=("Segoe UI", 9), bg=t["bg_surface"], fg=t["fg_muted"]).pack(anchor=tk.W, pady=(2, 0))
+        tk.Label(hdr_txt, text="Resumen de Errores de Procesamiento", font=("Segoe UI", 10, "bold"), bg=t["bg_surface"], fg=t["fg_primary"]).pack(anchor=tk.W)
+        tk.Label(hdr_txt, text="Los siguientes problemas ocurrieron al procesar los archivos de la cola:", font=("Segoe UI", 8), bg=t["bg_surface"], fg=t["fg_muted"]).pack(anchor=tk.W, pady=(2, 0))
 
         body = tk.Frame(dialog, bg=t["bg_app"], padx=16)
         body.pack(fill=tk.BOTH, expand=True)

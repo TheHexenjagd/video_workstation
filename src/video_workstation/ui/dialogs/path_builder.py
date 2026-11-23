@@ -43,8 +43,8 @@ class PathBuilderDialogMixin:
         tk.Label(hdr_in, text="VW", font=("Segoe UI", 12, "bold"), bg=t["accent"], fg="#FFFFFF", padx=10, anchor="center").pack(side=tk.LEFT, fill=tk.Y)
         hdr_txt = tk.Frame(hdr_in, bg=t["bg_surface"])
         hdr_txt.pack(side=tk.LEFT, padx=(10, 0), fill=tk.X, expand=True)
-        tk.Label(hdr_txt, text="Constructor de Ruta de Salida", font=("Segoe UI", 11, "bold"), bg=t["bg_surface"], fg=t["fg_primary"]).pack(anchor=tk.W)
-        tk.Label(hdr_txt, text="Haz clic en las banderas para agregarlas al patrón de subcarpeta:", font=("Segoe UI", 9), bg=t["bg_surface"], fg=t["fg_muted"]).pack(anchor=tk.W, pady=(2, 0))
+        tk.Label(hdr_txt, text="Constructor de Ruta de Salida", font=("Segoe UI", 10, "bold"), bg=t["bg_surface"], fg=t["fg_primary"]).pack(anchor=tk.W)
+        tk.Label(hdr_txt, text="Haz clic en las banderas para agregarlas al patrón de subcarpeta:", font=("Segoe UI", 8), bg=t["bg_surface"], fg=t["fg_muted"]).pack(anchor=tk.W, pady=(2, 0))
 
         cfg_card = tk.Frame(dialog, bg=t["bg_surface"], highlightthickness=1, highlightbackground=t["border"])
         cfg_card.pack(fill=tk.X, padx=16, pady=(0, 10))

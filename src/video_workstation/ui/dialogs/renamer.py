@@ -82,8 +82,8 @@ class RenamerDialogMixin:
         tk.Label(hdr_in, text="VW", font=("Segoe UI", 12, "bold"), bg=t["accent"], fg="#FFFFFF", padx=10, anchor="center").pack(side=tk.LEFT, fill=tk.Y)
         hdr_txt = tk.Frame(hdr_in, bg=t["bg_surface"])
         hdr_txt.pack(side=tk.LEFT, padx=(10, 0), fill=tk.X, expand=True)
-        tk.Label(hdr_txt, text="Renombrar Archivos de la Cola", font=("Segoe UI", 11, "bold"), fg=t["fg_primary"], bg=t["bg_surface"]).pack(anchor=tk.W)
-        tk.Label(hdr_txt, text="Configura un patrón de nombre para renombrar todos los archivos de la lista principal.", font=("Segoe UI", 9), fg=t["fg_muted"], bg=t["bg_surface"]).pack(anchor=tk.W, pady=(2, 0))
+        tk.Label(hdr_txt, text="Renombrar Archivos de la Cola", font=("Segoe UI", 10, "bold"), fg=t["fg_primary"], bg=t["bg_surface"]).pack(anchor=tk.W)
+        tk.Label(hdr_txt, text="Configura un patrón de nombre para renombrar todos los archivos de la lista principal.", font=("Segoe UI", 8), fg=t["fg_muted"], bg=t["bg_surface"]).pack(anchor=tk.W, pady=(2, 0))
 
         content = tk.Frame(dialog, bg=t["bg_app"], padx=16)
         content.pack(fill=tk.BOTH, expand=True)

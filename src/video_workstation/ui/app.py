@@ -1637,20 +1637,31 @@ class VWSuite(
         tk.Label(
             hdr,
             text=badge_txt,
-            font=("Segoe UI", 10, "bold"),
+            font=("Segoe UI", 12, "bold"),
             bg=badge_bg,
-            fg=t["accent_fg"],
-            padx=8,
-            pady=3,
-        ).pack(side=tk.LEFT, padx=(0, 10))
+            fg="#FFFFFF",
+            padx=10,
+            anchor="center",
+        ).pack(side=tk.LEFT, fill=tk.Y, padx=(0, 10))
+        hdr_txt = tk.Frame(hdr, bg=t["bg_surface"])
+        hdr_txt.pack(side=tk.LEFT, fill=tk.X, expand=True)
         tk.Label(
-            hdr,
+            hdr_txt,
             text=title,
-            font=("Segoe UI", 11, "bold"),
+            font=("Segoe UI", 10, "bold"),
             bg=t["bg_surface"],
             fg=t["fg_primary"],
             anchor=tk.W,
-        ).pack(side=tk.LEFT, fill=tk.X, expand=True)
+        ).pack(fill=tk.X)
+        sub_title = "Notificación del sistema" if kind == "info" else ("Atención requerida" if kind == "warning" else "Error del sistema")
+        tk.Label(
+            hdr_txt,
+            text=sub_title,
+            font=("Segoe UI", 8),
+            bg=t["bg_surface"],
+            fg=t["fg_muted"],
+            anchor=tk.W,
+        ).pack(fill=tk.X)
 
         tk.Frame(dlg, height=1, bg=t["border"]).pack(fill=tk.X)
 
@@ -1719,18 +1730,18 @@ class VWSuite(
         tk.Label(
             hdr,
             text="VW",
-            font=("Segoe UI", 10, "bold"),
+            font=("Segoe UI", 12, "bold"),
             bg=t["accent"],
-            fg=t["accent_fg"],
-            padx=8,
-            pady=4,
-        ).pack(side=tk.LEFT, padx=(0, 12))
+            fg="#FFFFFF",
+            padx=10,
+            anchor="center",
+        ).pack(side=tk.LEFT, fill=tk.Y, padx=(0, 10))
         hdr_txt = tk.Frame(hdr, bg=t["bg_surface"])
         hdr_txt.pack(side=tk.LEFT, fill=tk.X, expand=True)
         tk.Label(
             hdr_txt,
             text="Rutas configuradas",
-            font=("Segoe UI", 12, "bold"),
+            font=("Segoe UI", 10, "bold"),
             bg=t["bg_surface"],
             fg=t["fg_primary"],
             anchor=tk.W,
@@ -1738,9 +1749,9 @@ class VWSuite(
         tk.Label(
             hdr_txt,
             text="Ubicaciones activas de binarios y configuración",
-            font=("Segoe UI", 9),
+            font=("Segoe UI", 8),
             bg=t["bg_surface"],
-            fg=t["fg_secondary"],
+            fg=t["fg_muted"],
             anchor=tk.W,
         ).pack(fill=tk.X)
 
